@@ -413,13 +413,15 @@ export default function EscolhaTribo() {
                     {[1, 2, 3, 4, 5].map(tier => {
                       const tierChars = characters.filter(c => c.level?.tier === tier)
                       const tierLevel = tierChars[0]?.level
-                      const tierNames = ['Iniciante', 'Aprendiz', 'Destaque', 'Lider', 'Lenda']
+                      const tierLabels = ['Iniciante', 'Aprendiz', 'Destaque', 'Lider', 'Lenda']
+                      const levelName = tierLevel?.name || tierLabels[tier - 1]
+                      const label = tierLabels[tier - 1]
                       return (
-                        <div key={tier} className={`flex-shrink-0 w-20 text-center rounded-xl p-2 ${
+                        <div key={tier} className={`flex-shrink-0 w-24 text-center rounded-xl p-2 ${
                           tier === 1 ? 'bg-teal/10 border border-teal/30' : 'bg-white border border-gray-100 opacity-50'
                         }`}>
-                          <div className="text-xs font-bold text-gray-600">{tierLevel?.name || tierNames[tier - 1]}</div>
-                          <div className="text-[10px] text-gray-400">{tierChars.length} chars</div>
+                          <div className="text-xs font-bold text-gray-600">{levelName}</div>
+                          <div className="text-[10px] text-gray-400">({label})</div>
                           <div className="text-[10px] text-teal font-semibold">
                             {[0, 1000, 5000, 15000, 50000][tier - 1].toLocaleString('pt-BR')}+ pts
                           </div>
