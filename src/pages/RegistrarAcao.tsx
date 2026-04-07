@@ -1,38 +1,19 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Search, Check } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
-import { actionTypes } from '../data/actions'
-import { useLocalUser } from '../hooks/useLocalUser'
-import type { Action } from '../types'
+import { useAuth } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
+import type { ActionType } from '../types'
 
-const CLASSMATES = [
-  { id: 's1', name: 'Maria Silva', tribe: '🦁', role: 'student' as const },
-  { id: 's2', name: 'João Pedro', tribe: '🐉', role: 'student' as const },
-  { id: 's3', name: 'Ana Luísa', tribe: '🦅', role: 'student' as const },
-  { id: 's4', name: 'Pedro Rocha', tribe: '🦁', role: 'student' as const },
-  { id: 's5', name: 'Luísa Mendes', tribe: '🐉', role: 'student' as const },
-  { id: 's6', name: 'Carlos Eduardo', tribe: '🦅', role: 'student' as const },
-  { id: 's7', name: 'Beatriz Santos', tribe: '🦁', role: 'student' as const },
-  { id: 's8', name: 'Lucas Oliveira', tribe: '🐉', role: 'student' as const },
-  { id: 's9', name: 'Gabriela Costa', tribe: '🦅', role: 'student' as const },
-  { id: 's10', name: 'Rafael Almeida', tribe: '🦁', role: 'student' as const },
-]
-
-// A12: Separate teacher list for "Ajudei professor" action
-const TEACHERS = [
-  { id: 't1', name: 'Prof. Ana Rodrigues', tribe: '📋', role: 'teacher' as const },
-  { id: 't2', name: 'Prof. Carlos Mendes', tribe: '📋', role: 'teacher' as const },
-  { id: 't3', name: 'Prof. Fernanda Lima', tribe: '📋', role: 'teacher' as const },
-  { id: 't4', name: 'Prof. Roberto Santos', tribe: '📋', role: 'teacher' as const },
-  { id: 't5', name: 'Prof. Patricia Costa', tribe: '📋', role: 'teacher' as const },
-]
-
-// (allows_multiple now comes from actionTypes data)
+interface Classmate {
+  id: string
+  name: string
+}
 
 export default function RegistrarAcao() {
   const navigate = useNavigate()
-  useLocalUser()
+  const { user } = useAuth()
   const [step, setStep] = useState(1)
   const [selectedAction, setSelectedAction] = useState<string | null>(null)
   const [selectedBeneficiaries, setSelectedBeneficiaries] = useState<string[]>([])
@@ -41,42 +22,72 @@ export default function RegistrarAcao() {
   const [searchQuery, setSearchQuery] = useState('')
   const [qrToken] = useState(() => `piramidebem://validar/${Date.now()}`)
 
-  const selectedActionType = actionTypes.find((a) => a.id === selectedAction)
+  const [actionTypes, setActionTypes] = useState<ActionType[]>([])
+  const [classmates, setClassmates] = useState<Classmate[]>([])
+  const [studentId, setStudentId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  // A12: Show teachers for "Ajudei professor" action, students otherwise
-  const isTeacherAction = selectedAction === 'act-6'
-  const isOtherAction = selectedAction === 'act-other'
-  const allowsMultiple = selectedActionType?.allows_multiple ?? false
+  useEffect(() => {
+    if (!user) return
+
+    async function loadData() {
+      // Get current student
+      const { data: me } = await supabase
+        .from('students')
+        .select('id, school_id')
+        .eq('user_id', user!.id)
+        .single()
+
+      if (me) {
+        setStudentId(me.id)
+
+        // Load classmates from same school
+        if (me.school_id) {
+          const { data: peers } = await supabase
+            .from('students')
+            .select('id, name')
+            .eq('school_id', me.school_id)
+            .neq('id', me.id)
+            .limit(30)
+          if (peers) setClassmates(peers)
+        }
+      }
+
+      // Load action types
+      const { data: types } = await supabase
+        .from('action_types')
+        .select('*')
+        .order('display_order')
+      if (types) setActionTypes(types as ActionType[])
+
+      setLoading(false)
+    }
+    loadData()
+  }, [user])
+
+  const selectedActionType = actionTypes.find((a) => a.id === selectedAction)
+  const isOtherAction = selectedActionType?.name?.toLowerCase().includes('outr') ?? false
+  const allowsMultiple = true // allow selecting multiple beneficiaries
 
   const availablePeople = useMemo(() => {
-    const list = isTeacherAction ? TEACHERS : CLASSMATES
-    return list.filter((c) =>
+    return classmates.filter((c) =>
       c.name.toLowerCase().includes(searchQuery.toLowerCase())
     )
-  }, [searchQuery, isTeacherAction])
+  }, [searchQuery, classmates])
 
-  function saveAction() {
-    const stored = localStorage.getItem('piramide-actions')
-    const actions: Action[] = stored ? JSON.parse(stored) : []
+  async function saveAction() {
+    if (!studentId || !selectedAction) return
 
-    const newAction: Action = {
-      id: `action-${Date.now()}`,
-      author_id: 'current-user',
-      beneficiary_id: selectedBeneficiaries.join(','),
-      action_type_id: selectedAction ?? '',
-      description,
+    await supabase.from('actions').insert({
+      author_id: studentId,
+      beneficiary_id: selectedBeneficiaries[0] || null,
+      action_type_id: selectedAction,
+      description: isOtherAction ? `${customTitle}: ${description}` : description || null,
       status: 'pending',
-      validator_id: '',
-      beneficiary_confirmed: false,
       qr_code_token: qrToken,
       expires_at: new Date(Date.now() + 48 * 3600000).toISOString(),
-      validated_at: '',
       points_awarded: selectedActionType?.points ?? 0,
-      created_at: new Date().toISOString(),
-    }
-
-    actions.push(newAction)
-    localStorage.setItem('piramide-actions', JSON.stringify(actions))
+    })
   }
 
   function handleNext() {
@@ -95,10 +106,8 @@ export default function RegistrarAcao() {
     return true
   }
 
-  // A19: Auto-advance when action is selected (skip "Proximo" click)
   function handleActionSelect(actionId: string) {
     setSelectedAction(actionId)
-    // Reset beneficiaries when action type changes (teacher vs student)
     setSelectedBeneficiaries([])
   }
 
@@ -113,6 +122,14 @@ export default function RegistrarAcao() {
   }
 
   const stepLabels = ['Tipo', 'Quem', 'Detalhes', 'Pronto!']
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-bg flex items-center justify-center">
+        <div className="animate-pulse text-teal text-lg">Carregando...</div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-bg">
@@ -174,49 +191,48 @@ export default function RegistrarAcao() {
           <div>
             <h2 className="text-xl font-bold text-navy mb-1">Que boa acao voce fez hoje?</h2>
             <p className="text-gray-500 text-sm mb-5">Escolha o tipo da sua boa acao</p>
-            <div className="grid grid-cols-2 gap-3">
-              {actionTypes.map((at) => (
-                <button
-                  key={at.id}
-                  onClick={() => {
-                    handleActionSelect(at.id)
-                    // A19: Auto-advance to step 2 on click
-                    setTimeout(() => setStep(2), 200)
-                  }}
-                  className={`relative bg-white rounded-2xl p-4 text-left transition-all duration-200 shadow-sm hover:shadow-md active:scale-95 ${
-                    selectedAction === at.id
-                      ? 'border-2 border-teal scale-[1.03] shadow-lg ring-2 ring-teal/20'
-                      : 'border-2 border-transparent'
-                  }`}
-                >
-                  <span className="text-3xl block mb-2">{at.icon}</span>
-                  <p className="font-semibold text-navy text-sm leading-tight">{at.name}</p>
-                  <span className="inline-block mt-2 bg-teal text-white text-xs font-bold px-2.5 py-0.5 rounded-full">
-                    +{at.points} pts
-                  </span>
-                  {selectedAction === at.id && (
-                    <div className="absolute top-2 right-2 w-5 h-5 bg-teal rounded-full flex items-center justify-center">
-                      <Check size={12} className="text-white" />
-                    </div>
-                  )}
-                </button>
-              ))}
-            </div>
+            {actionTypes.length === 0 ? (
+              <div className="bg-white rounded-2xl shadow-sm p-8 text-center">
+                <p className="text-gray-400 text-sm">Nenhum tipo de acao cadastrado ainda.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {actionTypes.map((at) => (
+                  <button
+                    key={at.id}
+                    onClick={() => {
+                      handleActionSelect(at.id)
+                      setTimeout(() => setStep(2), 200)
+                    }}
+                    className={`relative bg-white rounded-2xl p-4 text-left transition-all duration-200 shadow-sm hover:shadow-md active:scale-95 ${
+                      selectedAction === at.id
+                        ? 'border-2 border-teal scale-[1.03] shadow-lg ring-2 ring-teal/20'
+                        : 'border-2 border-transparent'
+                    }`}
+                  >
+                    <span className="text-3xl block mb-2">{at.icon ?? '\u{1F91D}'}</span>
+                    <p className="font-semibold text-navy text-sm leading-tight">{at.name}</p>
+                    <span className="inline-block mt-2 bg-teal text-white text-xs font-bold px-2.5 py-0.5 rounded-full">
+                      +{at.points} pts
+                    </span>
+                    {selectedAction === at.id && (
+                      <div className="absolute top-2 right-2 w-5 h-5 bg-teal rounded-full flex items-center justify-center">
+                        <Check size={12} className="text-white" />
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
         {/* STEP 2 */}
         {step === 2 && (
           <div>
-            <h2 className="text-xl font-bold text-navy mb-1">
-              {isTeacherAction ? 'Qual professor voce ajudou?' : 'Quem voce ajudou?'}
-            </h2>
+            <h2 className="text-xl font-bold text-navy mb-1">Quem voce ajudou?</h2>
             <p className="text-gray-500 text-sm mb-4">
-              {allowsMultiple
-                ? 'Selecione um ou mais colegas'
-                : isTeacherAction
-                  ? 'Selecione o professor'
-                  : 'Selecione o colega que recebeu a boa acao'}
+              Selecione o(s) colega(s) que receberam a boa acao
             </p>
 
             <div className="relative mb-4">
@@ -225,40 +241,47 @@ export default function RegistrarAcao() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={isTeacherAction ? 'Buscar professor...' : 'Buscar colega...'}
+                placeholder="Buscar colega..."
                 className="w-full bg-white border border-gray-200 rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all"
               />
             </div>
 
-            {allowsMultiple && selectedBeneficiaries.length > 0 && (
+            {selectedBeneficiaries.length > 0 && (
               <p className="text-teal text-xs font-semibold mb-2">
                 {selectedBeneficiaries.length} selecionado(s)
               </p>
             )}
 
             <div className="space-y-2">
-              {availablePeople.map((c) => {
-                const isSelected = selectedBeneficiaries.includes(c.id)
-                return (
-                  <button
-                    key={c.id}
-                    onClick={() => toggleBeneficiary(c.id)}
-                    className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 active:scale-[0.98] ${
-                      isSelected
-                        ? 'bg-teal/10 border-2 border-teal'
-                        : 'bg-white border-2 border-transparent shadow-sm hover:shadow-md'
-                    }`}
-                  >
-                    <span className="text-2xl">{c.tribe}</span>
-                    <span className="font-medium text-navy text-sm">{c.name}</span>
-                    {isSelected && (
-                      <Check size={18} className="ml-auto text-teal" />
-                    )}
-                  </button>
-                )
-              })}
-              {availablePeople.length === 0 && (
-                <p className="text-center text-gray-400 text-sm py-8">Nenhum resultado encontrado</p>
+              {availablePeople.length === 0 ? (
+                <div className="bg-white rounded-xl shadow-sm p-6 text-center">
+                  <p className="text-gray-400 text-sm">
+                    {classmates.length === 0
+                      ? 'Nenhum colega da sua escola cadastrado ainda.'
+                      : 'Nenhum resultado encontrado'}
+                  </p>
+                </div>
+              ) : (
+                availablePeople.map((c) => {
+                  const isSelected = selectedBeneficiaries.includes(c.id)
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => toggleBeneficiary(c.id)}
+                      className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 active:scale-[0.98] ${
+                        isSelected
+                          ? 'bg-teal/10 border-2 border-teal'
+                          : 'bg-white border-2 border-transparent shadow-sm hover:shadow-md'
+                      }`}
+                    >
+                      <span className="text-2xl">{'\u{1F464}'}</span>
+                      <span className="font-medium text-navy text-sm">{c.name}</span>
+                      {isSelected && (
+                        <Check size={18} className="ml-auto text-teal" />
+                      )}
+                    </button>
+                  )
+                })
               )}
             </div>
           </div>
@@ -286,7 +309,7 @@ export default function RegistrarAcao() {
 
             <div className="bg-white rounded-2xl shadow-sm p-4 mb-4 border border-gray-100">
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-2xl">{selectedActionType?.icon}</span>
+                <span className="text-2xl">{selectedActionType?.icon ?? '\u{1F91D}'}</span>
                 <div>
                   <p className="font-semibold text-navy text-sm">{selectedActionType?.name}</p>
                   <p className="text-teal text-xs font-bold">+{selectedActionType?.points} pts</p>
@@ -294,7 +317,7 @@ export default function RegistrarAcao() {
               </div>
               <p className="text-gray-500 text-xs">
                 Beneficiado(s): {selectedBeneficiaries
-                  .map((id) => [...CLASSMATES, ...TEACHERS].find((c) => c.id === id)?.name)
+                  .map((id) => classmates.find((c) => c.id === id)?.name)
                   .filter(Boolean)
                   .join(', ') || '---'}
               </p>
@@ -318,7 +341,7 @@ export default function RegistrarAcao() {
         {/* STEP 4 - Success */}
         {step === 4 && (
           <div className="text-center">
-            <div className="text-5xl mb-3 float-anim">✅</div>
+            <div className="text-5xl mb-3 float-anim">{'\u2705'}</div>
             <h2 className="text-2xl font-bold text-navy mb-2">Acao registrada!</h2>
             <p className="text-gray-500 text-sm mb-6">
               Agora peca para um colega escanear o QR Code abaixo para validar sua acao.
@@ -337,7 +360,7 @@ export default function RegistrarAcao() {
 
             <div className="space-y-3 mb-6">
               <div className="bg-yellow/10 border border-yellow/30 rounded-xl p-3 flex items-center gap-2">
-                <span className="text-lg">⏳</span>
+                <span className="text-lg">{'\u23F3'}</span>
                 <div className="text-left">
                   <p className="font-bold text-navy text-sm">PENDENTE</p>
                   <p className="text-gray-500 text-xs">Este QR Code expira em 48 horas</p>
@@ -372,7 +395,7 @@ export default function RegistrarAcao() {
                   : 'bg-gray-300 cursor-not-allowed'
               }`}
             >
-              {step === 3 ? 'Registrar Acao ✅' : 'Proximo →'}
+              {step === 3 ? 'Registrar Acao \u2705' : 'Proximo \u2192'}
             </button>
           </div>
         )}

@@ -1,12 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ArrowLeft, ScanLine, CheckCircle2, XCircle, Clock, User, Shield } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { useLocalUser } from '../hooks/useLocalUser'
+import { useAuth } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
 import BottomNav from '../components/BottomNav'
 import ConfettiEffect from '../components/ConfettiEffect'
 import { QRCodeSVG } from 'qrcode.react'
-import type { Action } from '../types'
-import { actionTypes } from '../data/actions'
 
 type Tab = 'validar' | 'minhas'
 
@@ -18,61 +17,17 @@ interface PendingItem {
   beneficiaryName: string
   points: number
   createdAt: string
-  fromStorage: boolean
 }
 
 interface MyPendingAction {
   id: string
   actionTypeName: string
   actionIcon: string
-  beneficiaryName: string
   points: number
-  validatorConfirmed: boolean
-  beneficiaryConfirmed: boolean
   createdAt: string
   expiresAt: string
   qrToken: string
-}
-
-function getPendingToValidate(): PendingItem[] {
-  const stored = localStorage.getItem('piramide-actions')
-  const actions: Action[] = stored ? JSON.parse(stored) : []
-  const validatedIds = new Set(
-    actions.filter((a) => a.status === 'validated' || a.status === 'denied').map((a) => a.id)
-  )
-
-  const simulated: PendingItem[] = [
-    { id: 'sim-1', authorName: 'Maria Silva', actionTypeName: 'Ajudei colega no dever', actionIcon: '📚', beneficiaryName: 'Ana Luisa', points: 10, createdAt: new Date(Date.now() - 1800000).toISOString(), fromStorage: false },
-    { id: 'sim-2', authorName: 'Pedro Rocha', actionTypeName: 'Mediei conflito', actionIcon: '⚖️', beneficiaryName: 'Joao Pedro', points: 25, createdAt: new Date(Date.now() - 5400000).toISOString(), fromStorage: false },
-    { id: 'sim-3', authorName: 'Lucas Oliveira', actionTypeName: 'Organizei grupo de estudo', actionIcon: '📖', beneficiaryName: 'Varios', points: 25, createdAt: new Date(Date.now() - 10800000).toISOString(), fromStorage: false },
-  ]
-
-  return simulated.filter((s) => !validatedIds.has(s.id))
-}
-
-function getMyPendingActions(): MyPendingAction[] {
-  const stored = localStorage.getItem('piramide-actions')
-  const actions: Action[] = stored ? JSON.parse(stored) : []
-
-  return actions
-    .filter((a) => a.status === 'pending')
-    .map((a) => {
-      const at = actionTypes.find((t) => t.id === a.action_type_id)
-      const hoursLeft = Math.max(0, Math.round((new Date(a.expires_at).getTime() - Date.now()) / 3600000))
-      return {
-        id: a.id,
-        actionTypeName: at?.name ?? 'Boa acao',
-        actionIcon: at?.icon ?? '🤝',
-        beneficiaryName: 'Colega',
-        points: a.points_awarded,
-        validatorConfirmed: false,
-        beneficiaryConfirmed: false,
-        createdAt: a.created_at,
-        expiresAt: a.expires_at,
-        qrToken: a.qr_code_token,
-        hoursLeft,
-      }
-    })
+  status: string
 }
 
 function timeAgo(dateStr: string): string {
@@ -86,15 +41,78 @@ function timeAgo(dateStr: string): string {
 
 export default function ValidarAcao() {
   const navigate = useNavigate()
-  const { user, setUser } = useLocalUser()
+  const { user } = useAuth()
   const [tab, setTab] = useState<Tab>('validar')
-  const [pendingActions, setPendingActions] = useState(getPendingToValidate)
-  const [myActions] = useState(getMyPendingActions)
+  const [pendingActions, setPendingActions] = useState<PendingItem[]>([])
+  const [myActions, setMyActions] = useState<MyPendingAction[]>([])
   const [selectedAction, setSelectedAction] = useState<PendingItem | null>(null)
   const [showResult, setShowResult] = useState<'confirmed' | 'denied' | null>(null)
   const [showConfetti, setShowConfetti] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [showQr, setShowQr] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [studentId, setStudentId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!user) return
+
+    async function loadData() {
+      // Get current student
+      const { data: me } = await supabase
+        .from('students')
+        .select('id, school_id')
+        .eq('user_id', user!.id)
+        .single()
+
+      if (!me) { setLoading(false); return }
+      setStudentId(me.id)
+
+      // Load pending actions from same school (not authored by me)
+      const { data: pending } = await supabase
+        .from('actions')
+        .select('id, points_awarded, created_at, author:students!actions_author_id_fkey(name), action_type:action_types(name, icon), beneficiary:students!actions_beneficiary_id_fkey(name)')
+        .eq('status', 'pending')
+        .neq('author_id', me.id)
+        .order('created_at', { ascending: false })
+        .limit(20)
+
+      if (pending) {
+        setPendingActions(pending.map((a: Record<string, unknown>) => ({
+          id: a.id as string,
+          authorName: (a.author as { name: string } | null)?.name ?? 'Desconhecido',
+          actionTypeName: (a.action_type as { name: string; icon: string | null } | null)?.name ?? 'Boa acao',
+          actionIcon: (a.action_type as { name: string; icon: string | null } | null)?.icon ?? '\u{1F91D}',
+          beneficiaryName: (a.beneficiary as { name: string } | null)?.name ?? 'Colega',
+          points: (a.points_awarded as number) ?? 0,
+          createdAt: a.created_at as string,
+        })))
+      }
+
+      // Load my pending actions
+      const { data: mine } = await supabase
+        .from('actions')
+        .select('id, points_awarded, created_at, expires_at, qr_code_token, status, action_type:action_types(name, icon)')
+        .eq('author_id', me.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+
+      if (mine) {
+        setMyActions(mine.map((a: Record<string, unknown>) => ({
+          id: a.id as string,
+          actionTypeName: (a.action_type as { name: string; icon: string | null } | null)?.name ?? 'Boa acao',
+          actionIcon: (a.action_type as { name: string; icon: string | null } | null)?.icon ?? '\u{1F91D}',
+          points: (a.points_awarded as number) ?? 0,
+          createdAt: a.created_at as string,
+          expiresAt: a.expires_at as string,
+          qrToken: a.qr_code_token as string,
+          status: a.status as string,
+        })))
+      }
+
+      setLoading(false)
+    }
+    loadData()
+  }, [user])
 
   function handleScan() {
     setScanning(true)
@@ -104,26 +122,94 @@ export default function ValidarAcao() {
     }, 1500)
   }
 
-  function handleConfirm() {
-    if (!selectedAction) return
-    if (selectedAction.fromStorage) {
-      const stored = localStorage.getItem('piramide-actions')
-      const actions: Action[] = stored ? JSON.parse(stored) : []
-      const updated = actions.map((a) =>
-        a.id === selectedAction.id ? { ...a, status: 'validated' as const, validated_at: new Date().toISOString() } : a
-      )
-      localStorage.setItem('piramide-actions', JSON.stringify(updated))
+  async function handleConfirm() {
+    if (!selectedAction || !studentId) return
+
+    const actionPoints = selectedAction.points
+
+    // Update action status
+    await supabase
+      .from('actions')
+      .update({
+        status: 'validated',
+        validator_id: studentId,
+        validated_at: new Date().toISOString(),
+        points_awarded: actionPoints,
+      })
+      .eq('id', selectedAction.id)
+
+    // Insert validation record
+    await supabase.from('validations').insert({
+      action_id: selectedAction.id,
+      validator_id: studentId,
+      result: 'confirmed',
+    })
+
+    // Award points to the author
+    const { data: authorAction } = await supabase
+      .from('actions')
+      .select('author_id')
+      .eq('id', selectedAction.id)
+      .single()
+
+    if (authorAction) {
+      const { data: author } = await supabase
+        .from('students')
+        .select('total_points, available_points')
+        .eq('id', authorAction.author_id)
+        .single()
+
+      if (author) {
+        await supabase
+          .from('students')
+          .update({
+            total_points: (author.total_points ?? 0) + actionPoints,
+            available_points: (author.available_points ?? 0) + actionPoints,
+            last_action_date: new Date().toISOString(),
+          })
+          .eq('id', authorAction.author_id)
+      }
     }
-    if (user) {
-      setUser((prev) => ({ ...prev, totalPoints: prev.totalPoints + 3, availablePoints: prev.availablePoints + 3 }))
+
+    // Award validator bonus (+3 pts)
+    const { data: validator } = await supabase
+      .from('students')
+      .select('total_points, available_points')
+      .eq('id', studentId)
+      .single()
+
+    if (validator) {
+      await supabase
+        .from('students')
+        .update({
+          total_points: (validator.total_points ?? 0) + 3,
+          available_points: (validator.available_points ?? 0) + 3,
+        })
+        .eq('id', studentId)
     }
+
     setPendingActions((prev) => prev.filter((a) => a.id !== selectedAction.id))
     setShowConfetti(true)
     setShowResult('confirmed')
   }
 
-  function handleDeny() {
-    if (selectedAction) setPendingActions((prev) => prev.filter((a) => a.id !== selectedAction.id))
+  async function handleDeny() {
+    if (!selectedAction || !studentId) return
+
+    // Update action status
+    await supabase
+      .from('actions')
+      .update({ status: 'denied', validator_id: studentId })
+      .eq('id', selectedAction.id)
+
+    // Insert validation record
+    await supabase.from('validations').insert({
+      action_id: selectedAction.id,
+      validator_id: studentId,
+      result: 'denied',
+    })
+
+    setPendingActions((prev) => prev.filter((a) => a.id !== selectedAction.id))
     setShowResult('denied')
   }
 
@@ -131,6 +217,14 @@ export default function ValidarAcao() {
     setSelectedAction(null)
     setShowResult(null)
     setShowConfetti(false)
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-bg flex items-center justify-center">
+        <div className="animate-pulse text-teal text-lg">Carregando...</div>
+      </div>
+    )
   }
 
   return (
@@ -147,7 +241,6 @@ export default function ValidarAcao() {
             <h1 className="font-bold text-navy text-lg">Validar Acoes</h1>
           </div>
 
-          {/* C9: Two tabs */}
           <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
             <button
               onClick={() => { setTab('validar'); handleReset() }}
@@ -175,7 +268,7 @@ export default function ValidarAcao() {
           <>
             {showResult === 'confirmed' && selectedAction && (
               <div className="text-center py-8">
-                <div className="text-6xl mb-4 float-anim">🎉</div>
+                <div className="text-6xl mb-4 float-anim">{'\u{1F389}'}</div>
                 <h2 className="text-2xl font-bold text-navy mb-3">Acao validada!</h2>
                 <div className="bg-green/10 border border-green/30 rounded-2xl p-4 mb-4">
                   <p className="text-green font-semibold">{selectedAction.authorName} ganhou {selectedAction.points} pts!</p>
@@ -189,7 +282,7 @@ export default function ValidarAcao() {
 
             {showResult === 'denied' && (
               <div className="text-center py-8">
-                <div className="text-5xl mb-4">😌</div>
+                <div className="text-5xl mb-4">{'\u{1F60C}'}</div>
                 <h2 className="text-xl font-bold text-navy mb-2">Tudo bem.</h2>
                 <p className="text-gray-500 text-sm mb-6">A acao aguardara outro colega.</p>
                 <button onClick={handleReset} className="w-full bg-teal text-white font-bold py-3.5 rounded-xl">Voltar</button>
@@ -226,10 +319,9 @@ export default function ValidarAcao() {
 
             {!showResult && !selectedAction && (
               <>
-                {/* Scanner */}
                 <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100">
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="text-2xl">📷</span>
+                    <span className="text-2xl">{'\u{1F4F7}'}</span>
                     <h2 className="font-bold text-navy text-lg">Escanear QR Code</h2>
                   </div>
                   <button onClick={handleScan} disabled={scanning} className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold transition-all ${scanning ? 'bg-teal/50 text-white cursor-wait' : 'bg-teal text-white hover:bg-teal/90 shadow-md'}`}>
@@ -238,7 +330,6 @@ export default function ValidarAcao() {
                   </button>
                 </div>
 
-                {/* Pending list */}
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <Clock size={18} className="text-yellow" />
@@ -246,7 +337,7 @@ export default function ValidarAcao() {
                   </div>
                   {pendingActions.length === 0 ? (
                     <div className="bg-white rounded-2xl shadow-sm p-8 text-center">
-                      <span className="text-4xl block mb-3">✨</span>
+                      <span className="text-4xl block mb-3">{'\u2728'}</span>
                       <p className="text-gray-500 text-sm">Nenhuma acao pendente!</p>
                     </div>
                   ) : (
@@ -272,12 +363,12 @@ export default function ValidarAcao() {
           </>
         )}
 
-        {/* ===== TAB: My Pending Actions (C9/C10/B12) ===== */}
+        {/* ===== TAB: My Pending Actions ===== */}
         {tab === 'minhas' && (
           <>
             {myActions.length === 0 ? (
               <div className="bg-white rounded-2xl shadow-sm p-8 text-center">
-                <span className="text-4xl block mb-3">📋</span>
+                <span className="text-4xl block mb-3">{'\u{1F4CB}'}</span>
                 <p className="text-gray-500 text-sm">Nenhuma acao aguardando validacao.</p>
                 <p className="text-xs text-gray-400 mt-1">Registre uma boa acao para comecar!</p>
               </div>
@@ -298,42 +389,28 @@ export default function ValidarAcao() {
                         <span className="text-gray-400 text-[10px]">{timeAgo(action.createdAt)}</span>
                       </div>
 
-                      {/* C10: Two visual stamps */}
                       <div className="flex gap-3 mb-3">
-                        <div className={`flex-1 flex items-center gap-2 p-2.5 rounded-xl border-2 ${
-                          action.validatorConfirmed ? 'border-green/30 bg-green/5' : 'border-gray-200 bg-gray-50'
-                        }`}>
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                            action.validatorConfirmed ? 'bg-green text-white' : 'bg-gray-200 text-gray-400'
-                          }`}>
+                        <div className="flex-1 flex items-center gap-2 p-2.5 rounded-xl border-2 border-gray-200 bg-gray-50">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-200 text-gray-400">
                             <Shield className="w-4 h-4" />
                           </div>
                           <div>
                             <p className="text-[10px] font-semibold text-gray-500">Validador</p>
-                            <p className={`text-xs font-bold ${action.validatorConfirmed ? 'text-green' : 'text-gray-400'}`}>
-                              {action.validatorConfirmed ? 'Confirmado' : 'Pendente'}
-                            </p>
+                            <p className="text-xs font-bold text-gray-400">Pendente</p>
                           </div>
                         </div>
 
-                        <div className={`flex-1 flex items-center gap-2 p-2.5 rounded-xl border-2 ${
-                          action.beneficiaryConfirmed ? 'border-green/30 bg-green/5' : 'border-gray-200 bg-gray-50'
-                        }`}>
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                            action.beneficiaryConfirmed ? 'bg-green text-white' : 'bg-gray-200 text-gray-400'
-                          }`}>
+                        <div className="flex-1 flex items-center gap-2 p-2.5 rounded-xl border-2 border-gray-200 bg-gray-50">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-200 text-gray-400">
                             <User className="w-4 h-4" />
                           </div>
                           <div>
                             <p className="text-[10px] font-semibold text-gray-500">Beneficiado</p>
-                            <p className={`text-xs font-bold ${action.beneficiaryConfirmed ? 'text-green' : 'text-gray-400'}`}>
-                              {action.beneficiaryConfirmed ? 'Confirmado' : 'Pendente'}
-                            </p>
+                            <p className="text-xs font-bold text-gray-400">Pendente</p>
                           </div>
                         </div>
                       </div>
 
-                      {/* Expiration alert */}
                       {isUrgent && (
                         <div className="bg-red/5 border border-red/20 rounded-lg p-2 mb-3">
                           <p className="text-xs text-red-700 font-semibold">
@@ -342,7 +419,6 @@ export default function ValidarAcao() {
                         </div>
                       )}
 
-                      {/* Show QR button */}
                       <button
                         onClick={() => setShowQr(showQr === action.id ? null : action.id)}
                         className="w-full py-2.5 rounded-xl border-2 border-teal text-teal font-semibold text-xs hover:bg-teal/5 transition-colors"

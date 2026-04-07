@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ChevronRight, ChevronLeft, Eye, EyeOff, CheckCircle2 } from 'lucide-react'
-import { schools, states } from '../data/schools'
 import { useAuth } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
 
 const grades = [
   '1o ano', '2o ano', '3o ano', '4o ano', '5o ano',
@@ -38,32 +38,36 @@ interface FormData {
   parentName: string
   parentEmail: string
   lgpdConsent: boolean
+  schoolSearch: string
 }
 
 export default function Cadastro() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { signInWithGoogle, signUpWithEmail } = useAuth()
+  const { user, signInWithGoogle, signUpWithEmail } = useAuth()
   const fromGoogle = searchParams.get('from') === 'google'
   const initialStep = fromGoogle ? parseInt(searchParams.get('step') || '1') : 1
 
-  // A5: Redirect if already registered
+  // Redirect if already has a student record
   useEffect(() => {
-    const stored = localStorage.getItem('piramide-user')
-    if (stored) {
-      try {
-        const user = JSON.parse(stored)
-        if (user && user.tribeId) {
+    if (!user) return
+    supabase
+      .from('students')
+      .select('id, tribe_id')
+      .eq('user_id', user.id)
+      .single()
+      .then(({ data }) => {
+        if (data?.tribe_id) {
           navigate('/home', { replace: true })
         }
-      } catch { /* ignore */ }
-    }
-  }, [navigate])
+      })
+  }, [user, navigate])
 
   const [step, setStep] = useState(initialStep)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [emailError, setEmailError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
   const [form, setForm] = useState<FormData>({
     name: '',
     email: '',
@@ -81,11 +85,66 @@ export default function Cadastro() {
     parentName: '',
     parentEmail: '',
     lgpdConsent: false,
+    schoolSearch: '',
   })
+
+  // Dynamic school data from Supabase
+  const [states, setStates] = useState<string[]>([])
+  const [cities, setCities] = useState<string[]>([])
+  const [schoolsList, setSchoolsList] = useState<{ id: string; name: string }[]>([])
+
+  // Load states on mount
+  useEffect(() => {
+    supabase
+      .from('schools')
+      .select('state')
+      .limit(1000)
+      .then(({ data }) => {
+        if (data) {
+          const unique = [...new Set(data.map((r: { state: string }) => r.state))].sort()
+          setStates(unique)
+        }
+      })
+  }, [])
+
+  // Load cities when state changes
+  useEffect(() => {
+    if (!form.state) { setCities([]); return }
+    supabase
+      .from('schools')
+      .select('city')
+      .eq('state', form.state)
+      .limit(1000)
+      .then(({ data }) => {
+        if (data) {
+          const unique = [...new Set(data.map((r: { city: string }) => r.city))].sort()
+          setCities(unique)
+        }
+      })
+  }, [form.state])
+
+  // Load schools when city changes or search changes
+  useEffect(() => {
+    if (!form.state || !form.city) { setSchoolsList([]); return }
+    let query = supabase
+      .from('schools')
+      .select('id, name')
+      .eq('state', form.state)
+      .eq('city', form.city)
+      .order('name')
+      .limit(50)
+
+    if (form.schoolSearch.trim()) {
+      query = query.ilike('name', `%${form.schoolSearch.trim()}%`)
+    }
+
+    query.then(({ data }) => {
+      if (data) setSchoolsList(data)
+    })
+  }, [form.state, form.city, form.schoolSearch])
 
   const totalSteps = 6
 
-  // A6: Build birthDate from separate fields and validate
   const currentYear = new Date().getFullYear()
   const minYear = currentYear - 80
   const maxYear = currentYear - 5
@@ -124,31 +183,8 @@ export default function Cadastro() {
     return age < 18
   }, [form.birthDate, birthDateValid])
 
-  const cities = useMemo(() => {
-    const filtered = schools.filter((s) => s.state === form.state)
-    return [...new Set(filtered.map((s) => s.city))].sort()
-  }, [form.state])
-
-  const filteredSchools = useMemo(() => {
-    return schools.filter((s) => s.state === form.state && s.city === form.city)
-  }, [form.state, form.city])
-
   const update = (field: keyof FormData, value: string | boolean) => {
     setForm((prev) => ({ ...prev, [field]: value }))
-  }
-
-  // A13: Check email duplicate
-  const checkEmailDuplicate = (email: string): boolean => {
-    const storedUser = localStorage.getItem('piramide-user')
-    if (storedUser) {
-      try {
-        const existing = JSON.parse(storedUser)
-        if (existing.email && existing.email.toLowerCase() === email.toLowerCase()) {
-          return true
-        }
-      } catch { /* ignore */ }
-    }
-    return false
   }
 
   const canAdvance = () => {
@@ -177,42 +213,59 @@ export default function Cadastro() {
   }
 
   const handleComplete = async () => {
-    // If coming from Google OAuth, profile is already partially set
-    const existing = fromGoogle
-      ? JSON.parse(localStorage.getItem('piramide-user') || '{}')
-      : {}
+    if (submitting) return
+    setSubmitting(true)
 
-    const profile = {
-      ...existing,
-      name: form.name || existing.name || '',
-      email: form.email || existing.email || '',
-      birthDate: form.birthDate,
-      schoolId: form.schoolId,
-      classroomGrade: form.grade,
-      classroomSection: form.section,
-      parentName: form.parentName,
-      parentEmail: form.parentEmail,
-      tribeId: '',
-      tribeEmoji: '',
-      tribeName: '',
-      characterTier: 1,
-      characterName: '',
-      totalPoints: 0,
-      availablePoints: 0,
-      redeemedPoints: 0,
-    }
-    localStorage.setItem('piramide-user', JSON.stringify(profile))
+    try {
+      let authUserId = user?.id
 
-    // Create Supabase account if not from Google (Google already has auth)
-    if (!fromGoogle && form.email && form.password) {
-      const { error } = await signUpWithEmail(form.email, form.password)
-      if (error && !error.includes('already registered')) {
-        alert(`Erro no cadastro: ${error}`)
+      // Create Supabase account if not from Google
+      if (!fromGoogle && form.email && form.password) {
+        const { error, user: newUser } = await signUpWithEmail(form.email, form.password)
+        if (error && !error.includes('already registered')) {
+          alert(`Erro no cadastro: ${error}`)
+          setSubmitting(false)
+          return
+        }
+        if (newUser) authUserId = newUser.id
+      }
+
+      if (!authUserId) {
+        alert('Erro: usuario nao autenticado. Tente novamente.')
+        setSubmitting(false)
         return
       }
-    }
 
-    navigate('/tribo')
+      // Create student record in Supabase
+      const { error: studentError } = await supabase.from('students').insert({
+        user_id: authUserId,
+        name: form.name,
+        email: form.email,
+        birth_date: form.birthDate || null,
+        school_id: form.schoolId || null,
+        parent_name: form.parentName || null,
+        parent_email: form.parentEmail || null,
+        parent_consent: form.lgpdConsent,
+        total_points: 0,
+        available_points: 0,
+        redeemed_points: 0,
+        role: 'student',
+      })
+
+      if (studentError) {
+        // If student already exists, just proceed
+        if (!studentError.message.includes('duplicate')) {
+          alert(`Erro ao salvar perfil: ${studentError.message}`)
+          setSubmitting(false)
+          return
+        }
+      }
+
+      navigate('/tribo')
+    } catch (err) {
+      alert('Erro inesperado. Tente novamente.')
+      setSubmitting(false)
+    }
   }
 
   const [googleLoading, setGoogleLoading] = useState(false)
@@ -221,7 +274,6 @@ export default function Cadastro() {
     setGoogleLoading(true)
     try {
       await signInWithGoogle()
-      // Redirect happens via Supabase → /auth/callback
     } catch {
       setGoogleLoading(false)
       alert('Erro ao conectar com Google. Tente novamente.')
@@ -270,7 +322,7 @@ export default function Cadastro() {
         {step === 1 && (
           <div className="space-y-4">
             <div className="text-center">
-              <span className="text-5xl">👋</span>
+              <span className="text-5xl">{'\u{1F44B}'}</span>
               <h2 className="text-2xl font-extrabold text-navy mt-2">Como voce se chama?</h2>
               <p className="text-gray-400 text-sm mt-1">Esse nome aparecera no seu perfil</p>
             </div>
@@ -289,7 +341,7 @@ export default function Cadastro() {
         {step === 2 && (
           <div className="space-y-4">
             <div className="text-center">
-              <span className="text-5xl">📧</span>
+              <span className="text-5xl">{'\u{1F4E7}'}</span>
               <h2 className="text-2xl font-extrabold text-navy mt-2">Qual seu email?</h2>
               <p className="text-gray-400 text-sm mt-1">Voce pode usar o Google para entrar mais rapido</p>
             </div>
@@ -300,11 +352,7 @@ export default function Cadastro() {
               onChange={(e) => {
                 const val = e.target.value
                 update('email', val)
-                if (val.includes('@') && checkEmailDuplicate(val)) {
-                  setEmailError('Este email ja esta cadastrado. Faca login.')
-                } else {
-                  setEmailError('')
-                }
+                setEmailError('')
               }}
               className={`w-full px-4 py-3.5 rounded-xl border-2 focus:outline-none text-lg transition-colors ${
                 emailError ? 'border-red focus:border-red' : 'border-gray-200 focus:border-teal'
@@ -337,11 +385,11 @@ export default function Cadastro() {
           </div>
         )}
 
-        {/* Step 3: Age — A6/A15: Separate day/month/year selectors with validation */}
+        {/* Step 3: Age */}
         {step === 3 && (
           <div className="space-y-4">
             <div className="text-center">
-              <span className="text-5xl">🎂</span>
+              <span className="text-5xl">{'\u{1F382}'}</span>
               <h2 className="text-2xl font-extrabold text-navy mt-2">Quantos anos voce tem?</h2>
               <p className="text-gray-400 text-sm mt-1">Selecione sua data de nascimento</p>
             </div>
@@ -392,7 +440,7 @@ export default function Cadastro() {
         {step === 4 && (
           <div className="space-y-4">
             <div className="text-center">
-              <span className="text-5xl">🔒</span>
+              <span className="text-5xl">{'\u{1F512}'}</span>
               <h2 className="text-2xl font-extrabold text-navy mt-2">Crie uma senha</h2>
               <p className="text-gray-400 text-sm mt-1">Minimo 6 caracteres</p>
             </div>
@@ -456,7 +504,7 @@ export default function Cadastro() {
         {step === 5 && (
           <div className="space-y-4">
             <div className="text-center">
-              <span className="text-5xl">🏫</span>
+              <span className="text-5xl">{'\u{1F3EB}'}</span>
               <h2 className="text-2xl font-extrabold text-navy mt-2">Sua escola</h2>
               <p className="text-gray-400 text-sm mt-1">Selecione estado, cidade e escola</p>
             </div>
@@ -490,6 +538,16 @@ export default function Cadastro() {
               ))}
             </select>
 
+            {form.city && (
+              <input
+                type="text"
+                placeholder="Buscar escola pelo nome..."
+                value={form.schoolSearch}
+                onChange={(e) => update('schoolSearch', e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors"
+              />
+            )}
+
             <select
               value={form.schoolId}
               onChange={(e) => update('schoolId', e.target.value)}
@@ -497,7 +555,7 @@ export default function Cadastro() {
               className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors bg-white disabled:opacity-50"
             >
               <option value="">Selecione a escola</option>
-              {filteredSchools.map((s) => (
+              {schoolsList.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
@@ -531,7 +589,7 @@ export default function Cadastro() {
         {step === 6 && (
           <div className="space-y-4">
             <div className="text-center">
-              <span className="text-5xl">🛡️</span>
+              <span className="text-5xl">{'\u{1F6E1}\uFE0F'}</span>
               <h2 className="text-2xl font-extrabold text-navy mt-2">Consentimento do Responsavel</h2>
               <p className="text-gray-400 text-sm mt-1">
                 Conforme a LGPD, menores de 18 anos precisam de autorizacao
@@ -592,16 +650,16 @@ export default function Cadastro() {
           )}
           <button
             onClick={handleNext}
-            disabled={!canAdvance()}
+            disabled={!canAdvance() || submitting}
             className={`
               flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-lg transition-all duration-200
-              ${canAdvance()
+              ${canAdvance() && !submitting
                 ? 'bg-teal text-white hover:bg-teal/90 hover:shadow-lg active:scale-[0.98]'
                 : 'bg-gray-200 text-gray-400 cursor-not-allowed'
               }
             `}
           >
-            {step === totalSteps || (step === 5 && !isMinor) ? 'Concluir' : 'Proximo'}
+            {submitting ? 'Salvando...' : step === totalSteps || (step === 5 && !isMinor) ? 'Concluir' : 'Proximo'}
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>

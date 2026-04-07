@@ -1,12 +1,22 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import { X, ChevronRight, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
 import BottomNav from '../components/BottomNav'
-import { useLocalUser } from '../hooks/useLocalUser'
-import { tribes, characters } from '../data/tribes'
-import { badges } from '../data/badges'
-import { actionTypes } from '../data/actions'
+import { useAuth } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
+import type { Student, Badge, Action, ActionType } from '../types'
+
+const ICON_MAP: Record<string, string> = {
+  'fa-mask': '\u{1F9B8}',
+  'fa-bolt': '\u26A1',
+  'fa-hat-wizard': '\u{1F9D9}',
+  'fa-jedi': '\u2694\uFE0F',
+  'fa-wind': '\u{1F343}',
+  'fa-trophy': '\u{1F3C6}',
+  'fa-guitar': '\u{1F3B8}',
+  'fa-dungeon': '\u{1F5E1}\uFE0F',
+}
 
 /* ---- tier helpers ---- */
 const TIER_THRESHOLDS = [
@@ -28,33 +38,13 @@ function getTierInfo(points: number) {
   return { current, next, progress: Math.min(progress, 100) }
 }
 
-function getCharacterForTribe(tribeId: string, tier: number) {
-  return characters.find((c) => c.tribe_id === tribeId && c.tier === tier)
-}
-
-function getNextCharacterForTribe(tribeId: string, tier: number) {
-  return characters.find((c) => c.tribe_id === tribeId && c.tier === tier + 1)
-}
-
 /* ---- faixa helper ---- */
-function getFaixa(totalPoints: number, allPoints: number[]) {
-  const below = allPoints.filter((p) => p <= totalPoints).length
-  const percentile = (below / allPoints.length) * 100
-  if (percentile >= 95) return { label: 'Ouro', icon: '\u{1F451}', color: 'gold' }
-  if (percentile >= 90) return { label: 'Prata', icon: '\u{1F948}', color: 'silver' }
-  if (percentile >= 75) return { label: 'Bronze', icon: '\u{1F949}', color: 'bronze' }
-  if (percentile >= 50) return { label: 'Ativo', icon: '\u2B50', color: 'blue' }
+function getFaixa(totalPoints: number) {
+  if (totalPoints >= 1000) return { label: 'Ouro', icon: '\u{1F451}', color: 'gold' }
+  if (totalPoints >= 600) return { label: 'Prata', icon: '\u{1F948}', color: 'silver' }
+  if (totalPoints >= 300) return { label: 'Bronze', icon: '\u{1F949}', color: 'bronze' }
+  if (totalPoints >= 100) return { label: 'Ativo', icon: '\u2B50', color: 'blue' }
   return { label: 'Em crescimento', icon: '\u{1F331}', color: 'green' }
-}
-
-/* ---- stored action type ---- */
-interface StoredAction {
-  id: string
-  actionTypeId: string
-  beneficiaryName: string
-  status: 'pending' | 'validated' | 'denied' | 'expired'
-  pointsAwarded: number
-  createdAt: string
 }
 
 const statusConfig: Record<string, { icon: typeof CheckCircle; label: string; cls: string }> = {
@@ -64,46 +54,73 @@ const statusConfig: Record<string, { icon: typeof CheckCircle; label: string; cl
   expired: { icon: AlertCircle, label: 'Expirada', cls: 'text-gray-500 bg-gray-100' },
 }
 
-/* ---- badge earned logic (simple) ---- */
-function getEarnedBadgeIds(totalPoints: number, actionsCount: number): string[] {
-  const earned: string[] = []
-  if (actionsCount >= 1) earned.push('badge-1')
-  if (actionsCount >= 7) earned.push('badge-2')
-  if (totalPoints >= 100) earned.push('badge-3')
-  if (actionsCount >= 5) earned.push('badge-4')
-  if (actionsCount >= 10) earned.push('badge-5')
-  if (actionsCount >= 3) earned.push('badge-6')
-  // badge-7 and badge-8 are percentile-based, approximate
-  if (totalPoints >= 500) earned.push('badge-7')
-  if (totalPoints >= 800) earned.push('badge-8')
-  return earned
-}
-
 export default function Perfil() {
-  const { user } = useLocalUser()
+  const { user } = useAuth()
   const [showQrModal, setShowQrModal] = useState(false)
-  const [actions, setActions] = useState<StoredAction[]>([])
+  const [student, setStudent] = useState<Student | null>(null)
+  const [actions, setActions] = useState<(Action & { action_type?: ActionType })[]>([])
+  const [badges, setBadges] = useState<{ badge: Badge; earned_at: string }[]>([])
+  const [allBadges, setAllBadges] = useState<Badge[]>([])
+  const [loading, setLoading] = useState(true)
+  const [nextCharName, setNextCharName] = useState<string | null>(null)
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem('piramide-actions')
-      if (raw) setActions(JSON.parse(raw))
-    } catch {
-      /* empty */
-    }
-  }, [])
+    if (!user) return
 
-  /* simulate school points for faixa calculation */
-  const allSchoolPoints = useMemo(() => {
-    const pts: number[] = []
-    for (let i = 0; i < 150; i++) {
-      pts.push(Math.floor(Math.random() * 1200))
+    async function loadData() {
+      // Load student with tribe and character
+      const { data: studentData } = await supabase
+        .from('students')
+        .select('*, tribe:tribes(*), character:characters(*)')
+        .eq('user_id', user!.id)
+        .single()
+
+      if (studentData) {
+        setStudent(studentData as Student)
+
+        // Load next character
+        if (studentData.tribe_id) {
+          const currentTier = (studentData as Student).character?.tier ?? 1
+          const { data: nextChar } = await supabase
+            .from('characters')
+            .select('name')
+            .eq('tribe_id', studentData.tribe_id)
+            .eq('tier', currentTier + 1)
+            .single()
+          if (nextChar) setNextCharName(nextChar.name)
+        }
+
+        // Load actions
+        const { data: actionsData } = await supabase
+          .from('actions')
+          .select('*, action_type:action_types(*)')
+          .eq('author_id', studentData.id)
+          .order('created_at', { ascending: false })
+          .limit(10)
+        if (actionsData) setActions(actionsData as typeof actions)
+
+        // Load earned badges
+        const { data: studentBadges } = await supabase
+          .from('student_badges')
+          .select('earned_at, badge:badges(*)')
+          .eq('student_id', studentData.id)
+        if (studentBadges) setBadges(studentBadges as unknown as typeof badges)
+      }
+
+      // Load all badges
+      const { data: allBadgesData } = await supabase
+        .from('badges')
+        .select('*')
+        .order('id')
+      if (allBadgesData) setAllBadges(allBadgesData)
+
+      setLoading(false)
     }
-    if (user) pts.push(user.totalPoints)
-    return pts
+
+    loadData()
   }, [user])
 
-  if (!user) {
+  if (loading || !student) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center">
         <div className="animate-pulse text-teal text-lg">Carregando...</div>
@@ -111,24 +128,16 @@ export default function Perfil() {
     )
   }
 
-  const tribe = tribes.find((t) => t.id === user.tribeId)
-  const tribeIcon = tribe?.icon ?? user.tribeEmoji
-  const tribeName = tribe?.name ?? user.tribeName
+  const tribeIcon = student.tribe?.icon_class
+    ? (ICON_MAP[student.tribe.icon_class] ?? '\u{1F3AE}')
+    : '\u{1F3AE}'
+  const tribeName = student.tribe?.name ?? 'Sem tribo'
+  const charName = student.character?.name ?? 'Aprendiz'
+  const tierInfo = getTierInfo(student.total_points)
+  const faixa = getFaixa(student.total_points)
+  const pointsToNext = tierInfo.next ? tierInfo.next.min - student.total_points : 0
 
-  const tierInfo = getTierInfo(user.totalPoints)
-  const currentChar = getCharacterForTribe(user.tribeId, tierInfo.current.tier)
-  const nextChar = getNextCharacterForTribe(user.tribeId, tierInfo.current.tier)
-  const charName = currentChar?.name ?? user.characterName
-
-  const faixa = getFaixa(user.totalPoints, allSchoolPoints)
-  const percentile = Math.round(
-    (allSchoolPoints.filter((p) => p <= user.totalPoints).length / allSchoolPoints.length) * 100,
-  )
-  const topPercent = 100 - percentile
-
-  const pointsToNext = tierInfo.next ? tierInfo.next.min - user.totalPoints : 0
-
-  const earnedBadgeIds = getEarnedBadgeIds(user.totalPoints, actions.length)
+  const earnedBadgeIds = new Set(badges.map((b) => b.badge?.id).filter(Boolean))
 
   const faixaBorderColors: Record<string, string> = {
     gold: 'border-gold bg-yellow-50',
@@ -144,7 +153,7 @@ export default function Perfil() {
       <div className="gradient-bg px-6 pt-10 pb-8 rounded-b-3xl shadow-lg">
         <div className="flex flex-col items-center">
           <span className="text-7xl mb-2 drop-shadow-lg">{tribeIcon}</span>
-          <h1 className="text-2xl font-bold text-white">{user.name}</h1>
+          <h1 className="text-2xl font-bold text-white">{student.name}</h1>
           <p className="text-white/80 text-sm mt-1 text-center">
             {tribeName} &mdash; {charName} (Tier {tierInfo.current.tier})
           </p>
@@ -160,10 +169,10 @@ export default function Perfil() {
                 }}
               />
             </div>
-            {tierInfo.next && nextChar ? (
+            {tierInfo.next && nextCharName ? (
               <p className="text-white/70 text-xs text-center mt-2">
                 Faltam <span className="font-bold text-white">{pointsToNext} pontos</span> para
-                se tornar {nextChar.name}!
+                se tornar {nextCharName}!
               </p>
             ) : (
               <p className="text-white/70 text-xs text-center mt-2">
@@ -180,9 +189,9 @@ export default function Perfil() {
           <h2 className="text-lg font-bold text-navy mb-3 mt-6">Cofrinhos Digitais</h2>
           <div className="grid grid-cols-3 gap-3">
             {[
-              { emoji: '\u{1F3C6}', label: 'Pontos Ganhos', value: user.totalPoints },
-              { emoji: '\u{1F4B0}', label: 'Saldo Dispon\u00edvel', value: user.availablePoints },
-              { emoji: '\u{1F381}', label: 'Pontos Resgatados', value: user.redeemedPoints },
+              { emoji: '\u{1F3C6}', label: 'Pontos Ganhos', value: student.total_points },
+              { emoji: '\u{1F4B0}', label: 'Saldo Dispon\u00edvel', value: student.available_points },
+              { emoji: '\u{1F381}', label: 'Pontos Resgatados', value: student.redeemed_points },
             ].map((c) => (
               <div
                 key={c.label}
@@ -208,11 +217,6 @@ export default function Perfil() {
                 <p className="text-sm text-gray-600">Faixa: {faixa.label}</p>
               </div>
             </div>
-            <p className="text-sm text-gray-700 mt-2">
-              Voc&ecirc; est&aacute; no{' '}
-              <span className="font-bold text-teal">Top {topPercent > 0 ? topPercent : 1}%</span>{' '}
-              da sua escola
-            </p>
             <Link
               to="/ranking"
               className="mt-3 flex items-center gap-1 text-teal font-semibold text-sm hover:underline"
@@ -226,13 +230,13 @@ export default function Perfil() {
         <section className="flex flex-col items-center">
           <div className="bg-white rounded-xl shadow-md p-4 flex flex-col items-center">
             <QRCodeSVG
-              value={`piramide://student/${user.email}`}
+              value={`piramide://student/${student.id}`}
               size={100}
               bgColor="#FFFFFF"
               fgColor="#1F4E79"
               level="M"
             />
-            <p className="text-[10px] text-gray-400 mt-2">ID: {user.email}</p>
+            <p className="text-[10px] text-gray-400 mt-2">ID: {student.email || student.id}</p>
           </div>
           <button
             onClick={() => setShowQrModal(true)}
@@ -247,7 +251,7 @@ export default function Perfil() {
           <h2 className="text-lg font-bold text-navy mb-3">Hist&oacute;rico de a&ccedil;&otilde;es</h2>
           {actions.length === 0 ? (
             <div className="bg-white rounded-xl shadow-md p-6 text-center">
-              <span className="text-5xl block mb-2">📋</span>
+              <span className="text-5xl block mb-2">{'\u{1F4CB}'}</span>
               <p className="text-gray-500 text-sm">
                 Nenhuma a&ccedil;&atilde;o registrada ainda. Que tal come&ccedil;ar agora?
               </p>
@@ -260,23 +264,21 @@ export default function Perfil() {
             </div>
           ) : (
             <div className="space-y-2">
-              {actions.slice(0, 10).map((a) => {
-                const at = actionTypes.find((t) => t.id === a.actionTypeId)
+              {actions.map((a) => {
                 const st = statusConfig[a.status] ?? statusConfig.pending
                 const StIcon = st.icon
-                const date = new Date(a.createdAt)
+                const date = new Date(a.created_at)
                 return (
                   <div
                     key={a.id}
                     className="bg-white rounded-xl shadow-sm p-3 flex items-center gap-3"
                   >
-                    <span className="text-2xl">{at?.icon ?? '🔵'}</span>
+                    <span className="text-2xl">{a.action_type?.icon ?? '\u{1F535}'}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-navy truncate">
-                        {at?.name ?? 'A\u00e7\u00e3o'}
+                        {a.action_type?.name ?? 'A\u00e7\u00e3o'}
                       </p>
                       <p className="text-xs text-gray-400 truncate">
-                        {a.beneficiaryName} &middot;{' '}
                         {date.toLocaleDateString('pt-BR', {
                           day: '2-digit',
                           month: 'short',
@@ -285,7 +287,7 @@ export default function Perfil() {
                     </div>
                     <div className="text-right flex flex-col items-end gap-1">
                       <span className="text-xs font-bold text-navy">
-                        +{a.pointsAwarded}
+                        +{a.points_awarded ?? 0}
                       </span>
                       <span
                         className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex items-center gap-1 ${st.cls}`}
@@ -304,30 +306,36 @@ export default function Perfil() {
         {/* ===== SELOS ===== */}
         <section>
           <h2 className="text-lg font-bold text-navy mb-3">Selos conquistados</h2>
-          <div className="grid grid-cols-3 gap-3">
-            {badges.map((b) => {
-              const earned = earnedBadgeIds.includes(b.id)
-              return (
-                <div
-                  key={b.id}
-                  className={`rounded-xl p-4 flex flex-col items-center text-center transition-all ${
-                    earned
-                      ? 'bg-white shadow-md'
-                      : 'bg-gray-100 opacity-60'
-                  }`}
-                >
-                  <span className="text-3xl mb-1">{earned ? b.icon : '\u{1F512}'}</span>
-                  <span
-                    className={`text-[11px] leading-tight font-medium ${
-                      earned ? 'text-navy' : 'text-gray-400'
+          {allBadges.length === 0 ? (
+            <div className="bg-white rounded-xl shadow-md p-6 text-center">
+              <p className="text-gray-400 text-sm">Selos serao adicionados em breve.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-3">
+              {allBadges.map((b) => {
+                const earned = earnedBadgeIds.has(b.id)
+                return (
+                  <div
+                    key={b.id}
+                    className={`rounded-xl p-4 flex flex-col items-center text-center transition-all ${
+                      earned
+                        ? 'bg-white shadow-md'
+                        : 'bg-gray-100 opacity-60'
                     }`}
                   >
-                    {b.name}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
+                    <span className="text-3xl mb-1">{earned ? (b.icon ?? '\u{1F3C5}') : '\u{1F512}'}</span>
+                    <span
+                      className={`text-[11px] leading-tight font-medium ${
+                        earned ? 'text-navy' : 'text-gray-400'
+                      }`}
+                    >
+                      {b.name}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </section>
       </div>
 
@@ -349,14 +357,14 @@ export default function Perfil() {
             </button>
             <h3 className="text-navy font-bold text-lg mb-4">Meu QR Code</h3>
             <QRCodeSVG
-              value={`piramide://student/${user.email}`}
+              value={`piramide://student/${student.id}`}
               size={240}
               bgColor="#FFFFFF"
               fgColor="#1F4E79"
               level="H"
             />
-            <p className="text-xs text-gray-400 mt-4">{user.name}</p>
-            <p className="text-[10px] text-gray-300">{user.email}</p>
+            <p className="text-xs text-gray-400 mt-4">{student.name}</p>
+            <p className="text-[10px] text-gray-300">{student.email}</p>
           </div>
         </div>
       )}

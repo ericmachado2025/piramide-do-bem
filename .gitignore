@@ -33,3 +33,9 @@ dist-ssr
 # Tool configs
 .claude
 .rtk
+# INEP data (too large for git)
+scripts/inep_2023.zip
+scripts/inep_schools_active.csv
+scripts/communities-parsed.json
+scripts/communities_utf8.sql
+

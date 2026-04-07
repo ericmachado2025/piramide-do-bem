@@ -1,7 +1,9 @@
-import { useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Lock, Star, Zap, ChevronRight } from 'lucide-react'
-import { tribes, characters } from '../data/tribes'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
+import type { Tribe, Character, Student } from '../types'
 
 const tierColors = [
   'from-teal to-green',
@@ -19,44 +21,93 @@ const tierBgColors = [
   'bg-red/10 border-red/30',
 ]
 
+const iconClassToEmoji: Record<string, string> = {
+  'fa-mask': '🦸',
+  'fa-bolt': '⚡',
+  'fa-hat-wizard': '🧙',
+  'fa-jedi': '⚔️',
+  'fa-wind': '🍃',
+  'fa-trophy': '🏆',
+  'fa-guitar': '🎸',
+  'fa-dungeon': '🗡️',
+}
+
+function getTribeEmoji(iconClass: string | null): string {
+  if (!iconClass) return '⭐'
+  for (const [cls, emoji] of Object.entries(iconClassToEmoji)) {
+    if (iconClass.includes(cls)) return emoji
+  }
+  return '⭐'
+}
+
 export default function EscolhaPersonagem() {
   const navigate = useNavigate()
+  const { user: authUser } = useAuth()
+  const [student, setStudent] = useState<Student | null>(null)
+  const [tribe, setTribe] = useState<Tribe | null>(null)
+  const [tribeCharacters, setTribeCharacters] = useState<Character[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const user = useMemo(() => {
-    return JSON.parse(localStorage.getItem('piramide-user') || '{}')
-  }, [])
+  useEffect(() => {
+    if (!authUser) return
+    async function loadData() {
+      // Get student with tribe and character
+      const { data: studentData } = await supabase
+        .from('students')
+        .select('*, tribe:tribes(*), character:characters(*)')
+        .eq('user_id', authUser!.id)
+        .single()
 
-  const tribe = useMemo(() => {
-    return tribes.find((t) => t.id === user.tribeId) || tribes[0]
-  }, [user.tribeId])
+      if (!studentData || !studentData.tribe_id) {
+        navigate('/tribo')
+        return
+      }
 
-  // Filter characters by tribe + gender + archetype
-  const tribeCharacters = useMemo(() => {
-    const gender = user.gender === 'nonbinary' ? 'neutral' : (user.gender || 'neutral')
-    const archetype = user.archetype || 'hero'
-    return characters
-      .filter((c) => {
-        if (c.tribe_id !== tribe.id) return false
-        if (c.archetype !== archetype) return false
-        if (c.gender_filter !== 'neutral' && c.gender_filter !== gender) return false
-        return true
-      })
-      .sort((a, b) => a.tier - b.tier)
-  }, [tribe.id, user.gender, user.archetype])
+      setStudent(studentData)
+      setTribe(studentData.tribe as Tribe)
 
-  const currentPoints = user.totalPoints || 0
+      // Load characters for the tribe matching student's character archetype and gender
+      const currentChar = studentData.character as Character | null
+      const archetype = currentChar?.archetype || 'HERO'
+      const gender = currentChar?.gender || 'NEUTRAL'
+
+      const { data: chars } = await supabase
+        .from('characters')
+        .select('*')
+        .eq('tribe_id', studentData.tribe_id)
+        .eq('archetype', archetype)
+        .order('tier')
+
+      // Filter by gender: show matching gender or NEUTRAL
+      const filtered = (chars || []).filter(
+        (c) => c.gender === 'NEUTRAL' || c.gender === gender
+      )
+      setTribeCharacters(filtered)
+      setLoading(false)
+    }
+    loadData()
+  }, [authUser])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-bg flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-10 h-10 border-4 border-teal border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-gray-500 text-sm">Carregando personagens...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!tribe || !student) return null
+
+  const tribeEmoji = getTribeEmoji(tribe.icon_class)
+  const currentPoints = student.total_points || 0
   const tier1Char = tribeCharacters[0]
   const nextTierPoints = tribeCharacters[1]?.min_points || 100
   const progress = Math.min((currentPoints / nextTierPoints) * 100, 100)
 
   const handleStart = () => {
-    const updated = {
-      ...user,
-      currentCharacterId: tier1Char?.id,
-      characterTier: 1,
-      characterName: tier1Char?.name ?? '',
-    }
-    localStorage.setItem('piramide-user', JSON.stringify(updated))
     navigate('/home')
   }
 
@@ -67,7 +118,7 @@ export default function EscolhaPersonagem() {
         <div className="absolute top-4 right-4 w-20 h-20 rounded-full bg-white/5" />
         <div className="absolute bottom-2 left-6 w-12 h-12 rounded-full bg-white/5" />
 
-        <span className="text-5xl block mb-2">{tribe.icon}</span>
+        <span className="text-5xl block mb-2">{tribeEmoji}</span>
         <h1 className="text-3xl md:text-4xl font-extrabold text-white mb-1">
           Conheca seus personagens!
         </h1>
@@ -118,7 +169,7 @@ export default function EscolhaPersonagem() {
                       }`}
                     >
                       {isActive ? (
-                        <span className="text-3xl">{tribe.icon}</span>
+                        <span className="text-3xl">{tribeEmoji}</span>
                       ) : (
                         <Lock className="w-6 h-6 text-gray-400" />
                       )}

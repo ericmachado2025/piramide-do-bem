@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -13,50 +14,67 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
 
+  async function redirectByRole(userId: string) {
+    // Check each role table in order
+    const { data: student } = await supabase
+      .from('students')
+      .select('id')
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (student) { navigate('/home', { replace: true }); return }
+
+    const { data: teacher } = await supabase
+      .from('teachers')
+      .select('id')
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (teacher) { navigate('/professor/dashboard', { replace: true }); return }
+
+    const { data: parent } = await supabase
+      .from('parents')
+      .select('id')
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (parent) { navigate('/responsavel/dashboard', { replace: true }); return }
+
+    const { data: sponsor } = await supabase
+      .from('sponsors')
+      .select('id')
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (sponsor) { navigate('/patrocinador/dashboard', { replace: true }); return }
+
+    // No role found — new user
+    navigate('/cadastro/perfil', { replace: true })
+  }
+
   const handleLogin = async () => {
     setError('')
     setLoading(true)
 
-    // Try Supabase auth first
     const { error: authError } = await signInWithEmail(email, password)
 
     if (authError) {
-      // Fallback: try localStorage prototype auth
-      const stored = localStorage.getItem('piramide-user')
-      if (stored) {
-        try {
-          const user = JSON.parse(stored)
-          if (user.email && user.email.toLowerCase() === email.toLowerCase()) {
-            setLoading(false)
-            navigate(user.tribeId ? '/home' : '/tribo', { replace: true })
-            return
-          }
-        } catch { /* ignore */ }
-      }
       setLoading(false)
       setError(translateError(authError))
       return
     }
 
-    // Auth successful — check if profile exists
-    const stored = localStorage.getItem('piramide-user')
-    if (stored) {
-      try {
-        const profile = JSON.parse(stored)
-        if (profile.tribeId) {
-          navigate('/home', { replace: true })
-          return
-        }
-      } catch { /* ignore */ }
+    // Get the authenticated user
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      await redirectByRole(user.id)
+    } else {
+      navigate('/cadastro/perfil', { replace: true })
     }
     setLoading(false)
-    navigate('/home', { replace: true })
   }
 
   const handleGoogleLogin = async () => {
     setGoogleLoading(true)
     try {
       await signInWithGoogle()
+      // OAuth redirects to /auth/callback which handles the rest
     } catch {
       setGoogleLoading(false)
       setError('Erro ao conectar com Google.')
@@ -155,10 +173,20 @@ export default function Login() {
             {loading ? 'Entrando...' : 'Entrar'}
           </button>
 
-          <div className="text-center pt-2">
+          <div className="text-center pt-1">
+            <button
+              type="button"
+              className="text-gray-400 text-sm hover:text-teal transition-colors"
+              onClick={() => {/* TODO: forgot password flow */}}
+            >
+              Esqueceu a senha?
+            </button>
+          </div>
+
+          <div className="text-center pt-1">
             <p className="text-gray-400 text-sm">
               Nao tem conta?{' '}
-              <Link to="/cadastro" className="text-teal font-semibold hover:underline">
+              <Link to="/cadastro/perfil" className="text-teal font-semibold hover:underline">
                 Cadastre-se
               </Link>
             </p>

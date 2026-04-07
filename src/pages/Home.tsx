@@ -1,62 +1,116 @@
-import { Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { ChevronRight, Clock, CheckCircle2, Sparkles } from 'lucide-react'
-import { useLocalUser } from '../hooks/useLocalUser'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 import BottomNav from '../components/BottomNav'
-import type { Action } from '../types'
-import { actionTypes } from '../data/actions'
+import type { Student, Action, ActionType } from '../types'
 
-const TIERS = ['Aprendiz', 'Guardião', 'Protetor', 'Herói', 'Lenda']
+const TIERS = ['Aprendiz', 'Guardiao', 'Protetor', 'Heroi', 'Lenda']
 
-function getSimulatedActions(): (Action & { authorName: string; actionTypeName: string; actionIcon: string })[] {
-  const stored = localStorage.getItem('piramide-actions')
-  const userActions: Action[] = stored ? JSON.parse(stored) : []
-
-  const simulated = [
-    { authorName: 'Maria S.', actionTypeName: 'Ajudei colega no dever', actionIcon: '📚', status: 'validated' as const, points_awarded: 10, created_at: new Date(Date.now() - 3600000).toISOString() },
-    { authorName: 'João P.', actionTypeName: 'Mediei conflito', actionIcon: '⚖️', status: 'pending' as const, points_awarded: 25, created_at: new Date(Date.now() - 7200000).toISOString() },
-    { authorName: 'Ana L.', actionTypeName: 'Acolhi aluno novo', actionIcon: '🤝', status: 'validated' as const, points_awarded: 15, created_at: new Date(Date.now() - 86400000).toISOString() },
-    { authorName: 'Pedro R.', actionTypeName: 'Compartilhei material', actionIcon: '📤', status: 'pending' as const, points_awarded: 10, created_at: new Date(Date.now() - 100000000).toISOString() },
-    { authorName: 'Luísa M.', actionTypeName: 'Participei de projeto coletivo', actionIcon: '🏗️', status: 'validated' as const, points_awarded: 20, created_at: new Date(Date.now() - 150000000).toISOString() },
-  ]
-
-  const mapped = userActions.slice(-3).map((a) => {
-    const at = actionTypes.find((t) => t.id === a.action_type_id)
-    return {
-      ...a,
-      authorName: 'Você',
-      actionTypeName: at?.name ?? 'Boa ação',
-      actionIcon: at?.icon ?? '🤝',
-    }
-  })
-
-  const combined = [...mapped.reverse(), ...simulated]
-  return combined.slice(0, 5) as (Action & { authorName: string; actionTypeName: string; actionIcon: string })[]
+const iconClassToEmoji: Record<string, string> = {
+  'fa-mask': '🦸',
+  'fa-bolt': '⚡',
+  'fa-hat-wizard': '🧙',
+  'fa-jedi': '⚔️',
+  'fa-wind': '🍃',
+  'fa-trophy': '🏆',
+  'fa-guitar': '🎸',
+  'fa-dungeon': '🗡️',
 }
 
-function getPendingCount(): number {
-  const stored = localStorage.getItem('piramide-actions')
-  const actions: Action[] = stored ? JSON.parse(stored) : []
-  const userPending = actions.filter((a) => a.status === 'pending').length
-  return userPending + 2 // add simulated pending
+function getTribeEmoji(iconClass: string | null): string {
+  if (!iconClass) return '⭐'
+  for (const [cls, emoji] of Object.entries(iconClassToEmoji)) {
+    if (iconClass.includes(cls)) return emoji
+  }
+  return '⭐'
 }
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime()
   const mins = Math.floor(diff / 60000)
-  if (mins < 60) return `${mins}min atrás`
+  if (mins < 60) return `${mins}min atras`
   const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h atrás`
+  if (hours < 24) return `${hours}h atras`
   const days = Math.floor(hours / 24)
-  return `${days}d atrás`
+  return `${days}d atras`
+}
+
+interface RecentAction extends Omit<Action, 'author' | 'action_type'> {
+  action_type: ActionType | null
+  author: { name: string } | null
 }
 
 export default function Home() {
-  const { user } = useLocalUser()
-  const actions = getSimulatedActions()
-  const pendingCount = getPendingCount()
-  const tierProgress = user ? Math.min(((user.totalPoints % 100) / 100) * 100, 100) : 0
+  const navigate = useNavigate()
+  const { user: authUser, loading: authLoading } = useAuth()
+  const [student, setStudent] = useState<Student | null>(null)
+  const [recentActions, setRecentActions] = useState<RecentAction[]>([])
+  const [pendingCount, setPendingCount] = useState(0)
+  const [loading, setLoading] = useState(true)
 
-  if (!user) return null
+  useEffect(() => {
+    if (authLoading) return
+    if (!authUser) {
+      navigate('/login')
+      return
+    }
+
+    async function loadData() {
+      // Load student with tribe and character
+      const { data: studentData } = await supabase
+        .from('students')
+        .select('*, tribe:tribes(*), character:characters(*)')
+        .eq('user_id', authUser!.id)
+        .single()
+
+      if (!studentData) {
+        navigate('/cadastro/perfil')
+        return
+      }
+
+      setStudent(studentData)
+
+      // Load recent validated actions
+      const { data: actions } = await supabase
+        .from('actions')
+        .select('*, action_type:action_types(*), author:students!actions_author_id_fkey(name)')
+        .eq('status', 'validated')
+        .order('created_at', { ascending: false })
+        .limit(5)
+
+      setRecentActions((actions as RecentAction[]) || [])
+
+      // Load pending actions count
+      const { count } = await supabase
+        .from('actions')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending')
+
+      setPendingCount(count || 0)
+      setLoading(false)
+    }
+
+    loadData()
+  }, [authUser, authLoading])
+
+  if (authLoading || loading) {
+    return (
+      <div className="min-h-screen bg-bg flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-10 h-10 border-4 border-teal border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-gray-500 text-sm">Carregando...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!student) return null
+
+  const tribeEmoji = getTribeEmoji(student.tribe?.icon_class ?? null)
+  const currentTier = student.character?.tier ?? 1
+  const tierProgress = Math.min(((student.total_points % 100) / 100) * 100, 100)
 
   return (
     <div className="min-h-screen bg-bg pb-20">
@@ -64,18 +118,18 @@ export default function Home() {
       <div className="gradient-bg px-5 pt-8 pb-6 rounded-b-3xl">
         <div className="max-w-md mx-auto">
           <h1 className="text-2xl font-bold text-white">
-            Ola, {user.name}! <span className="inline-block animate-bounce">🎮</span>
+            Ola, {student.name}! <span className="inline-block animate-bounce">🎮</span>
           </h1>
-          <p className="text-white/70 text-sm mt-1">Que boas ações vamos fazer hoje?</p>
+          <p className="text-white/70 text-sm mt-1">Que boas acoes vamos fazer hoje?</p>
 
           {/* Mini avatar / stats */}
           <div className="mt-4 bg-white/15 backdrop-blur-sm rounded-2xl p-4 flex items-center gap-4">
-            <div className="text-4xl">{user.tribeEmoji}</div>
+            <div className="text-4xl">{tribeEmoji}</div>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <span className="text-white font-semibold text-sm">{TIERS[user.characterTier - 1] ?? 'Aprendiz'}</span>
+                <span className="text-white font-semibold text-sm">{TIERS[currentTier - 1] ?? 'Aprendiz'}</span>
                 <span className="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full">
-                  Tier {user.characterTier}
+                  Tier {currentTier}
                 </span>
               </div>
               <div className="mt-2 h-2 bg-white/20 rounded-full overflow-hidden">
@@ -85,8 +139,8 @@ export default function Home() {
                 />
               </div>
               <div className="flex justify-between mt-1">
-                <span className="text-white/60 text-xs">{user.totalPoints} pts</span>
-                <span className="text-white/60 text-xs">Top 12% da sua escola</span>
+                <span className="text-white/60 text-xs">{student.total_points} pts</span>
+                <span className="text-white/60 text-xs">{student.tribe?.name ?? 'Sem tribo'}</span>
               </div>
             </div>
           </div>
@@ -184,35 +238,35 @@ export default function Home() {
             <h2 className="font-bold text-navy text-lg">Ultimas Acoes</h2>
           </div>
           <div className="space-y-2">
-            {actions.map((action, i) => (
-              <div
-                key={i}
-                className="bg-white rounded-2xl shadow-sm p-4 flex items-center gap-3 hover:shadow-md transition-shadow"
-              >
-                <span className="text-2xl">{action.actionIcon}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-navy text-sm truncate">
-                    {action.authorName}
-                  </p>
-                  <p className="text-gray-500 text-xs truncate">{action.actionTypeName}</p>
-                </div>
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                  {action.status === 'validated' ? (
+            {recentActions.length === 0 ? (
+              <div className="bg-white rounded-2xl shadow-sm p-6 text-center">
+                <p className="text-gray-400 text-sm">Nenhuma acao ainda</p>
+                <p className="text-gray-300 text-xs mt-1">Registre sua primeira boa acao!</p>
+              </div>
+            ) : (
+              recentActions.map((action) => (
+                <div
+                  key={action.id}
+                  className="bg-white rounded-2xl shadow-sm p-4 flex items-center gap-3 hover:shadow-md transition-shadow"
+                >
+                  <span className="text-2xl">{action.action_type?.icon ?? '🤝'}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-navy text-sm truncate">
+                      {action.author?.name ?? 'Aluno'}
+                    </p>
+                    <p className="text-gray-500 text-xs truncate">{action.action_type?.name ?? 'Boa acao'}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
                     <span className="flex items-center gap-1 text-green text-xs font-medium">
                       <CheckCircle2 size={14} />
                       Validado
                     </span>
-                  ) : (
-                    <span className="flex items-center gap-1 text-yellow text-xs font-medium">
-                      <Clock size={14} />
-                      Pendente
-                    </span>
-                  )}
-                  <span className="text-teal font-bold text-xs">+{action.points_awarded} pts</span>
-                  <span className="text-gray-400 text-[10px]">{timeAgo(action.created_at)}</span>
+                    <span className="text-teal font-bold text-xs">+{action.points_awarded ?? 0} pts</span>
+                    <span className="text-gray-400 text-[10px]">{timeAgo(action.created_at)}</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>

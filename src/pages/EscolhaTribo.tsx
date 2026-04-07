@@ -1,21 +1,12 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronRight, Star, Lock, ArrowLeft, Shield, Skull } from 'lucide-react'
-import { tribes, characters } from '../data/tribes'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
+import type { Tribe, Character } from '../types'
 
 type Gender = 'male' | 'female' | 'nonbinary' | ''
-type Archetype = 'hero' | 'villain' | ''
-
-const universeColors: Record<string, string> = {
-  Marvel: 'bg-red/10 text-red',
-  'Dragon Ball': 'bg-yellow/10 text-yellow-700',
-  'Harry Potter': 'bg-purple-100 text-purple-700',
-  'Star Wars': 'bg-blue-100 text-blue-700',
-  Naruto: 'bg-orange-100 text-orange-700',
-  Esportes: 'bg-green/10 text-green-700',
-  Musica: 'bg-pink-100 text-pink-700',
-  Fantasia: 'bg-indigo-100 text-indigo-700',
-}
+type Archetype = 'HERO' | 'ANTI_HERO' | 'VILLAIN' | ''
 
 const genderOptions = [
   { value: 'male' as Gender, label: 'Masculino', icon: '♂️' },
@@ -23,46 +14,98 @@ const genderOptions = [
   { value: 'nonbinary' as Gender, label: 'Nao-binario', icon: '⚧️' },
 ]
 
+const iconClassToEmoji: Record<string, string> = {
+  'fa-mask': '🦸',
+  'fa-bolt': '⚡',
+  'fa-hat-wizard': '🧙',
+  'fa-jedi': '⚔️',
+  'fa-wind': '🍃',
+  'fa-trophy': '🏆',
+  'fa-guitar': '🎸',
+  'fa-dungeon': '🗡️',
+}
+
+function getTribeEmoji(iconClass: string | null): string {
+  if (!iconClass) return '⭐'
+  for (const [cls, emoji] of Object.entries(iconClassToEmoji)) {
+    if (iconClass.includes(cls)) return emoji
+  }
+  return '⭐'
+}
+
 export default function EscolhaTribo() {
   const navigate = useNavigate()
+  const { user: authUser } = useAuth()
   const [gender, setGender] = useState<Gender>('')
   const [selectedTribe, setSelectedTribe] = useState<string | null>(null)
   const [selectedArchetype, setSelectedArchetype] = useState<Archetype>('')
   const [expandedTribe, setExpandedTribe] = useState<string | null>(null)
+  const [tribes, setTribes] = useState<Tribe[]>([])
+  const [tribeCharacters, setTribeCharacters] = useState<Record<string, Character[]>>({})
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
 
   // C15: Must select gender first
   const showTribes = gender !== ''
 
+  // Map local gender to DB gender
+  const genderFilter = gender === 'nonbinary' ? 'NEUTRAL' : gender === 'male' ? 'MALE' : gender === 'female' ? 'FEMALE' : ''
+
+  // Load tribes on mount
+  useEffect(() => {
+    async function loadTribes() {
+      const { data } = await supabase
+        .from('tribes')
+        .select('*')
+        .order('display_order')
+      if (data) setTribes(data)
+      setLoading(false)
+    }
+    loadTribes()
+  }, [])
+
+  // Load characters when a tribe is expanded
+  useEffect(() => {
+    if (!expandedTribe || tribeCharacters[expandedTribe]) return
+    async function loadCharacters() {
+      const { data } = await supabase
+        .from('characters')
+        .select('*')
+        .eq('tribe_id', expandedTribe!)
+        .order('tier')
+      if (data) {
+        setTribeCharacters((prev) => ({ ...prev, [expandedTribe!]: data }))
+      }
+    }
+    loadCharacters()
+  }, [expandedTribe])
+
   // Get characters filtered by gender + archetype for a tribe
   const getFilteredCharacters = (tribeId: string, archetype: string) => {
-    const genderFilter = gender === 'nonbinary' ? 'neutral' : gender
-    return characters
+    const chars = tribeCharacters[tribeId] || []
+    return chars
       .filter((c) => {
-        if (c.tribe_id !== tribeId) return false
         if (c.archetype !== archetype) return false
-        // Show characters that match gender OR are neutral
-        if (c.gender_filter !== 'neutral' && c.gender_filter !== genderFilter) return false
+        if (c.gender !== 'NEUTRAL' && c.gender !== genderFilter) return false
         return true
       })
       .sort((a, b) => a.tier - b.tier)
   }
 
   // Get available archetypes for a tribe (based on gender)
-  const getAvailableArchetypes = (tribeId: string) => {
-    const genderFilter = gender === 'nonbinary' ? 'neutral' : gender
-    const tribeChars = characters.filter((c) =>
-      c.tribe_id === tribeId &&
-      (c.gender_filter === 'neutral' || c.gender_filter === genderFilter)
+  const getAvailableArchetypes = (tribeId: string): string[] => {
+    const chars = tribeCharacters[tribeId] || []
+    const filtered = chars.filter(
+      (c) => c.gender === 'NEUTRAL' || c.gender === genderFilter
     )
-    const archetypes = [...new Set(tribeChars.map((c) => c.archetype))]
-    return archetypes
+    return [...new Set(filtered.map((c) => c.archetype).filter(Boolean))] as string[]
   }
 
   // Currently displayed characters
   const displayedCharacters = useMemo(() => {
     if (!selectedTribe || !selectedArchetype) return []
     return getFilteredCharacters(selectedTribe, selectedArchetype)
-  }, [selectedTribe, selectedArchetype, gender])
+  }, [selectedTribe, selectedArchetype, gender, tribeCharacters])
 
   const handleTribeClick = (tribeId: string) => {
     if (expandedTribe === tribeId) {
@@ -75,23 +118,55 @@ export default function EscolhaTribo() {
     }
   }
 
-  const handleChoose = () => {
-    if (!selectedTribe || displayedCharacters.length === 0) return
-    const tribe = tribes.find((t) => t.id === selectedTribe)
-    const user = JSON.parse(localStorage.getItem('piramide-user') || '{}')
-    user.tribeId = selectedTribe
-    user.tribeName = tribe?.name
-    user.tribeEmoji = tribe?.icon
-    user.gender = gender
-    user.archetype = selectedArchetype
-    // Store the first character ID for this path
-    const firstChar = displayedCharacters[0]
-    if (firstChar) {
-      user.characterName = firstChar.name
-      user.characterTier = 1
+  const handleChoose = async () => {
+    if (!selectedTribe || displayedCharacters.length === 0 || !authUser) return
+    setSaving(true)
+    try {
+      // Get student record
+      const { data: student } = await supabase
+        .from('students')
+        .select('id')
+        .eq('user_id', authUser.id)
+        .single()
+      if (!student) {
+        console.error('Student record not found')
+        setSaving(false)
+        return
+      }
+      // Get tier 1 character for selected tribe+archetype+gender
+      const { data: chars } = await supabase
+        .from('characters')
+        .select('*')
+        .eq('tribe_id', selectedTribe)
+        .eq('archetype', selectedArchetype)
+        .eq('gender', genderFilter)
+        .order('tier')
+        .limit(1)
+      // Update student
+      await supabase
+        .from('students')
+        .update({
+          tribe_id: selectedTribe,
+          current_character_id: chars?.[0]?.id ?? null,
+        })
+        .eq('id', student.id)
+      navigate('/personagem')
+    } catch (err) {
+      console.error('Error choosing tribe:', err)
+    } finally {
+      setSaving(false)
     }
-    localStorage.setItem('piramide-user', JSON.stringify(user))
-    navigate('/personagem')
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-bg flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-10 h-10 border-4 border-teal border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-gray-500 text-sm">Carregando tribos...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -157,7 +232,10 @@ export default function EscolhaTribo() {
                 const isExpanded = expandedTribe === tribe.id
                 const isSelected = selectedTribe === tribe.id
                 const archetypes = getAvailableArchetypes(tribe.id)
-                const colorClass = universeColors[tribe.universe] || 'bg-gray-100 text-gray-600'
+                const tribeEmoji = getTribeEmoji(tribe.icon_class)
+                const accentStyle = tribe.color_hex
+                  ? { backgroundColor: `${tribe.color_hex}15`, color: tribe.color_hex }
+                  : {}
 
                 return (
                   <div
@@ -172,13 +250,16 @@ export default function EscolhaTribo() {
                     >
                       <div className={`${isExpanded ? 'flex items-center gap-4' : 'text-center'}`}>
                         <span className={`${isExpanded ? 'text-5xl' : 'text-5xl block mb-2'}`}>
-                          {tribe.icon}
+                          {tribeEmoji}
                         </span>
                         <div className={isExpanded ? 'flex-1' : ''}>
                           <h3 className="font-bold text-navy text-base leading-tight">{tribe.name}</h3>
                           <p className="text-gray-400 text-xs mt-1 leading-snug">{tribe.description}</p>
-                          <span className={`inline-block mt-2 text-xs font-semibold px-2 py-0.5 rounded-full ${colorClass}`}>
-                            {tribe.universe}
+                          <span
+                            className="inline-block mt-2 text-xs font-semibold px-2 py-0.5 rounded-full"
+                            style={accentStyle}
+                          >
+                            {tribe.slug}
                           </span>
                         </div>
                       </div>
@@ -189,11 +270,11 @@ export default function EscolhaTribo() {
                           {/* Archetype selector */}
                           <h4 className="text-sm font-bold text-navy mb-3">Escolha sua trilha:</h4>
                           <div className="flex gap-2 mb-4">
-                            {archetypes.includes('hero') && (
+                            {archetypes.includes('HERO') && (
                               <button
-                                onClick={() => setSelectedArchetype('hero')}
+                                onClick={() => setSelectedArchetype('HERO')}
                                 className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                                  selectedArchetype === 'hero'
+                                  selectedArchetype === 'HERO'
                                     ? 'bg-teal text-white shadow-md'
                                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                 }`}
@@ -202,11 +283,24 @@ export default function EscolhaTribo() {
                                 Heroi
                               </button>
                             )}
-                            {archetypes.includes('villain') && (
+                            {archetypes.includes('ANTI_HERO') && (
                               <button
-                                onClick={() => setSelectedArchetype('villain')}
+                                onClick={() => setSelectedArchetype('ANTI_HERO')}
                                 className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                                  selectedArchetype === 'villain'
+                                  selectedArchetype === 'ANTI_HERO'
+                                    ? 'bg-orange-500 text-white shadow-md'
+                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                }`}
+                              >
+                                <Shield className="w-4 h-4" />
+                                Anti-Heroi
+                              </button>
+                            )}
+                            {archetypes.includes('VILLAIN') && (
+                              <button
+                                onClick={() => setSelectedArchetype('VILLAIN')}
+                                className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                                  selectedArchetype === 'VILLAIN'
                                     ? 'bg-purple-600 text-white shadow-md'
                                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                 }`}
@@ -235,7 +329,7 @@ export default function EscolhaTribo() {
                                     }`}
                                   >
                                     <div className="text-2xl mb-1">
-                                      {char.tier === 1 ? tribe.icon : <Lock className="w-5 h-5 mx-auto text-gray-300" />}
+                                      {char.tier === 1 ? tribeEmoji : <Lock className="w-5 h-5 mx-auto text-gray-300" />}
                                     </div>
                                     <div className="text-xs font-bold text-navy truncate">{char.name}</div>
                                     <div className="text-[10px] text-gray-400 mt-0.5">
@@ -247,10 +341,11 @@ export default function EscolhaTribo() {
 
                               <button
                                 onClick={handleChoose}
-                                className="mt-4 w-full bg-teal text-white font-bold py-3 rounded-xl hover:bg-teal/90 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                                disabled={saving}
+                                className="mt-4 w-full bg-teal text-white font-bold py-3 rounded-xl hover:bg-teal/90 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-60"
                               >
-                                Escolher esta tribo
-                                <ChevronRight className="w-5 h-5" />
+                                {saving ? 'Salvando...' : 'Escolher esta tribo'}
+                                {!saving && <ChevronRight className="w-5 h-5" />}
                               </button>
                             </>
                           )}

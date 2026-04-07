@@ -1,6 +1,4 @@
-import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { X, Sparkles } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 const particles = Array.from({ length: 20 }, (_, i) => ({
   id: i,
@@ -12,22 +10,6 @@ const particles = Array.from({ length: 20 }, (_, i) => ({
 }))
 
 export default function Landing() {
-  const [showModal, setShowModal] = useState(false)
-  const navigate = useNavigate()
-
-  // A5: If user is already logged in, redirect to home
-  useEffect(() => {
-    const stored = localStorage.getItem('piramide-user')
-    if (stored) {
-      try {
-        const user = JSON.parse(stored)
-        if (user && user.tribeId) {
-          navigate('/home', { replace: true })
-        }
-      } catch { /* ignore */ }
-    }
-  }, [navigate])
-
   return (
     <div className="relative min-h-screen gradient-bg overflow-hidden flex flex-col items-center justify-center px-4">
       {/* Floating particles */}
@@ -82,7 +64,6 @@ export default function Landing() {
               fill="white"
               opacity="0.15"
             />
-            {/* Eye / sparkle in center */}
             <circle cx="60" cy="65" r="8" fill="white" opacity="0.9" />
             <circle cx="60" cy="65" r="4" fill="#028090" />
           </svg>
@@ -105,46 +86,26 @@ export default function Landing() {
         <div className="flex flex-col gap-4 w-full max-w-xs">
           <Link
             to="/login"
-            className="group flex items-center justify-center gap-2 bg-white text-teal font-bold text-lg py-4 px-8 rounded-2xl shadow-lg hover:shadow-2xl hover:scale-105 active:scale-95 transition-all duration-200"
+            className="flex items-center justify-center gap-2 bg-white text-teal font-bold text-lg py-4 px-8 rounded-2xl shadow-lg hover:shadow-2xl hover:scale-105 active:scale-95 transition-all duration-200"
           >
-            <span className="text-2xl">🔑</span>
             Entrar
-            <Sparkles className="w-5 h-5 opacity-0 group-hover:opacity-100 transition-opacity text-yellow" />
           </Link>
 
           <Link
-            to="/cadastro"
+            to="/cadastro/perfil"
             className="flex items-center justify-center gap-2 border-2 border-white/60 text-white font-semibold text-base py-3 px-6 rounded-2xl hover:bg-white/10 hover:border-white hover:scale-105 active:scale-95 transition-all duration-200"
           >
-            <span className="text-xl">🎮</span>
-            Cadastre-se
+            Cadastrar-se
           </Link>
-
-          <div className="flex gap-3">
-            <Link
-              to="/dashboard"
-              className="flex-1 flex items-center justify-center gap-1.5 text-white/60 hover:text-white/90 font-medium text-sm py-2 transition-colors"
-            >
-              <span className="text-base">📊</span>
-              Professor
-            </Link>
-            <Link
-              to="/pais"
-              className="flex-1 flex items-center justify-center gap-1.5 text-white/60 hover:text-white/90 font-medium text-sm py-2 transition-colors"
-            >
-              <span className="text-base">👨‍👩‍👧</span>
-              Pais
-            </Link>
-          </div>
         </div>
 
-        {/* What is it link */}
-        <button
-          onClick={() => setShowModal(true)}
-          className="mt-8 text-white/60 hover:text-white/90 underline underline-offset-4 text-sm transition-colors cursor-pointer"
+        {/* Impact link */}
+        <Link
+          to="/estatisticas"
+          className="mt-8 text-white/60 hover:text-white/90 underline underline-offset-4 text-sm transition-colors"
         >
-          O que e a Piramide do Bem?
-        </button>
+          Ver impacto &rarr;
+        </Link>
       </div>
 
       {/* Footer */}
@@ -153,78 +114,6 @@ export default function Landing() {
           Desafio LED 2026 — Globo + Fundacao Roberto Marinho
         </p>
       </div>
-
-      {/* Modal */}
-      {showModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-          onClick={() => setShowModal(false)}
-        >
-          <div
-            className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 relative animate-in"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              animation: 'fadeInUp 0.3s ease-out',
-            }}
-          >
-            <button
-              onClick={() => setShowModal(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 transition-colors"
-            >
-              <X className="w-6 h-6" />
-            </button>
-
-            <div className="text-center mb-6">
-              <div className="text-5xl mb-3">🏛️</div>
-              <h2 className="text-2xl font-extrabold text-navy">
-                O que e a Piramide do Bem?
-              </h2>
-            </div>
-
-            <div className="space-y-4 text-gray-600 leading-relaxed">
-              <p>
-                <strong className="text-teal">A Piramide do Bem Escolar</strong> e
-                uma plataforma gamificada que incentiva boas acoes entre alunos.
-                Cada ato de gentileza, acolhimento ou colaboracao gera pontos que
-                fazem o aluno evoluir dentro de uma tribo tematica.
-              </p>
-              <p>
-                O objetivo e criar uma <strong className="text-navy">rede de
-                pertencimento</strong> nas escolas, reduzindo a evasao escolar ao
-                fazer com que cada aluno se sinta valorizado e parte de algo maior
-                que ele mesmo.
-              </p>
-              <p>
-                Inspirado na <strong className="text-green">Piramide de Maslow</strong>,
-                o projeto atende necessidades emocionais e sociais dos estudantes,
-                transformando o ambiente escolar em um espaco de acolhimento,
-                reconhecimento e crescimento coletivo.
-              </p>
-            </div>
-
-            <button
-              onClick={() => setShowModal(false)}
-              className="mt-6 w-full bg-teal text-white font-bold py-3 rounded-xl hover:bg-teal/90 transition-colors"
-            >
-              Entendi!
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Inline keyframes */}
-      <style>{`
-        @keyframes fadeInUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px) scale(0.95);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-          }
-        }
-      `}</style>
     </div>
   )
 }
