@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
-import { X, ChevronRight, Clock, CheckCircle, XCircle, AlertCircle, RefreshCw } from 'lucide-react'
+import { X, ChevronRight, Clock, CheckCircle, XCircle, AlertCircle, RefreshCw, LogOut } from 'lucide-react'
 import BottomNav from '../components/BottomNav'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -73,7 +73,7 @@ export default function Perfil() {
       // Load student with tribe and character
       const { data: studentData } = await supabase
         .from('students')
-        .select('*, tribe:tribes(*), character:characters(*)')
+        .select('*, community:communities(*), character:characters(*)')
         .eq('user_id', user!.id)
         .single()
 
@@ -81,15 +81,15 @@ export default function Perfil() {
         setStudent(studentData as Student)
 
         // Load next character
-        if (studentData.tribe_id) {
-          const currentTier = (studentData as Student).character?.tier ?? 1
-          const { data: nextChar } = await supabase
+        if (studentData.community_id) {
+          const currentTier = (studentData as Student).character?.level?.tier ?? 1
+          const { data: nextChars } = await supabase
             .from('characters')
-            .select('name')
-            .eq('tribe_id', studentData.tribe_id)
-            .eq('tier', currentTier + 1)
-            .single()
-          if (nextChar) setNextCharName(nextChar.name)
+            .select('name, level:community_levels!inner(tier)')
+            .eq('community_id', studentData.community_id)
+            .eq('community_levels.tier', currentTier + 1)
+            .limit(1)
+          if (nextChars?.[0]) setNextCharName(nextChars[0].name)
         }
 
         // Load actions
@@ -130,10 +130,10 @@ export default function Perfil() {
     )
   }
 
-  const tribeIcon = student.tribe?.icon_class
-    ? (ICON_MAP[student.tribe.icon_class] ?? '\u{1F3AE}')
+  const tribeIcon = student.community?.icon_class
+    ? (ICON_MAP[student.community.icon_class] ?? '\u{1F3AE}')
     : '\u{1F3AE}'
-  const tribeName = student.tribe?.name ?? 'Sem tribo'
+  const tribeName = student.community?.name ?? 'Sem comunidade'
   const charName = student.character?.name ?? 'Aprendiz'
   const tierInfo = getTierInfo(student.total_points)
   const faixa = getFaixa(student.total_points)
@@ -410,7 +410,7 @@ export default function Perfil() {
                 onClick={async () => {
                   await supabase
                     .from('students')
-                    .update({ tribe_id: null, current_character_id: null })
+                    .update({ community_id: null, current_character_id: null })
                     .eq('id', student.id)
                   setShowTribeModal(false)
                   navigate('/tribo')
@@ -423,6 +423,20 @@ export default function Perfil() {
           </div>
         </div>
       )}
+
+      {/* Logout button */}
+      <div className="px-4 mb-24">
+        <button
+          onClick={async () => {
+            await supabase.auth.signOut()
+            navigate('/')
+          }}
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-red/30 text-red font-semibold hover:bg-red/5 transition-colors"
+        >
+          <LogOut className="w-5 h-5" />
+          Sair da conta
+        </button>
+      </div>
 
       <BottomNav />
     </div>

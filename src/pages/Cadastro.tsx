@@ -3,8 +3,21 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ChevronRight, ChevronLeft, Eye, EyeOff, CheckCircle2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { findOrCreateClassroom, createStudentEnrollment } from '../lib/database'
 
-const grades = [
+// Grades by school type
+const GRADES_BY_TYPE: Record<string, string[]> = {
+  infantil: ['Pre I', 'Pre II'],
+  fundamental_I: ['1o ano', '2o ano', '3o ano', '4o ano', '5o ano'],
+  fundamental_II: ['6o ano', '7o ano', '8o ano', '9o ano'],
+  medio: ['1o EM', '2o EM', '3o EM'],
+  tecnico: ['1o Tecnico', '2o Tecnico', '3o Tecnico', '4o Tecnico'],
+  eja: ['EJA Fundamental', 'EJA Medio'],
+  superior: ['1o sem', '2o sem', '3o sem', '4o sem', '5o sem', '6o sem', '7o sem', '8o sem', '9o sem', '10o sem'],
+}
+
+const ALL_GRADES = [
+  'Pre I', 'Pre II',
   '1o ano', '2o ano', '3o ano', '4o ano', '5o ano',
   '6o ano', '7o ano', '8o ano', '9o ano',
   '1o EM', '2o EM', '3o EM',
@@ -19,6 +32,34 @@ const MONTHS = [
 function getDaysInMonth(month: number, year: number): number {
   if (!month || !year) return 31
   return new Date(year, month, 0).getDate()
+}
+
+// Password validation
+function validatePassword(password: string): { valid: boolean; errors: string[] } {
+  const errors: string[] = []
+  if (password.length < 8) errors.push('Minimo 8 caracteres')
+  if (!/[A-Z]/.test(password)) errors.push('1 letra maiuscula')
+  if (!/[a-z]/.test(password)) errors.push('1 letra minuscula')
+  if (!/[0-9]/.test(password)) errors.push('1 numero')
+  if (!/[!@#$%^&*()_+\-=\[\]{}|;':",.<>?/]/.test(password)) errors.push('1 caractere especial')
+  return { valid: errors.length === 0, errors }
+}
+
+function getPasswordStrength(password: string): number {
+  let strength = 0
+  if (password.length >= 8) strength++
+  if (/[A-Z]/.test(password)) strength++
+  if (/[a-z]/.test(password)) strength++
+  if (/[0-9]/.test(password)) strength++
+  if (/[!@#$%^&*()_+\-=\[\]{}|;':",.<>?/]/.test(password)) strength++
+  return strength
+}
+
+function formatWhatsApp(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 11)
+  if (digits.length <= 2) return digits
+  if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
 }
 
 interface FormData {
@@ -39,6 +80,7 @@ interface FormData {
   parentEmail: string
   lgpdConsent: boolean
   schoolSearch: string
+  whatsapp: string
 }
 
 // Passos para login normal: 1=Nome, 2=Email, 3=Nascimento, 4=Senha, 5=Escola, 6=LGPD
@@ -57,11 +99,11 @@ export default function Cadastro() {
     if (!user) return
     supabase
       .from('students')
-      .select('id, tribe_id')
+      .select('id, community_id')
       .eq('user_id', user.id)
       .maybeSingle()
       .then(({ data }) => {
-        if (data?.tribe_id) {
+        if (data?.community_id) {
           navigate('/home', { replace: true })
         }
       })
@@ -94,6 +136,7 @@ export default function Cadastro() {
     parentEmail: '',
     lgpdConsent: false,
     schoolSearch: '',
+    whatsapp: '',
   }))
 
   // Pre-fill name/email from Google metadata when user becomes available
@@ -110,7 +153,7 @@ export default function Cadastro() {
   // Dynamic school data from Supabase
   const [states, setStates] = useState<string[]>([])
   const [cities, setCities] = useState<string[]>([])
-  const [schoolsList, setSchoolsList] = useState<{ id: string; name: string }[]>([])
+  const [schoolsList, setSchoolsList] = useState<{ id: string; name: string; school_type: string }[]>([])
 
   // Load states on mount
   useEffect(() => {
@@ -147,7 +190,7 @@ export default function Cadastro() {
     if (!form.state || !form.city) { setSchoolsList([]); return }
     let query = supabase
       .from('schools')
-      .select('id, name')
+      .select('id, name, school_type')
       .eq('state', form.state)
       .eq('city', form.city)
       .order('name')
@@ -161,6 +204,21 @@ export default function Cadastro() {
       if (data) setSchoolsList(data)
     })
   }, [form.state, form.city, form.schoolSearch])
+
+  // Get available grades based on selected school's type
+  const availableGrades = useMemo(() => {
+    const school = schoolsList.find(s => s.id === form.schoolId)
+    if (!school || !school.school_type) return ALL_GRADES
+
+    const types = school.school_type.split(',').map(t => t.trim())
+    const grades: string[] = []
+    for (const type of types) {
+      if (GRADES_BY_TYPE[type]) {
+        grades.push(...GRADES_BY_TYPE[type])
+      }
+    }
+    return grades.length > 0 ? grades : ALL_GRADES
+  }, [form.schoolId, schoolsList])
 
   const currentYear = new Date().getFullYear()
   const minYear = currentYear - 80
@@ -200,6 +258,9 @@ export default function Cadastro() {
     return age < 18
   }, [form.birthDate, birthDateValid])
 
+  const passwordValidation = useMemo(() => validatePassword(form.password), [form.password])
+  const passwordStrength = useMemo(() => getPasswordStrength(form.password), [form.password])
+
   const update = (field: keyof FormData, value: string | boolean) => {
     setForm((prev) => ({ ...prev, [field]: value }))
   }
@@ -209,15 +270,20 @@ export default function Cadastro() {
       case 1: return form.name.trim().length >= 2
       case 2: return form.email.includes('@') && !emailError
       case 3: return birthDateValid
-      case 4: return form.password.length >= 6 && form.password === form.confirmPassword
+      case 4: return passwordValidation.valid && form.password === form.confirmPassword
       case 5: return form.schoolId !== '' && form.grade !== '' && form.section !== ''
       case 6: return !isMinor || (form.parentName.trim().length >= 2 && form.parentEmail.includes('@') && form.lgpdConsent)
       default: return false
     }
   }
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && canAdvance()) {
+      handleNext()
+    }
+  }
+
   const handleNext = () => {
-    // Check if we're on the school step and user is adult → skip LGPD, complete
     if (step === 5 && !isMinor) {
       handleComplete()
       return
@@ -237,7 +303,6 @@ export default function Cadastro() {
     try {
       let authUserId = user?.id
 
-      // Create Supabase account if not from Google
       if (!fromGoogle && form.email && form.password) {
         const { error, user: newUser } = await signUpWithEmail(form.email, form.password)
         if (error && !error.includes('already registered')) {
@@ -254,8 +319,7 @@ export default function Cadastro() {
         return
       }
 
-      // Create student record in Supabase
-      const { error: studentError } = await supabase.from('students').insert({
+      const { data: studentData, error: studentError } = await supabase.from('students').insert({
         user_id: authUserId,
         name: form.name,
         email: form.email,
@@ -264,14 +328,14 @@ export default function Cadastro() {
         parent_name: form.parentName || null,
         parent_email: form.parentEmail || null,
         parent_consent: form.lgpdConsent,
+        whatsapp: form.whatsapp.replace(/\D/g, '') || null,
         total_points: 0,
         available_points: 0,
         redeemed_points: 0,
         role: 'student',
-      })
+      }).select('id').single()
 
       if (studentError) {
-        // If student already exists, just proceed
         if (!studentError.message.includes('duplicate')) {
           alert(`Erro ao salvar perfil: ${studentError.message}`)
           setSubmitting(false)
@@ -279,8 +343,21 @@ export default function Cadastro() {
         }
       }
 
+      // Create classroom and enrollment
+      if (form.schoolId && form.grade && form.section) {
+        try {
+          const classroom = await findOrCreateClassroom(form.schoolId, form.grade, form.section)
+          const studentId = studentData?.id
+          if (studentId && classroom) {
+            await createStudentEnrollment(studentId, classroom.id)
+          }
+        } catch (err) {
+          console.error('Error creating enrollment:', err)
+        }
+      }
+
       navigate('/tribo')
-    } catch (err) {
+    } catch {
       alert('Erro inesperado. Tente novamente.')
       setSubmitting(false)
     }
@@ -331,10 +408,9 @@ export default function Cadastro() {
       {/* Card */}
       <div
         className="bg-white rounded-2xl shadow-lg p-6 w-full max-w-md transition-all duration-300"
-        style={{
-          animation: 'fadeSlideIn 0.35s ease-out',
-        }}
+        style={{ animation: 'fadeSlideIn 0.35s ease-out' }}
         key={step}
+        onKeyDown={handleKeyDown}
       >
         {/* Step 1: Name */}
         {step === 1 && (
@@ -368,8 +444,7 @@ export default function Cadastro() {
               placeholder="seu@email.com"
               value={form.email}
               onChange={(e) => {
-                const val = e.target.value
-                update('email', val)
+                update('email', e.target.value)
                 setEmailError('')
               }}
               className={`w-full px-4 py-3.5 rounded-xl border-2 focus:outline-none text-lg transition-colors ${
@@ -377,9 +452,7 @@ export default function Cadastro() {
               }`}
               autoFocus
             />
-            {emailError && (
-              <p className="text-red text-sm">{emailError}</p>
-            )}
+            {emailError && <p className="text-red text-sm">{emailError}</p>}
             <div className="relative flex items-center my-2">
               <div className="flex-1 h-px bg-gray-200" />
               <span className="px-3 text-gray-400 text-sm">ou</span>
@@ -412,31 +485,22 @@ export default function Cadastro() {
               <p className="text-gray-400 text-sm mt-1">Selecione sua data de nascimento</p>
             </div>
             <div className="flex gap-3">
-              <select
-                value={form.birthDay}
-                onChange={(e) => update('birthDay', e.target.value)}
-                className="flex-1 px-3 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white"
-              >
+              <select value={form.birthDay} onChange={(e) => update('birthDay', e.target.value)}
+                className="flex-1 px-3 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white">
                 <option value="">Dia</option>
                 {Array.from({ length: getDaysInMonth(parseInt(form.birthMonth) || 12, parseInt(form.birthYear) || 2000) }, (_, i) => i + 1).map((d) => (
                   <option key={d} value={String(d)}>{d}</option>
                 ))}
               </select>
-              <select
-                value={form.birthMonth}
-                onChange={(e) => update('birthMonth', e.target.value)}
-                className="flex-[1.5] px-3 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white"
-              >
+              <select value={form.birthMonth} onChange={(e) => update('birthMonth', e.target.value)}
+                className="flex-[1.5] px-3 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white">
                 <option value="">Mes</option>
                 {MONTHS.map((m, i) => (
                   <option key={m} value={String(i + 1)}>{m}</option>
                 ))}
               </select>
-              <select
-                value={form.birthYear}
-                onChange={(e) => update('birthYear', e.target.value)}
-                className="flex-1 px-3 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white"
-              >
+              <select value={form.birthYear} onChange={(e) => update('birthYear', e.target.value)}
+                className="flex-1 px-3 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white">
                 <option value="">Ano</option>
                 {Array.from({ length: maxYear - minYear + 1 }, (_, i) => maxYear - i).map((y) => (
                   <option key={y} value={String(y)}>{y}</option>
@@ -459,8 +523,8 @@ export default function Cadastro() {
           <div className="space-y-4">
             <div className="text-center">
               <span className="text-5xl">{'\u{1F512}'}</span>
-              <h2 className="text-2xl font-extrabold text-navy mt-2">Crie uma senha</h2>
-              <p className="text-gray-400 text-sm mt-1">Minimo 6 caracteres</p>
+              <h2 className="text-2xl font-extrabold text-navy mt-2">Crie uma senha forte</h2>
+              <p className="text-gray-400 text-sm mt-1">Minimo 8 caracteres com variedade</p>
             </div>
             <div className="relative">
               <input
@@ -471,11 +535,8 @@ export default function Cadastro() {
                 className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors pr-12"
                 autoFocus
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
+              <button type="button" onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                 {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
             </div>
@@ -487,34 +548,37 @@ export default function Cadastro() {
                 onChange={(e) => update('confirmPassword', e.target.value)}
                 className={`w-full px-4 py-3.5 rounded-xl border-2 focus:outline-none text-lg transition-colors pr-12 ${
                   form.confirmPassword && form.confirmPassword !== form.password
-                    ? 'border-red focus:border-red'
-                    : 'border-gray-200 focus:border-teal'
+                    ? 'border-red focus:border-red' : 'border-gray-200 focus:border-teal'
                 }`}
               />
-              <button
-                type="button"
-                onClick={() => setShowConfirm(!showConfirm)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
+              <button type="button" onClick={() => setShowConfirm(!showConfirm)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                 {showConfirm ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
             </div>
             {form.confirmPassword && form.confirmPassword !== form.password && (
               <p className="text-red text-sm">As senhas nao coincidem</p>
             )}
-            {/* Password strength */}
+            {/* Password strength meter */}
             <div className="flex gap-1">
-              {[1, 2, 3, 4].map((i) => (
-                <div
-                  key={i}
-                  className={`h-1.5 flex-1 rounded-full transition-colors ${
-                    form.password.length >= i * 3
-                      ? i <= 1 ? 'bg-red' : i <= 2 ? 'bg-yellow' : 'bg-green'
-                      : 'bg-gray-200'
-                  }`}
-                />
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className={`h-1.5 flex-1 rounded-full transition-colors ${
+                  passwordStrength >= i
+                    ? i <= 2 ? 'bg-red' : i <= 3 ? 'bg-yellow' : 'bg-green'
+                    : 'bg-gray-200'
+                }`} />
               ))}
             </div>
+            {/* Password requirements */}
+            {form.password && !passwordValidation.valid && (
+              <div className="text-xs space-y-1">
+                {passwordValidation.errors.map((err) => (
+                  <p key={err} className="text-red flex items-center gap-1">
+                    <span className="w-1 h-1 rounded-full bg-red inline-block" /> {err}
+                  </p>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -526,79 +590,51 @@ export default function Cadastro() {
               <h2 className="text-2xl font-extrabold text-navy mt-2">Sua escola</h2>
               <p className="text-gray-400 text-sm mt-1">Selecione estado, cidade e escola</p>
             </div>
-            <select
-              value={form.state}
-              onChange={(e) => {
-                update('state', e.target.value)
-                update('city', '')
-                update('schoolId', '')
-              }}
-              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors bg-white"
-            >
+            <select value={form.state} onChange={(e) => { update('state', e.target.value); update('city', ''); update('schoolId', ''); update('grade', '') }}
+              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors bg-white">
               <option value="">Selecione o estado</option>
-              {states.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
+              {states.map((s) => (<option key={s} value={s}>{s}</option>))}
             </select>
 
-            <select
-              value={form.city}
-              onChange={(e) => {
-                update('city', e.target.value)
-                update('schoolId', '')
-              }}
+            <select value={form.city} onChange={(e) => { update('city', e.target.value); update('schoolId', ''); update('grade', '') }}
               disabled={!form.state}
-              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors bg-white disabled:opacity-50"
-            >
+              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors bg-white disabled:opacity-50">
               <option value="">Selecione a cidade</option>
-              {cities.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
+              {cities.map((c) => (<option key={c} value={c}>{c}</option>))}
             </select>
 
             {form.city && (
-              <input
-                type="text"
-                placeholder="Buscar escola pelo nome..."
-                value={form.schoolSearch}
+              <input type="text" placeholder="Buscar escola pelo nome..." value={form.schoolSearch}
                 onChange={(e) => update('schoolSearch', e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors"
-              />
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors" />
             )}
 
-            <select
-              value={form.schoolId}
-              onChange={(e) => update('schoolId', e.target.value)}
+            <select value={form.schoolId} onChange={(e) => { update('schoolId', e.target.value); update('grade', '') }}
               disabled={!form.city}
-              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors bg-white disabled:opacity-50"
-            >
+              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors bg-white disabled:opacity-50">
               <option value="">Selecione a escola</option>
-              {schoolsList.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
+              {schoolsList.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
             </select>
 
             <div className="flex gap-3">
-              <select
-                value={form.grade}
-                onChange={(e) => update('grade', e.target.value)}
-                className="flex-1 px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white"
-              >
+              <select value={form.grade} onChange={(e) => update('grade', e.target.value)}
+                className="flex-1 px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white">
                 <option value="">Serie</option>
-                {grades.map((g) => (
-                  <option key={g} value={g}>{g}</option>
-                ))}
+                {availableGrades.map((g) => (<option key={g} value={g}>{g}</option>))}
               </select>
-              <select
-                value={form.section}
-                onChange={(e) => update('section', e.target.value)}
-                className="w-24 px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white"
-              >
+              <select value={form.section} onChange={(e) => update('section', e.target.value)}
+                className="w-24 px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white">
                 <option value="">Turma</option>
-                {sections.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
+                {sections.map((s) => (<option key={s} value={s}>{s}</option>))}
               </select>
+            </div>
+
+            {/* WhatsApp optional */}
+            <div>
+              <label className="text-sm text-gray-500 mb-1 block">WhatsApp (opcional)</label>
+              <input type="tel" placeholder="(XX) XXXXX-XXXX" value={form.whatsapp}
+                onChange={(e) => update('whatsapp', formatWhatsApp(e.target.value))}
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors" />
             </div>
           </div>
         )}
@@ -609,47 +645,26 @@ export default function Cadastro() {
             <div className="text-center">
               <span className="text-5xl">{'\u{1F6E1}\uFE0F'}</span>
               <h2 className="text-2xl font-extrabold text-navy mt-2">Consentimento do Responsavel</h2>
-              <p className="text-gray-400 text-sm mt-1">
-                Conforme a LGPD, menores de 18 anos precisam de autorizacao
-              </p>
+              <p className="text-gray-400 text-sm mt-1">Conforme a LGPD, menores de 18 anos precisam de autorizacao</p>
             </div>
-            <input
-              type="text"
-              placeholder="Nome do responsavel"
-              value={form.parentName}
+            <input type="text" placeholder="Nome do responsavel" value={form.parentName}
               onChange={(e) => update('parentName', e.target.value)}
-              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors"
-              autoFocus
-            />
-            <input
-              type="email"
-              placeholder="Email do responsavel"
-              value={form.parentEmail}
+              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors" autoFocus />
+            <input type="email" placeholder="Email do responsavel" value={form.parentEmail}
               onChange={(e) => update('parentEmail', e.target.value)}
-              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors"
-            />
+              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors" />
             <label className={`flex items-start gap-3 p-4 rounded-xl border-2 transition-colors cursor-pointer ${
               form.lgpdConsent ? 'border-teal bg-teal/5' : 'border-gray-200 hover:border-teal/50'
             }`}>
               <div className={`mt-0.5 w-6 h-6 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                form.lgpdConsent
-                  ? 'bg-teal border-teal'
-                  : 'bg-white border-gray-400'
+                form.lgpdConsent ? 'bg-teal border-teal' : 'bg-white border-gray-400'
               }`}>
-                {form.lgpdConsent && (
-                  <CheckCircle2 className="w-4 h-4 text-white" />
-                )}
+                {form.lgpdConsent && <CheckCircle2 className="w-4 h-4 text-white" />}
               </div>
-              <input
-                type="checkbox"
-                checked={form.lgpdConsent}
-                onChange={(e) => update('lgpdConsent', e.target.checked)}
-                className="sr-only"
-              />
+              <input type="checkbox" checked={form.lgpdConsent} onChange={(e) => update('lgpdConsent', e.target.checked)} className="sr-only" />
               <span className="text-sm text-gray-700 leading-relaxed">
-                Autorizo a coleta e tratamento dos dados do menor de acordo com a
-                Lei Geral de Protecao de Dados (LGPD). Os dados serao usados
-                exclusivamente para o funcionamento da plataforma educacional.
+                Autorizo a coleta e tratamento dos dados do menor de acordo com a Lei Geral de Protecao de Dados (LGPD).
+                Os dados serao usados exclusivamente para o funcionamento da plataforma educacional.
               </span>
             </label>
           </div>
@@ -658,46 +673,30 @@ export default function Cadastro() {
         {/* Navigation buttons */}
         <div className="flex gap-3 mt-6">
           {stepIndex > 0 && (
-            <button
-              onClick={() => setStepIndex(stepIndex - 1)}
-              className="flex items-center justify-center gap-1 px-5 py-3.5 rounded-xl border-2 border-gray-200 text-gray-500 font-semibold hover:bg-gray-50 transition-colors"
-            >
-              <ChevronLeft className="w-5 h-5" />
-              Voltar
+            <button onClick={() => setStepIndex(stepIndex - 1)}
+              className="flex items-center justify-center gap-1 px-5 py-3.5 rounded-xl border-2 border-gray-200 text-gray-500 font-semibold hover:bg-gray-50 transition-colors">
+              <ChevronLeft className="w-5 h-5" /> Voltar
             </button>
           )}
-          <button
-            onClick={handleNext}
-            disabled={!canAdvance() || submitting}
-            className={`
-              flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-lg transition-all duration-200
+          <button onClick={handleNext} disabled={!canAdvance() || submitting}
+            className={`flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-lg transition-all duration-200
               ${canAdvance() && !submitting
                 ? 'bg-teal text-white hover:bg-teal/90 hover:shadow-lg active:scale-[0.98]'
-                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-              }
-            `}
-          >
+                : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
             {submitting ? 'Salvando...' : stepIndex === stepSequence.length - 1 || (step === 5 && !isMinor) ? 'Concluir' : 'Proximo'}
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>
       </div>
 
-      {/* Progress text */}
       <p className="mt-4 text-gray-400 text-sm">
         Passo {stepIndex + 1} de {isMinor ? totalVisibleSteps : Math.max(totalVisibleSteps - 1, 1)}
       </p>
 
       <style>{`
         @keyframes fadeSlideIn {
-          from {
-            opacity: 0;
-            transform: translateX(30px);
-          }
-          to {
-            opacity: 1;
-            transform: translateX(0);
-          }
+          from { opacity: 0; transform: translateX(30px); }
+          to { opacity: 1; transform: translateX(0); }
         }
       `}</style>
     </div>

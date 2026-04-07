@@ -1,0 +1,23 @@
+O Claude não carregou a tabela de escolas e as tabelas que deveriam ser carregadas a partir do nosso characters.sql (vc tem aí as chaves do supabase, por gentileza, acesse o ambiente e verifique o que ele fez e o que falta. Conforme combinamos o modelo de dados deveria estar completo.
+
+Gostaria de também te dar acesso ao projeto para que vc consiga auditar o trabalho do code
+
+Aproveite para incluir as seguintes considerações a serem ajustadas
+
+1) Incluir (mesmo que seja Opcional) a opção de informar o WhatsApp (isso pode auxiliar a comunicação entre os alunos e também nos dá a possibilidade de encaminhar alertas para o WhatsApp
+3) Precisamos melhorar a área de escolha de colegas do mecanismo de registrar boa ação:
+ a) a lista de colegas deve ser aberta a TODOS os participantes. (considerando que falamos de uma ferramenta online e que as ajudas podem ser dadas por meio de videoconferencia, não faz sentido ser fechada na turma do aluno)
+ b) a busca deve ser um campo auto fill onde o aluno pode incluir o nome, o email ou o whatsapp do colega e ela já ir recarregando automaticamente (isso facilita encontrar o aluno)
+ c) seria relevante que a busca tivesse um filtro por tribos e characters. Eventualmente o aluno pode querer identificar colegas da tribo dele
+4) Nas perguntas: "Qual é o seu nome?" e "Qual o seu email?" a ação de prosseguir só é aceita clicando no botão (não está aceitando Enter). Ajustar para que o Enter também prossiga.
+5) Incluir um botão de "Recomendar a Piramide do Bem" - Cada recomendação em que a pessoa se cadastrar, o aluno ganha (5 pontos nas 5 primeiras indicacões, 3 pontos da sexta a décima e 1 ponto para as demais indicações).
+6) Aprimoramentos para o Mapa
+ a) Apesar de haver 2 alunos cadastradoso Mapa está mostrando "Nenhuma escola ativa ainda" (o que é surpreendente, já que a base de escola está com 180 mil escolas). O mapa deveria ser mais completo e mostrar alunos, professores, patrocinadores, monitores, escolas, etc) e não apenas as escolas.
+ b) O mapa deve ser sempre apresentado, com divisão política (em estados) e o número de usuários em cada estado deverá estar sempre visível. O mapa deveria aparecer com zero em todos mesmo quando não houver nenhum usuário cadastrado.
+ c) ao passar o mouse (ou o dedo - qdo no app) sobre o Mapa, deve destacar o estado e mostrar o número de escolas, alunos, professores, patrocinadores, monitores, etc.
+ d) Ao clicar, abre o estado o estado deverá ficar em zoom e destacar as cidades com o número total de usuários
+ e) ao passar o mouse ou o dedo sobre o mapa, deve ser destacada cada cidade e mostrada a lista completa (escolas, alunos, professores, patrocinadores, monitores, etc)
+ f) ao clicar sobre a cidade, devem ser destacados os bairros (ou regiões administrativas no caso de Brasília) apresentando a quantidade de usuários. Ao passar o dedo ou o mouse, mostrar a mesma lista completa.
+ g) ao clicar sobre o bairro, devem ser mostradas as escolas com o número total de usuários e ao passar o dedo ou o mouse, destacar a escola e apresentar os totais de alunos, professores e monitores
+7) Incluir log-out no perfil.
+8) Apesar do site perguntar ano e turma ele não guarda isso em nenhum local no banco de dados. Lembrando que essas informações devem ser inseridas em tabela n-n (mantando o histórico dos anos anteriores.

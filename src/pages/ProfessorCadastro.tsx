@@ -3,8 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import {
   ChevronRight,
   ChevronLeft,
-  Eye,
-  EyeOff,
   CheckCircle2,
   Search,
   Plus,
@@ -12,6 +10,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import PasswordInput, { validatePassword } from '../components/PasswordInput'
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -63,7 +62,7 @@ export default function ProfessorCadastro() {
   // Step 1 — Account
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [authError, setAuthError] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
 
@@ -321,7 +320,7 @@ export default function ProfessorCadastro() {
 
   function canAdvance(): boolean {
     switch (step) {
-      case 1: return email.length > 3 && password.length >= 6
+      case 1: return email.length > 3 && validatePassword(password).valid && password === confirmPassword
       case 2: return nome.trim().length > 2 && telefone.trim().length > 7
       case 3: return !!selectedSchoolId && !!nivel
       case 4: return selectedSubjects.length > 0 || customSubject.trim().length > 0
@@ -381,27 +380,19 @@ export default function ProfessorCadastro() {
                 placeholder="professor@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && canAdvance() && nextStep()}
               />
             </div>
 
             <div>
               <label className={labelClass}>Senha</label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  className={inputClass}
-                  placeholder="Minimo 6 caracteres"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
+              <PasswordInput
+                password={password}
+                confirmPassword={confirmPassword}
+                onPasswordChange={setPassword}
+                onConfirmChange={setConfirmPassword}
+                onEnterAdvance={() => canAdvance() && nextStep()}
+              />
             </div>
 
             {authError && <p className="text-sm text-red-500">{authError}</p>}
@@ -421,6 +412,7 @@ export default function ProfessorCadastro() {
                 placeholder="Maria da Silva"
                 value={nome}
                 onChange={(e) => setNome(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && canAdvance() && nextStep()}
               />
             </div>
 
@@ -432,6 +424,7 @@ export default function ProfessorCadastro() {
                 placeholder="(11) 99999-9999"
                 value={telefone}
                 onChange={(e) => setTelefone(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && canAdvance() && nextStep()}
               />
               <p className="text-xs text-gray-400 mt-1">Formato: (DDD) XXXXX-XXXX</p>
             </div>

@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { School, Tribe, Character, ActionType, Badge, Reward, Student, Action, Teacher, Subject, Classroom, Sponsor, TeacherAssignment, Parent, ParentStudent, FraudAlert, Redemption } from '../types'
+import type { School, Character, ActionType, Badge, Reward, Student, Action, Teacher, Subject, Classroom, Sponsor, TeacherAssignment, Parent, ParentStudent, FraudAlert, Redemption, CommunityCategory, CommunityType, Community, CommunityLevel } from '../types'
 
 // === Schools ===
 export async function searchSchools(state: string, city?: string, query?: string) {
@@ -27,33 +27,59 @@ export async function getSchoolsWithStudents() {
   return data ?? []
 }
 
-// === Tribes & Characters ===
-export async function getTribes() {
-  const { data } = await supabase.from('tribes').select('*').order('display_order')
-  return (data ?? []) as Tribe[]
+export async function getSchoolById(schoolId: string) {
+  const { data } = await supabase.from('schools').select('*').eq('id', schoolId).single()
+  return data as School | null
 }
 
-export async function getCharactersByTribe(tribeId: string) {
-  const { data } = await supabase.from('characters').select('*').eq('tribe_id', tribeId).order('tier').order('display_order')
+// === Community Categories ===
+export async function getCommunityCategories() {
+  const { data } = await supabase.from('community_categories').select('*').eq('status', 'ACTIVE').order('display_order')
+  return (data ?? []) as CommunityCategory[]
+}
+
+// === Community Types ===
+export async function getCommunityTypesByCategory(categoryId: string) {
+  const { data } = await supabase.from('community_types').select('*').eq('category_id', categoryId).eq('status', 'ACTIVE').order('display_order')
+  return (data ?? []) as CommunityType[]
+}
+
+// === Communities ===
+export async function getCommunitiesByType(typeId: string) {
+  const { data } = await supabase.from('communities').select('*').eq('type_id', typeId).eq('status', 'ACTIVE').order('display_order')
+  return (data ?? []) as Community[]
+}
+
+export async function getCommunityById(communityId: string) {
+  const { data } = await supabase.from('communities').select('*, community_type:community_types(*, category:community_categories(*))').eq('id', communityId).single()
+  return data as Community | null
+}
+
+// === Community Levels ===
+export async function getCommunityLevels(communityId: string) {
+  const { data } = await supabase.from('community_levels').select('*').eq('community_id', communityId).order('tier')
+  return (data ?? []) as CommunityLevel[]
+}
+
+// === Characters ===
+export async function getCharactersByCommunity(communityId: string) {
+  const { data } = await supabase.from('characters').select('*, level:community_levels(*)').eq('community_id', communityId).eq('status', 'ACTIVE').order('display_order')
   return (data ?? []) as Character[]
 }
 
-export async function getCharactersFiltered(tribeId: string, archetype?: string, gender?: string) {
-  let q = supabase.from('characters').select('*').eq('tribe_id', tribeId)
+export async function getCharactersFiltered(communityId: string, archetype?: string, gender?: string) {
+  let q = supabase.from('characters').select('*, level:community_levels(*)').eq('community_id', communityId).eq('status', 'ACTIVE')
   if (archetype) q = q.eq('archetype', archetype)
   if (gender) q = q.eq('gender', gender)
-  const { data } = await q.order('tier')
+  const { data } = await q.order('display_order')
   return (data ?? []) as Character[]
 }
 
-export async function getAvailableArchetypes(tribeId: string) {
-  const { data } = await supabase.from('characters').select('archetype').eq('tribe_id', tribeId)
+export async function getAvailableArchetypes(communityId: string, gender?: string) {
+  let q = supabase.from('characters').select('archetype').eq('community_id', communityId).eq('status', 'ACTIVE')
+  if (gender) q = q.eq('gender', gender)
+  const { data } = await q
   return [...new Set((data ?? []).map((d: { archetype: string }) => d.archetype))]
-}
-
-export async function getAvailableGenders(tribeId: string, archetype: string) {
-  const { data } = await supabase.from('characters').select('gender').eq('tribe_id', tribeId).eq('archetype', archetype)
-  return [...new Set((data ?? []).map((d: { gender: string }) => d.gender))]
 }
 
 // === Action Types ===
@@ -64,7 +90,7 @@ export async function getActionTypes() {
 
 // === Students ===
 export async function getStudentByUserId(userId: string) {
-  const { data } = await supabase.from('students').select('*, tribe:tribes(*), character:characters(*)').eq('user_id', userId).single()
+  const { data } = await supabase.from('students').select('*, community:communities(*, community_type:community_types(*, category:community_categories(*))), character:characters(*, level:community_levels(*))').eq('user_id', userId).single()
   return data as Student | null
 }
 
@@ -81,8 +107,13 @@ export async function updateStudent(id: string, updates: Partial<Student>) {
 }
 
 export async function getStudentsBySchool(schoolId: string) {
-  const { data } = await supabase.from('students').select('*, tribe:tribes(name, slug, color_hex)').eq('school_id', schoolId).order('total_points', { ascending: false })
+  const { data } = await supabase.from('students').select('*, community:communities(name, slug, color_hex)').eq('school_id', schoolId).order('total_points', { ascending: false })
   return (data ?? []) as Student[]
+}
+
+export async function searchStudents(query: string) {
+  const { data } = await supabase.from('students').select('id, name, email, whatsapp, school_id').or(`name.ilike.%${query}%,email.ilike.%${query}%,whatsapp.ilike.%${query}%`).limit(20)
+  return (data ?? []) as Partial<Student>[]
 }
 
 // === Actions ===
@@ -125,7 +156,7 @@ export async function validateAction(actionId: string, validatorId: string, resu
 }
 
 export async function getRecentActions(limit = 20) {
-  const { data } = await supabase.from('actions').select('*, action_type:action_types(*), author:students!actions_author_id_fkey(name, tribe_id)').eq('status', 'validated').order('created_at', { ascending: false }).limit(limit)
+  const { data } = await supabase.from('actions').select('*, action_type:action_types(*), author:students!actions_author_id_fkey(name, community_id)').eq('status', 'validated').order('created_at', { ascending: false }).limit(limit)
   return (data ?? []) as Action[]
 }
 
@@ -191,6 +222,38 @@ export async function createClassroom(classroom: Partial<Classroom>) {
   return data as Classroom
 }
 
+export async function findOrCreateClassroom(schoolId: string, grade: string, section: string) {
+  // Try to find existing classroom
+  const { data: existing } = await supabase.from('classrooms')
+    .select('*')
+    .eq('school_id', schoolId)
+    .eq('grade', grade)
+    .eq('section', section)
+    .eq('year', new Date().getFullYear())
+    .maybeSingle()
+
+  if (existing) return existing as Classroom
+
+  // Create new classroom
+  const { data, error } = await supabase.from('classrooms').insert({
+    school_id: schoolId,
+    grade,
+    section,
+    year: new Date().getFullYear()
+  }).select().single()
+  if (error) throw error
+  return data as Classroom
+}
+
+export async function createStudentEnrollment(studentId: string, classroomId: string) {
+  const { error } = await supabase.from('student_enrollments').insert({
+    student_id: studentId,
+    classroom_id: classroomId,
+    academic_year: new Date().getFullYear()
+  })
+  if (error && !error.message.includes('duplicate')) throw error
+}
+
 // === Parents ===
 export async function getParentByUserId(userId: string) {
   const { data } = await supabase.from('parents').select('*').eq('user_id', userId).single()
@@ -204,7 +267,7 @@ export async function createParent(parent: Partial<Parent>) {
 }
 
 export async function getParentStudents(parentId: string) {
-  const { data } = await supabase.from('parent_students').select('*, student:students(*, tribe:tribes(*), school:schools(name))').eq('parent_id', parentId)
+  const { data } = await supabase.from('parent_students').select('*, student:students(*, community:communities(*), school:schools(name))').eq('parent_id', parentId)
   return (data ?? []) as ParentStudent[]
 }
 
@@ -222,7 +285,7 @@ export async function createSponsor(sponsor: Partial<Sponsor>) {
 
 // === Fraud Alerts ===
 export async function getFraudAlerts(_schoolId?: string) {
-  let q = supabase.from('fraud_alerts').select('*, student_a:students!fraud_alerts_student_a_id_fkey(name), student_b:students!fraud_alerts_student_b_id_fkey(name)').eq('reviewed', false)
+  const q = supabase.from('fraud_alerts').select('*, student_a:students!fraud_alerts_student_a_id_fkey(name), student_b:students!fraud_alerts_student_b_id_fkey(name)').eq('reviewed', false)
   const { data } = await q.order('created_at', { ascending: false })
   return (data ?? []) as FraudAlert[]
 }
@@ -255,7 +318,7 @@ export async function createPhoneVerification(userId: string, phone: string) {
   })
   if (error) throw error
   console.log(`[PHONE VERIFICATION] Code for ${phone}: ${code}`)
-  alert(`Código de verificação: ${code}`)
+  alert(`Codigo de verificacao: ${code}`)
   return code
 }
 

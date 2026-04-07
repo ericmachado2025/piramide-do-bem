@@ -54,17 +54,17 @@ export default function EscolhaPersonagem() {
       // Get student with tribe and character
       const { data: studentData } = await supabase
         .from('students')
-        .select('*, tribe:tribes(*), character:characters(*)')
+        .select('*, community:communities(*), character:characters(*)')
         .eq('user_id', authUser!.id)
         .single()
 
-      if (!studentData || !studentData.tribe_id) {
+      if (!studentData || !studentData.community_id) {
         navigate('/tribo')
         return
       }
 
       setStudent(studentData)
-      setTribe(studentData.tribe as Tribe)
+      setTribe(studentData.community as Tribe)
 
       // Load characters for the tribe matching student's character archetype and gender
       const currentChar = studentData.character as Character | null
@@ -74,7 +74,7 @@ export default function EscolhaPersonagem() {
       const { data: chars } = await supabase
         .from('characters')
         .select('*')
-        .eq('tribe_id', studentData.tribe_id)
+        .eq('community_id', studentData.community_id)
         .eq('archetype', archetype)
         .order('tier')
 
@@ -104,7 +104,7 @@ export default function EscolhaPersonagem() {
   const tribeEmoji = getTribeEmoji(tribe.icon_class)
   const currentPoints = student.total_points || 0
   const tier1Char = tribeCharacters[0]
-  const nextTierPoints = tribeCharacters[1]?.min_points || 100
+  const nextTierPoints = tribeCharacters[1]?.level?.min_points || 100
   const progress = Math.min((currentPoints / nextTierPoints) * 100, 100)
 
   const handleStart = () => {
@@ -180,9 +180,9 @@ export default function EscolhaPersonagem() {
                         <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                           isActive ? `bg-gradient-to-r ${tierColors[index]} text-white` : 'bg-gray-200 text-gray-400'
                         }`}>
-                          TIER {char.tier}
+                          TIER {(char.level?.tier ?? 0)}
                         </span>
-                        {[...Array(char.tier)].map((_, i) => (
+                        {[...Array((char.level?.tier ?? 0))].map((_, i) => (
                           <Star key={i} className={`w-3.5 h-3.5 ${isActive ? 'text-yellow fill-yellow' : 'text-gray-300'}`} />
                         ))}
                       </div>
@@ -193,7 +193,7 @@ export default function EscolhaPersonagem() {
                         {char.description}
                       </p>
                       <p className={`text-xs mt-1 font-semibold ${isActive ? 'text-teal' : 'text-gray-300'}`}>
-                        {char.min_points}+ pontos
+                        {(char.level?.min_points ?? 0)}+ pontos
                       </p>
                     </div>
                   </div>

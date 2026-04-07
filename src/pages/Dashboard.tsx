@@ -57,23 +57,23 @@ export default function Dashboard() {
 
       const { data: students } = await supabase
         .from('students')
-        .select('total_points, tribe:tribes(name, icon_class, color_hex)')
-        .not('tribe_id', 'is', null)
+        .select('total_points, community:communities(name, icon_class, color_hex)')
+        .not('community_id', 'is', null)
 
       if (students) {
         const tribeMap: Record<string, { name: string; icon: string; pontos: number; color: string }> = {}
         for (const s of students) {
-          const tribe = s.tribe as unknown as { name: string; icon_class: string | null; color_hex: string | null } | null
-          if (!tribe) continue
-          if (!tribeMap[tribe.name]) {
-            tribeMap[tribe.name] = {
-              name: tribe.name,
-              icon: tribe.icon_class ? (ICON_MAP[tribe.icon_class] ?? '\u{1F5A4}') : '\u{1F5A4}',
+          const community = s.community as unknown as { name: string; icon_class: string | null; color_hex: string | null } | null
+          if (!community) continue
+          if (!tribeMap[community.name]) {
+            tribeMap[community.name] = {
+              name: community.name,
+              icon: community.icon_class ? (ICON_MAP[community.icon_class] ?? '\u{1F5A4}') : '\u{1F5A4}',
               pontos: 0,
-              color: tribe.color_hex ?? tribeColors[Object.keys(tribeMap).length % tribeColors.length],
+              color: community.color_hex ?? tribeColors[Object.keys(tribeMap).length % tribeColors.length],
             }
           }
-          tribeMap[tribe.name].pontos += s.total_points
+          tribeMap[community.name].pontos += s.total_points
         }
         setTribeRanking(Object.values(tribeMap).sort((a, b) => b.pontos - a.pontos))
       }

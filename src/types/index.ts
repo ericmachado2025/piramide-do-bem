@@ -12,28 +12,74 @@ export interface School {
   created_at: string
 }
 
-export interface Tribe {
+export interface CommunityCategory {
   id: string
+  public_id: string
   name: string
+  description: string | null
   slug: string
   icon_class: string | null
   color_hex: string | null
+  display_order: number
+  status: string
+}
+
+export interface CommunityType {
+  id: string
+  public_id: string
+  category_id: string
+  name: string
   description: string | null
-  display_order: number | null
+  slug: string
+  icon_class: string | null
+  color_hex: string | null
+  display_order: number
+  status: string
+  category?: CommunityCategory
+}
+
+export interface Community {
+  id: string
+  public_id: string
+  type_id: string
+  name: string
+  description: string | null
+  slug: string
+  icon_class: string | null
+  color_hex: string | null
+  display_order: number
+  status: string
+  community_type?: CommunityType
+}
+
+export interface CommunityLevel {
+  id: string
+  public_id: string
+  community_id: string
+  tier: number
+  name: string
+  min_points: number
+  display_order: number
 }
 
 export interface Character {
   id: string
-  tribe_id: string
-  tier: number
+  public_id: string
+  community_id: string
+  level_id: string
   name: string
   real_name: string | null
   description: string | null
-  archetype: string | null
-  gender: string | null
-  display_order: number | null
-  min_points: number
+  archetype: string
+  gender: string
+  display_order: number
+  status: string
+  community?: Community
+  level?: CommunityLevel
 }
+
+// Backward-compat alias
+export type Tribe = Community
 
 export interface Teacher {
   id: string
@@ -86,8 +132,10 @@ export interface Student {
   phone: string | null
   birth_date: string | null
   school_id: string | null
-  tribe_id: string | null
+  community_id: string | null
   current_character_id: string | null
+  whatsapp: string | null
+  gender: string | null
   total_points: number
   available_points: number
   redeemed_points: number
@@ -98,7 +146,7 @@ export interface Student {
   parent_email: string | null
   created_at: string
   school?: School
-  tribe?: Tribe
+  community?: Community
   character?: Character
 }
 

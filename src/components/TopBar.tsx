@@ -20,7 +20,7 @@ export default function TopBar() {
   const [student, setStudent] = useState<{
     name: string
     total_points: number
-    tribe?: { icon_class: string | null; name: string } | null
+    community?: { icon_class: string | null; name: string } | null
     character?: { name: string; tier: number } | null
   } | null>(null)
   const [unreadCount, setUnreadCount] = useState(0)
@@ -29,7 +29,7 @@ export default function TopBar() {
     if (!user) return
     supabase
       .from('students')
-      .select('name, total_points, tribe:tribes(icon_class, name), character:characters(name, tier)')
+      .select('name, total_points, community:communities(icon_class, name), character:characters(name, tier)')
       .eq('user_id', user.id)
       .single()
       .then(({ data }) => {
@@ -49,8 +49,8 @@ export default function TopBar() {
 
   if (!user || !student) return null
 
-  const tribeEmoji = student.tribe?.icon_class
-    ? (ICON_MAP[student.tribe.icon_class] ?? '\u{1F3AE}')
+  const tribeEmoji = student.community?.icon_class
+    ? (ICON_MAP[student.community.icon_class] ?? '\u{1F3AE}')
     : '\u{1F3AE}'
   const tierNum = student.character?.tier ?? 1
   const charName = student.character?.name ?? 'Aprendiz'

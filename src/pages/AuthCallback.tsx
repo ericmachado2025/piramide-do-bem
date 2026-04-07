@@ -19,14 +19,14 @@ export default function AuthCallback() {
       // Check if user already has a student record
       const { data: student } = await supabase
         .from('students')
-        .select('id, tribe_id')
+        .select('id, community_id')
         .eq('user_id', user!.id)
         .maybeSingle()
 
-      if (student?.tribe_id) {
+      if (student?.community_id) {
         // Perfil completo — direto para home
         navigate('/home', { replace: true })
-      } else if (student && !student.tribe_id) {
+      } else if (student && !student.community_id) {
         // Tem registro mas falta tribo
         navigate('/tribo', { replace: true })
       } else {

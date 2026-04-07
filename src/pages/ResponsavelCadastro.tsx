@@ -3,8 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import {
   ChevronRight,
   ChevronLeft,
-  Eye,
-  EyeOff,
   CheckCircle2,
   Phone,
   Search,
@@ -13,6 +11,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import PasswordInput, { validatePassword } from '../components/PasswordInput'
 
 interface StudentResult {
   id: string
@@ -30,7 +29,7 @@ export default function ResponsavelCadastro() {
   // Step 1
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [authError, setAuthError] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
 
@@ -170,7 +169,7 @@ export default function ResponsavelCadastro() {
 
   const canAdvance = () => {
     switch (step) {
-      case 1: return email.includes('@') && password.length >= 6
+      case 1: return email.includes('@') && validatePassword(password).valid && password === confirmPassword
       case 2: return fullName.trim().length >= 2 && phone.trim().length >= 10
       case 3: return codeVerified
       case 4: return selectedStudent !== null
@@ -243,26 +242,16 @@ export default function ResponsavelCadastro() {
                   style={{ borderColor: undefined }}
                   onFocus={(e) => (e.target.style.borderColor = '#028090')}
                   onBlur={(e) => (e.target.style.borderColor = '#e5e7eb')}
+                  onKeyDown={(e) => e.key === 'Enter' && canAdvance() && handleNext()}
                   autoFocus
                 />
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Sua senha (min. 6 caracteres)"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:outline-none text-lg transition-colors pr-12"
-                    onFocus={(e) => (e.target.style.borderColor = '#028090')}
-                    onBlur={(e) => (e.target.style.borderColor = '#e5e7eb')}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                </div>
+                <PasswordInput
+                  password={password}
+                  confirmPassword={confirmPassword}
+                  onPasswordChange={setPassword}
+                  onConfirmChange={setConfirmPassword}
+                  onEnterAdvance={() => canAdvance() && handleNext()}
+                />
                 {authError && <p className="text-sm" style={{ color: '#dc2626' }}>{authError}</p>}
               </>
             )}
@@ -285,6 +274,7 @@ export default function ResponsavelCadastro() {
               className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:outline-none text-lg transition-colors"
               onFocus={(e) => (e.target.style.borderColor = '#028090')}
               onBlur={(e) => (e.target.style.borderColor = '#e5e7eb')}
+              onKeyDown={(e) => e.key === 'Enter' && canAdvance() && handleNext()}
               autoFocus
             />
             <input
@@ -295,6 +285,7 @@ export default function ResponsavelCadastro() {
               className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:outline-none text-lg transition-colors"
               onFocus={(e) => (e.target.style.borderColor = '#028090')}
               onBlur={(e) => (e.target.style.borderColor = '#e5e7eb')}
+              onKeyDown={(e) => e.key === 'Enter' && canAdvance() && handleNext()}
             />
           </div>
         )}

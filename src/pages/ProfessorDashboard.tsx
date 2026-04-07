@@ -175,22 +175,22 @@ export default function ProfessorDashboard() {
         // Leading tribe — group students by tribe, count them
         const { data: students } = await supabase
           .from('students')
-          .select('tribe_id')
+          .select('community_id')
           .in('id', studentIds)
 
         if (students && students.length > 0) {
           const tribeCounts: Record<string, number> = {}
-          students.forEach((s: { tribe_id: string | null }) => {
-            if (s.tribe_id) tribeCounts[s.tribe_id] = (tribeCounts[s.tribe_id] || 0) + 1
+          students.forEach((s: { community_id: string | null }) => {
+            if (s.community_id) tribeCounts[s.community_id] = (tribeCounts[s.community_id] || 0) + 1
           })
           const leadingTribeId = Object.entries(tribeCounts).sort((a, b) => b[1] - a[1])[0]?.[0]
           if (leadingTribeId) {
-            const { data: tribe } = await supabase
-              .from('tribes')
+            const { data: community } = await supabase
+              .from('communities')
               .select('name')
               .eq('id', leadingTribeId)
               .single()
-            setTriboLider(tribe?.name ?? '-')
+            setTriboLider(community?.name ?? '-')
           } else {
             setTriboLider('-')
           }
@@ -201,22 +201,22 @@ export default function ProfessorDashboard() {
         // Tribe ranking by total points
         const { data: studentPoints } = await supabase
           .from('students')
-          .select('tribe_id, points')
+          .select('community_id, points')
           .in('id', studentIds)
 
         if (studentPoints) {
           const tribeMap: Record<string, number> = {}
           const tribeNameMap: Record<string, string> = {}
 
-          for (const sp of studentPoints as { tribe_id: string | null; points: number }[]) {
-            if (!sp.tribe_id) continue
-            tribeMap[sp.tribe_id] = (tribeMap[sp.tribe_id] || 0) + (sp.points || 0)
+          for (const sp of studentPoints as { community_id: string | null; points: number }[]) {
+            if (!sp.community_id) continue
+            tribeMap[sp.community_id] = (tribeMap[sp.community_id] || 0) + (sp.points || 0)
           }
 
           const tribeIds = Object.keys(tribeMap)
           if (tribeIds.length > 0) {
             const { data: tribeNames } = await supabase
-              .from('tribes')
+              .from('communities')
               .select('id, name')
               .in('id', tribeIds)
 

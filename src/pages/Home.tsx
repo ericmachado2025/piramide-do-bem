@@ -61,7 +61,7 @@ export default function Home() {
       // Load student with tribe and character
       const { data: studentData } = await supabase
         .from('students')
-        .select('*, tribe:tribes(*), character:characters(*)')
+        .select('*, community:communities(*), character:characters(*)')
         .eq('user_id', authUser!.id)
         .single()
 
@@ -108,8 +108,8 @@ export default function Home() {
 
   if (!student) return null
 
-  const tribeEmoji = getTribeEmoji(student.tribe?.icon_class ?? null)
-  const currentTier = student.character?.tier ?? 1
+  const tribeEmoji = getTribeEmoji(student.community?.icon_class ?? null)
+  const currentTier = student.character?.level?.tier ?? 1
   const tierProgress = Math.min(((student.total_points % 100) / 100) * 100, 100)
 
   return (
@@ -140,7 +140,7 @@ export default function Home() {
               </div>
               <div className="flex justify-between mt-1">
                 <span className="text-white/60 text-xs">{student.total_points} pts</span>
-                <span className="text-white/60 text-xs">{student.tribe?.name ?? 'Sem tribo'}</span>
+                <span className="text-white/60 text-xs">{student.community?.name ?? 'Sem comunidade'}</span>
               </div>
             </div>
           </div>

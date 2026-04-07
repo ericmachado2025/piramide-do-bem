@@ -46,9 +46,9 @@ const FAIXAS: Faixa[] = [
 interface RankedStudent {
   id: string
   name: string
-  tribeIcon: string
-  tribeName: string
-  tribeColor: string | null
+  communityIcon: string
+  communityName: string
+  communityColor: string | null
   tier: number
   totalPoints: number
   percentile: number
@@ -97,7 +97,7 @@ export default function Ranking() {
         // Load students with tribe info
         const { data, error: queryError } = await supabase
           .from('students')
-          .select('id, name, total_points, tribe:tribes!left(name, icon_class, color_hex)')
+          .select('id, name, total_points, community:communities!left(name, icon_class, color_hex)')
           .order('total_points', { ascending: false })
           .limit(100)
 
@@ -113,7 +113,7 @@ export default function Ranking() {
 
           const ranked: RankedStudent[] = sorted.map((s, idx) => {
             const percentile = ((idx + 1) / total) * 100
-            const tribe = s.tribe as unknown as { name: string; icon_class: string | null; color_hex: string | null } | null
+            const community = s.community as unknown as { name: string; icon_class: string | null; color_hex: string | null } | null
             let faixaId = 'crescimento'
             for (const f of FAIXAS) {
               if (percentile >= f.minPercentile) { faixaId = f.id; break }
@@ -121,9 +121,9 @@ export default function Ranking() {
             return {
               id: s.id,
               name: s.name,
-              tribeIcon: tribe?.icon_class ? (ICON_MAP[tribe.icon_class] ?? '\u{1F5A4}') : '\u{1F5A4}',
-              tribeName: tribe?.name ?? 'Desconhecida',
-              tribeColor: tribe?.color_hex ?? null,
+              communityIcon: community?.icon_class ? (ICON_MAP[community.icon_class] ?? '\u{1F5A4}') : '\u{1F5A4}',
+              communityName: community?.name ?? 'Desconhecida',
+              communityColor: community?.color_hex ?? null,
               tier: getTier(s.total_points),
               totalPoints: s.total_points,
               percentile,
@@ -136,15 +136,15 @@ export default function Ranking() {
           // Calculate tribe totals
           const tribeMap: Record<string, { name: string; icon: string; total: number; color: string }> = {}
           for (const s of data) {
-            const tribe = s.tribe as unknown as { name: string; icon_class: string | null; color_hex: string | null } | null
-            if (!tribe) continue
-            const key = tribe.name
+            const community = s.community as unknown as { name: string; icon_class: string | null; color_hex: string | null } | null
+            if (!community) continue
+            const key = community.name
             if (!tribeMap[key]) {
               tribeMap[key] = {
-                name: tribe.name,
-                icon: tribe.icon_class ? (ICON_MAP[tribe.icon_class] ?? '\u{1F5A4}') : '\u{1F5A4}',
+                name: community.name,
+                icon: community.icon_class ? (ICON_MAP[community.icon_class] ?? '\u{1F5A4}') : '\u{1F5A4}',
                 total: 0,
-                color: tribe.color_hex ?? '#028090',
+                color: community.color_hex ?? '#028090',
               }
             }
             tribeMap[key].total += s.total_points
@@ -315,7 +315,7 @@ export default function Ranking() {
                                     : ''
                                 }`}
                               >
-                                <span className="text-2xl">{s.tribeIcon}</span>
+                                <span className="text-2xl">{s.communityIcon}</span>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm font-semibold text-navy truncate">
                                     {s.name}
@@ -326,7 +326,7 @@ export default function Ranking() {
                                     )}
                                   </p>
                                   <p className="text-xs text-gray-400 truncate">
-                                    {s.tribeName}
+                                    {s.communityName}
                                   </p>
                                 </div>
                                 <span className="text-xs font-medium text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">

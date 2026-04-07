@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Search, Check } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
@@ -40,17 +40,6 @@ export default function RegistrarAcao() {
 
       if (me) {
         setStudentId(me.id)
-
-        // Load classmates from same school
-        if (me.school_id) {
-          const { data: peers } = await supabase
-            .from('students')
-            .select('id, name')
-            .eq('school_id', me.school_id)
-            .neq('id', me.id)
-            .limit(30)
-          if (peers) setClassmates(peers)
-        }
       }
 
       // Load action types
@@ -69,11 +58,22 @@ export default function RegistrarAcao() {
   const isOtherAction = selectedActionType?.name?.toLowerCase().includes('outr') ?? false
   const allowsMultiple = true // allow selecting multiple beneficiaries
 
-  const availablePeople = useMemo(() => {
-    return classmates.filter((c) =>
-      c.name.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-  }, [searchQuery, classmates])
+  // Debounced search for all participants (open, not restricted to school)
+  useEffect(() => {
+    if (searchQuery.length < 2) { setClassmates([]); return }
+    const timer = setTimeout(async () => {
+      const { data } = await supabase
+        .from('students')
+        .select('id, name')
+        .or(`name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%,whatsapp.ilike.%${searchQuery}%`)
+        .neq('id', studentId ?? '')
+        .limit(20)
+      if (data) setClassmates(data)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery, studentId])
+
+  const availablePeople = classmates
 
   async function saveAction() {
     if (!studentId || !selectedAction) return

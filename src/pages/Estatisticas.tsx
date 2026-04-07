@@ -43,8 +43,8 @@ interface SchoolRanking {
 }
 
 interface TribeRanking {
-  tribe_id: string
-  tribe_name: string
+  community_id: string
+  community_name: string
   student_count: number
 }
 
@@ -152,11 +152,11 @@ export default function Estatisticas() {
         // 6 - Top 3 tribes by student count
         const { data: studentTribes } = await supabase
           .from('students')
-          .select('tribe_id')
+          .select('community_id')
 
         const tribeCountMap: Record<string, number> = {}
         for (const st of studentTribes ?? []) {
-          const tid = (st as { tribe_id: string }).tribe_id
+          const tid = (st as { community_id: string }).community_id
           if (tid) {
             tribeCountMap[tid] = (tribeCountMap[tid] || 0) + 1
           }
@@ -168,7 +168,7 @@ export default function Estatisticas() {
         let topTribesList: TribeRanking[] = []
         if (sortedTribeIds.length > 0) {
           const { data: tribeNames } = await supabase
-            .from('tribes')
+            .from('communities')
             .select('id, name')
             .in(
               'id',
@@ -181,8 +181,8 @@ export default function Estatisticas() {
           }
 
           topTribesList = sortedTribeIds.map(([id, count]) => ({
-            tribe_id: id,
-            tribe_name: tribeNameMap[id] || 'Tribo desconhecida',
+            community_id: id,
+            community_name: tribeNameMap[id] || 'Comunidade desconhecida',
             student_count: count,
           }))
         }
@@ -420,7 +420,7 @@ export default function Estatisticas() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {topTribes.map((tribe, i) => (
                 <div
-                  key={tribe.tribe_id}
+                  key={tribe.community_id}
                   className="bg-white rounded-2xl shadow-lg p-6 text-center"
                 >
                   <span
@@ -440,7 +440,7 @@ export default function Estatisticas() {
                     className="font-bold text-lg"
                     style={{ color: '#1F4E79' }}
                   >
-                    {tribe.tribe_name}
+                    {tribe.community_name}
                   </p>
                   <p className="text-sm text-gray-500 mt-1">
                     {tribe.student_count}{' '}

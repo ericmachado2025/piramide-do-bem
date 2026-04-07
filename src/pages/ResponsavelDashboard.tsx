@@ -84,7 +84,7 @@ export default function ResponsavelDashboard() {
             redeemed_points,
             tier,
             schools ( name ),
-            tribes ( name )
+            communities ( name )
           )
         `)
         .eq('parent_id', parentData.id)
@@ -94,7 +94,7 @@ export default function ResponsavelDashboard() {
       const mapped: ChildData[] = (links || []).map((link: Record<string, unknown>) => {
         const student = link.students as Record<string, unknown> | null
         const school = student?.schools as Record<string, unknown> | null
-        const tribe = student?.tribes as Record<string, unknown> | null
+        const tribe = student?.communities as Record<string, unknown> | null
         return {
           id: (student?.id as string) || '',
           student_id: link.student_id as string,
