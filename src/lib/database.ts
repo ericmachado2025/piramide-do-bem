@@ -82,6 +82,27 @@ export async function getAvailableArchetypes(communityId: string, gender?: strin
   return [...new Set((data ?? []).map((d: { archetype: string }) => d.archetype))]
 }
 
+// === Scoring Rules ===
+export async function getScoringRule(ruleKey: string) {
+  const { data } = await supabase
+    .from('scoring_rules')
+    .select('*')
+    .eq('rule_key', ruleKey)
+    .eq('active', true)
+    .single()
+  return data
+}
+
+export async function getActionScoringRules() {
+  const { data } = await supabase
+    .from('scoring_rules')
+    .select('*')
+    .eq('rule_type', 'action')
+    .eq('active', true)
+    .order('points', { ascending: true })
+  return data ?? []
+}
+
 // === Action Types ===
 export async function getActionTypes() {
   const { data } = await supabase.from('action_types').select('*').order('display_order')

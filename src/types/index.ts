@@ -58,7 +58,10 @@ export interface CommunityLevel {
   community_id: string
   tier: number
   name: string
+  description: string | null
   min_points: number
+  max_points: number | null
+  color_hex: string | null
   display_order: number
 }
 
@@ -204,6 +207,7 @@ export interface ActionType {
   icon: string | null
   description: string | null
   display_order: number | null
+  scoring_rule_key: string | null
 }
 
 export interface Action {

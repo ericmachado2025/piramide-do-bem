@@ -109,8 +109,9 @@ export default function EscolhaPersonagem() {
   const tribeEmoji = getTribeEmoji(tribe.icon_class)
   const currentPoints = student.total_points || 0
   const tier1Char = tribeCharacters[0]
-  const nextTierPoints = tribeCharacters[1]?.level?.min_points || 100
-  const progress = Math.min((currentPoints / nextTierPoints) * 100, 100)
+  const nextTierPoints = tribeCharacters[1]?.level?.min_points || 1000
+  const progress = nextTierPoints > 0 ? Math.min((currentPoints / nextTierPoints) * 100, 100) : 0
+  const nextLevelName = tribeCharacters[1]?.level?.name || 'Aprendiz'
 
   const handleStart = () => {
     navigate('/home')
@@ -184,8 +185,10 @@ export default function EscolhaPersonagem() {
                       <div className="flex items-center gap-2">
                         <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                           isActive ? `bg-gradient-to-r ${tierColors[index]} text-white` : 'bg-gray-200 text-gray-400'
-                        }`}>
-                          TIER {(char.level?.tier ?? 0)}
+                        }`}
+                          style={char.level?.color_hex ? { backgroundColor: isActive ? char.level.color_hex : undefined } : undefined}
+                        >
+                          {char.level?.name || `Tier ${char.level?.tier ?? 0}`}
                         </span>
                         {[...Array((char.level?.tier ?? 0))].map((_, i) => (
                           <Star key={i} className={`w-3.5 h-3.5 ${isActive ? 'text-yellow fill-yellow' : 'text-gray-300'}`} />
@@ -198,7 +201,7 @@ export default function EscolhaPersonagem() {
                         {char.description}
                       </p>
                       <p className={`text-xs mt-1 font-semibold ${isActive ? 'text-teal' : 'text-gray-300'}`}>
-                        {(char.level?.min_points ?? 0)}+ pontos
+                        {(char.level?.min_points ?? 0).toLocaleString('pt-BR')}+ pontos
                       </p>
                     </div>
                   </div>
@@ -215,7 +218,7 @@ export default function EscolhaPersonagem() {
               <div className="flex justify-between items-center mb-2">
                 <span className="text-sm font-bold text-navy">Seu progresso</span>
                 <span className="text-sm font-bold text-teal">
-                  {currentPoints}/{nextTierPoints} pts
+                  {currentPoints.toLocaleString('pt-BR')}/{nextTierPoints.toLocaleString('pt-BR')} pts
                 </span>
               </div>
               <div className="h-4 bg-gray-100 rounded-full overflow-hidden">
@@ -227,7 +230,7 @@ export default function EscolhaPersonagem() {
                 </div>
               </div>
               <p className="text-xs text-gray-400 mt-2 text-center">
-                Faltam <strong className="text-teal">{nextTierPoints - currentPoints}</strong> pontos para o proximo tier
+                Faltam <strong className="text-teal">{(nextTierPoints - currentPoints).toLocaleString('pt-BR')}</strong> pontos para <strong>{nextLevelName}</strong>
               </p>
             </div>
 

@@ -4,6 +4,7 @@ import { ArrowLeft, Search, Check } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { getScoringRule } from '../lib/database'
 import type { ActionType } from '../types'
 
 interface Classmate {
@@ -42,10 +43,10 @@ export default function RegistrarAcao() {
         setStudentId(me.id)
       }
 
-      // Load action types
+      // Load action types with scoring_rule_key
       const { data: types } = await supabase
         .from('action_types')
-        .select('*')
+        .select('*, scoring_rule_key')
         .order('display_order')
       if (types) setActionTypes(types as ActionType[])
 
@@ -78,6 +79,16 @@ export default function RegistrarAcao() {
   async function saveAction() {
     if (!studentId || !selectedAction) return
 
+    // Calculate points using scoring_rules with multiplier
+    let finalPoints = selectedActionType?.points ?? 0
+    const ruleKey = selectedActionType?.scoring_rule_key
+    if (ruleKey) {
+      const rule = await getScoringRule(ruleKey)
+      if (rule) {
+        finalPoints = Math.round(rule.points * (rule.multiplier ?? 1))
+      }
+    }
+
     await supabase.from('actions').insert({
       author_id: studentId,
       beneficiary_id: selectedBeneficiaries[0] || null,
@@ -86,7 +97,7 @@ export default function RegistrarAcao() {
       status: 'pending',
       qr_code_token: qrToken,
       expires_at: new Date(Date.now() + 48 * 3600000).toISOString(),
-      points_awarded: selectedActionType?.points ?? 0,
+      points_awarded: finalPoints,
     })
   }
 

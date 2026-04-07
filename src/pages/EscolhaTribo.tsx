@@ -412,14 +412,16 @@ export default function EscolhaTribo() {
                   <div className="flex gap-2 overflow-x-auto pb-1">
                     {[1, 2, 3, 4, 5].map(tier => {
                       const tierChars = characters.filter(c => c.level?.tier === tier)
+                      const tierLevel = tierChars[0]?.level
+                      const tierNames = ['Iniciante', 'Aprendiz', 'Destaque', 'Lider', 'Lenda']
                       return (
                         <div key={tier} className={`flex-shrink-0 w-20 text-center rounded-xl p-2 ${
                           tier === 1 ? 'bg-teal/10 border border-teal/30' : 'bg-white border border-gray-100 opacity-50'
                         }`}>
-                          <div className="text-xs font-bold text-gray-600">Tier {tier}</div>
+                          <div className="text-xs font-bold text-gray-600">{tierLevel?.name || tierNames[tier - 1]}</div>
                           <div className="text-[10px] text-gray-400">{tierChars.length} chars</div>
                           <div className="text-[10px] text-teal font-semibold">
-                            {[0, 100, 300, 600, 1000][tier - 1]}+ pts
+                            {[0, 1000, 5000, 15000, 50000][tier - 1].toLocaleString('pt-BR')}+ pts
                           </div>
                         </div>
                       )
