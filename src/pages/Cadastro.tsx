@@ -1,15 +1,31 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ChevronRight, ChevronLeft, Eye, EyeOff, CheckCircle2 } from 'lucide-react'
+import { ChevronRight, ChevronLeft, CheckCircle2, Search, Loader2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { findOrCreateClassroom, createStudentEnrollment } from '../lib/database'
+import PasswordInput, { validatePassword } from '../components/PasswordInput'
+
+// 27 Brazilian states
+const BRAZILIAN_STATES = [
+  'AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA',
+  'MG', 'MS', 'MT', 'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN',
+  'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO',
+]
+
+const STATE_NAMES: Record<string, string> = {
+  AC: 'Acre', AL: 'Alagoas', AM: 'Amazonas', AP: 'Amapa', BA: 'Bahia',
+  CE: 'Ceara', DF: 'Distrito Federal', ES: 'Espirito Santo', GO: 'Goias',
+  MA: 'Maranhao', MG: 'Minas Gerais', MS: 'Mato Grosso do Sul', MT: 'Mato Grosso',
+  PA: 'Para', PB: 'Paraiba', PE: 'Pernambuco', PI: 'Piaui', PR: 'Parana',
+  RJ: 'Rio de Janeiro', RN: 'Rio Grande do Norte', RO: 'Rondonia', RR: 'Roraima',
+  RS: 'Rio Grande do Sul', SC: 'Santa Catarina', SE: 'Sergipe', SP: 'Sao Paulo', TO: 'Tocantins',
+}
 
 // Grades by school type
 const GRADES_BY_TYPE: Record<string, string[]> = {
   infantil: ['Pre I', 'Pre II'],
-  fundamental_I: ['1o ano', '2o ano', '3o ano', '4o ano', '5o ano'],
-  fundamental_II: ['6o ano', '7o ano', '8o ano', '9o ano'],
+  fundamental: ['1o ano', '2o ano', '3o ano', '4o ano', '5o ano', '6o ano', '7o ano', '8o ano', '9o ano'],
   medio: ['1o EM', '2o EM', '3o EM'],
   tecnico: ['1o Tecnico', '2o Tecnico', '3o Tecnico', '4o Tecnico'],
   eja: ['EJA Fundamental', 'EJA Medio'],
@@ -34,32 +50,15 @@ function getDaysInMonth(month: number, year: number): number {
   return new Date(year, month, 0).getDate()
 }
 
-// Password validation
-function validatePassword(password: string): { valid: boolean; errors: string[] } {
-  const errors: string[] = []
-  if (password.length < 8) errors.push('Minimo 8 caracteres')
-  if (!/[A-Z]/.test(password)) errors.push('1 letra maiuscula')
-  if (!/[a-z]/.test(password)) errors.push('1 letra minuscula')
-  if (!/[0-9]/.test(password)) errors.push('1 numero')
-  if (!/[!@#$%^&*()_+\-=\[\]{}|;':",.<>?/]/.test(password)) errors.push('1 caractere especial')
-  return { valid: errors.length === 0, errors }
-}
-
-function getPasswordStrength(password: string): number {
-  let strength = 0
-  if (password.length >= 8) strength++
-  if (/[A-Z]/.test(password)) strength++
-  if (/[a-z]/.test(password)) strength++
-  if (/[0-9]/.test(password)) strength++
-  if (/[!@#$%^&*()_+\-=\[\]{}|;':",.<>?/]/.test(password)) strength++
-  return strength
-}
-
 function formatWhatsApp(value: string): string {
   const digits = value.replace(/\D/g, '').slice(0, 11)
   if (digits.length <= 2) return digits
   if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
+}
+
+function formatPhone(value: string): string {
+  return formatWhatsApp(value)
 }
 
 interface FormData {
@@ -73,20 +72,23 @@ interface FormData {
   confirmPassword: string
   state: string
   city: string
+  citySearch: string
   schoolId: string
+  schoolSearch: string
+  schoolType: string
   grade: string
   section: string
-  parentName: string
-  parentEmail: string
-  lgpdConsent: boolean
-  schoolSearch: string
   whatsapp: string
+  parentEmail: string
+  parentPhone: string
+  parentRelation: string
+  lgpdConsent: boolean
 }
 
-// Passos para login normal: 1=Nome, 2=Email, 3=Nascimento, 4=Senha, 5=Escola, 6=LGPD
-// Passos para Google OAuth: 3=Nascimento, 5=Escola, 6=LGPD (pula nome, email, senha)
-const GOOGLE_STEPS = [3, 5, 6]
-const NORMAL_STEPS = [1, 2, 3, 4, 5, 6]
+// Normal flow: 1=Email, 2=Nome, 3=Senha, 4=Nascimento, 5=Escola, 6=WhatsApp, 7=LGPD
+// Google flow: 4=Nascimento, 5=Escola, 6=WhatsApp, 7=LGPD
+const NORMAL_STEPS = [1, 2, 3, 4, 5, 6, 7]
+const GOOGLE_STEPS = [4, 5, 6, 7]
 
 export default function Cadastro() {
   const navigate = useNavigate()
@@ -112,10 +114,7 @@ export default function Cadastro() {
   const stepSequence = fromGoogle ? GOOGLE_STEPS : NORMAL_STEPS
   const [stepIndex, setStepIndex] = useState(0)
   const step = stepSequence[stepIndex] ?? stepSequence[0]
-  const totalVisibleSteps = stepSequence.length
 
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirm, setShowConfirm] = useState(false)
   const [emailError, setEmailError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [form, setForm] = useState<FormData>(() => ({
@@ -129,17 +128,20 @@ export default function Cadastro() {
     confirmPassword: '',
     state: '',
     city: '',
+    citySearch: '',
     schoolId: '',
+    schoolSearch: '',
+    schoolType: '',
     grade: '',
     section: '',
-    parentName: '',
-    parentEmail: '',
-    lgpdConsent: false,
-    schoolSearch: '',
     whatsapp: '',
+    parentEmail: '',
+    parentPhone: '',
+    parentRelation: '',
+    lgpdConsent: false,
   }))
 
-  // Pre-fill name/email from Google metadata when user becomes available
+  // Pre-fill from Google
   useEffect(() => {
     if (fromGoogle && user && !form.name) {
       setForm(prev => ({
@@ -150,75 +152,84 @@ export default function Cadastro() {
     }
   }, [user, fromGoogle])
 
-  // Dynamic school data from Supabase
-  const [states, setStates] = useState<string[]>([])
-  const [cities, setCities] = useState<string[]>([])
-  const [schoolsList, setSchoolsList] = useState<{ id: string; name: string; school_type: string }[]>([])
-
-  // Load states on mount
+  // Browser back support
   useEffect(() => {
-    supabase
-      .from('schools')
-      .select('state')
-      .limit(1000)
-      .then(({ data }) => {
-        if (data) {
-          const unique = [...new Set(data.map((r: { state: string }) => r.state))].sort()
-          setStates(unique)
-        }
+    window.history.pushState({ step: stepIndex }, '')
+  }, [stepIndex])
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setStepIndex(prev => {
+        if (prev > 0) return prev - 1
+        navigate('/')
+        return prev
       })
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [navigate])
+
+  // City autocomplete
+  const [citySuggestions, setCitySuggestions] = useState<string[]>([])
+  const [cityLoading, setCityLoading] = useState(false)
+  const [showCityDropdown, setShowCityDropdown] = useState(false)
+  const cityDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const searchCities = useCallback((state: string, query: string) => {
+    if (cityDebounceRef.current) clearTimeout(cityDebounceRef.current)
+    if (!state || query.length < 3) { setCitySuggestions([]); return }
+    setCityLoading(true)
+    cityDebounceRef.current = setTimeout(async () => {
+      const { data } = await supabase
+        .from('schools')
+        .select('city')
+        .eq('state', state)
+        .ilike('city', `${query}%`)
+        .limit(200)
+      if (data) {
+        const unique = [...new Set(data.map((r: { city: string }) => r.city))].sort()
+        setCitySuggestions(unique)
+      }
+      setCityLoading(false)
+      setShowCityDropdown(true)
+    }, 300)
   }, [])
 
-  // Load cities when state changes
-  useEffect(() => {
-    if (!form.state) { setCities([]); return }
-    supabase
-      .from('schools')
-      .select('city')
-      .eq('state', form.state)
-      .limit(1000)
-      .then(({ data }) => {
-        if (data) {
-          const unique = [...new Set(data.map((r: { city: string }) => r.city))].sort()
-          setCities(unique)
-        }
-      })
-  }, [form.state])
+  // School autocomplete
+  const [schoolSuggestions, setSchoolSuggestions] = useState<{ id: string; name: string; school_type: string }[]>([])
+  const [schoolLoading, setSchoolLoading] = useState(false)
+  const [showSchoolDropdown, setShowSchoolDropdown] = useState(false)
+  const schoolDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Load schools when city changes or search changes
-  useEffect(() => {
-    if (!form.state || !form.city) { setSchoolsList([]); return }
-    let query = supabase
-      .from('schools')
-      .select('id, name, school_type')
-      .eq('state', form.state)
-      .eq('city', form.city)
-      .order('name')
-      .limit(50)
+  const searchSchools = useCallback((state: string, city: string, query: string) => {
+    if (schoolDebounceRef.current) clearTimeout(schoolDebounceRef.current)
+    if (!state || !city || query.length < 3) { setSchoolSuggestions([]); return }
+    setSchoolLoading(true)
+    schoolDebounceRef.current = setTimeout(async () => {
+      const { data } = await supabase
+        .from('schools')
+        .select('id, name, school_type')
+        .eq('state', state)
+        .eq('city', city)
+        .ilike('name', `%${query}%`)
+        .order('name')
+        .limit(20)
+      if (data) setSchoolSuggestions(data)
+      setSchoolLoading(false)
+      setShowSchoolDropdown(true)
+    }, 300)
+  }, [])
 
-    if (form.schoolSearch.trim()) {
-      query = query.ilike('name', `%${form.schoolSearch.trim()}%`)
-    }
-
-    query.then(({ data }) => {
-      if (data) setSchoolsList(data)
-    })
-  }, [form.state, form.city, form.schoolSearch])
-
-  // Get available grades based on selected school's type
+  // Get available grades based on selected school type
   const availableGrades = useMemo(() => {
-    const school = schoolsList.find(s => s.id === form.schoolId)
-    if (!school || !school.school_type) return ALL_GRADES
-
-    const types = school.school_type.split(',').map(t => t.trim())
+    if (!form.schoolType) return ALL_GRADES
+    const types = form.schoolType.split(',').map(t => t.trim())
     const grades: string[] = []
     for (const type of types) {
-      if (GRADES_BY_TYPE[type]) {
-        grades.push(...GRADES_BY_TYPE[type])
-      }
+      if (GRADES_BY_TYPE[type]) grades.push(...GRADES_BY_TYPE[type])
     }
     return grades.length > 0 ? grades : ALL_GRADES
-  }, [form.schoolId, schoolsList])
+  }, [form.schoolType])
 
   const currentYear = new Date().getFullYear()
   const minYear = currentYear - 80
@@ -234,65 +245,85 @@ export default function Cadastro() {
     return true
   }, [form.birthYear, form.birthMonth, form.birthDay, minYear, maxYear])
 
-  // Update birthDate string whenever parts change
-  useMemo(() => {
-    if (birthDateValid) {
-      const y = form.birthYear.padStart(4, '0')
-      const m = form.birthMonth.padStart(2, '0')
-      const d = form.birthDay.padStart(2, '0')
-      form.birthDate = `${y}-${m}-${d}`
-    } else {
-      form.birthDate = ''
-    }
+  // Compute birth date string
+  const birthDate = useMemo(() => {
+    if (!birthDateValid) return ''
+    const y = form.birthYear.padStart(4, '0')
+    const m = form.birthMonth.padStart(2, '0')
+    const d = form.birthDay.padStart(2, '0')
+    return `${y}-${m}-${d}`
   }, [form.birthYear, form.birthMonth, form.birthDay, birthDateValid])
 
-  const isMinor = useMemo(() => {
-    if (!birthDateValid) return true
-    const birth = new Date(form.birthDate)
+  // Age calculation — LGPD only for < 12
+  const age = useMemo(() => {
+    if (!birthDateValid || !birthDate) return null
+    const birth = new Date(birthDate)
     const today = new Date()
-    const age = today.getFullYear() - birth.getFullYear()
+    let a = today.getFullYear() - birth.getFullYear()
     const monthDiff = today.getMonth() - birth.getMonth()
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-      return age - 1 < 18
-    }
-    return age < 18
-  }, [form.birthDate, birthDateValid])
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) a--
+    return a
+  }, [birthDate, birthDateValid])
+
+  const needsConsent = age !== null && age < 12
 
   const passwordValidation = useMemo(() => validatePassword(form.password), [form.password])
-  const passwordStrength = useMemo(() => getPasswordStrength(form.password), [form.password])
 
   const update = (field: keyof FormData, value: string | boolean) => {
     setForm((prev) => ({ ...prev, [field]: value }))
   }
 
+  // Determine how many steps to show (skip LGPD if not needed)
+  const effectiveSteps = useMemo(() => {
+    if (needsConsent) return stepSequence
+    return stepSequence.filter(s => s !== 7)
+  }, [stepSequence, needsConsent])
+
+  const totalVisibleSteps = effectiveSteps.length
+
   const canAdvance = () => {
     switch (step) {
-      case 1: return form.name.trim().length >= 2
-      case 2: return form.email.includes('@') && !emailError
-      case 3: return birthDateValid
-      case 4: return passwordValidation.valid && form.password === form.confirmPassword
+      case 1: return form.email.includes('@') && !emailError
+      case 2: return form.name.trim().length >= 2
+      case 3: return passwordValidation.valid && form.password === form.confirmPassword
+      case 4: return birthDateValid
       case 5: return form.schoolId !== '' && form.grade !== '' && form.section !== ''
-      case 6: return !isMinor || (form.parentName.trim().length >= 2 && form.parentEmail.includes('@') && form.lgpdConsent)
+      case 6: return true // WhatsApp is optional
+      case 7: return form.parentEmail.includes('@') && form.parentPhone.replace(/\D/g, '').length >= 10 && form.parentRelation !== '' && form.lgpdConsent
       default: return false
     }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && canAdvance()) {
-      handleNext()
-    }
+    if (e.key === 'Enter' && canAdvance()) handleNext()
   }
 
   const handleNext = () => {
-    if (step === 5 && !isMinor) {
+    // Skip LGPD step if consent not needed
+    if (step === 6 && !needsConsent) {
       handleComplete()
       return
     }
 
-    if (stepIndex < stepSequence.length - 1) {
-      setStepIndex(stepIndex + 1)
+    const currentEffectiveIndex = effectiveSteps.indexOf(step)
+    if (currentEffectiveIndex < effectiveSteps.length - 1) {
+      const nextStep = effectiveSteps[currentEffectiveIndex + 1]
+      const realIndex = stepSequence.indexOf(nextStep)
+      setStepIndex(realIndex)
     } else {
       handleComplete()
+    }
+  }
+
+  const handleBack = () => {
+    if (stepIndex > 0) {
+      // Find previous effective step
+      const currentEffectiveIndex = effectiveSteps.indexOf(step)
+      if (currentEffectiveIndex > 0) {
+        const prevStep = effectiveSteps[currentEffectiveIndex - 1]
+        const realIndex = stepSequence.indexOf(prevStep)
+        setStepIndex(realIndex)
+      }
     }
   }
 
@@ -323,10 +354,11 @@ export default function Cadastro() {
         user_id: authUserId,
         name: form.name,
         email: form.email,
-        birth_date: form.birthDate || null,
+        birth_date: birthDate || null,
         school_id: form.schoolId || null,
-        parent_name: form.parentName || null,
+        parent_name: null,
         parent_email: form.parentEmail || null,
+        parent_phone: form.parentPhone.replace(/\D/g, '') || null,
         parent_consent: form.lgpdConsent,
         whatsapp: form.whatsapp.replace(/\D/g, '') || null,
         total_points: 0,
@@ -375,31 +407,40 @@ export default function Cadastro() {
     }
   }
 
+  // Check duplicate email
+  const checkEmailExists = useCallback(async (email: string) => {
+    if (!email.includes('@')) return
+    const { data } = await supabase.from('students').select('id').eq('email', email).maybeSingle()
+    if (data) {
+      setEmailError('Este email ja esta cadastrado. Faca login.')
+    }
+  }, [])
+
+  const effectiveIndex = effectiveSteps.indexOf(step)
+
   return (
     <div className="min-h-screen bg-bg flex flex-col items-center justify-start pt-8 px-4 pb-8">
       {/* Step indicator */}
       <div className="flex items-center gap-0 mb-8 max-w-xs w-full justify-center">
-        {stepSequence.map((_, i) => (
+        {effectiveSteps.map((_, i) => (
           <div key={i} className="flex items-center">
             <div
               className={`
                 w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-300
-                ${i < stepIndex
+                ${i < effectiveIndex
                   ? 'bg-green text-white'
-                  : i === stepIndex
+                  : i === effectiveIndex
                     ? 'bg-teal text-white shadow-lg scale-110'
                     : 'bg-gray-200 text-gray-400'
                 }
               `}
             >
-              {i < stepIndex ? <CheckCircle2 className="w-5 h-5" /> : i + 1}
+              {i < effectiveIndex ? <CheckCircle2 className="w-5 h-5" /> : i + 1}
             </div>
-            {i < stepSequence.length - 1 && (
-              <div
-                className={`w-6 h-1 rounded-full transition-colors duration-300 ${
-                  i < stepIndex ? 'bg-green' : 'bg-gray-200'
-                }`}
-              />
+            {i < effectiveSteps.length - 1 && (
+              <div className={`w-6 h-1 rounded-full transition-colors duration-300 ${
+                i < effectiveIndex ? 'bg-green' : 'bg-gray-200'
+              }`} />
             )}
           </div>
         ))}
@@ -412,8 +453,65 @@ export default function Cadastro() {
         key={step}
         onKeyDown={handleKeyDown}
       >
-        {/* Step 1: Name */}
+        {/* Step 1: Email + Google */}
         {step === 1 && (
+          <div className="space-y-4">
+            <div className="text-center">
+              <span className="text-5xl">{'\u{1F4E7}'}</span>
+              <h2 className="text-2xl font-extrabold text-navy mt-2">Vamos comecar!</h2>
+              <p className="text-gray-400 text-sm mt-1">Entre com Google ou cadastre com email</p>
+            </div>
+            {/* Google first — more prominent */}
+            <button
+              onClick={handleGoogleSignIn}
+              disabled={googleLoading}
+              className={`w-full flex items-center justify-center gap-3 py-4 px-4 bg-white border-2 border-teal rounded-xl transition-all font-bold text-lg ${
+                googleLoading ? 'opacity-50 cursor-wait' : 'hover:bg-teal/5 hover:shadow-md text-navy'
+              }`}
+            >
+              <svg width="22" height="22" viewBox="0 0 48 48">
+                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+                <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+                <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+              </svg>
+              {googleLoading ? 'Conectando...' : 'Entrar com Google'}
+            </button>
+            <div className="relative flex items-center my-2">
+              <div className="flex-1 h-px bg-gray-200" />
+              <span className="px-3 text-gray-400 text-sm">ou cadastre com email</span>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
+            <input
+              type="email"
+              placeholder="seu@email.com"
+              value={form.email}
+              onChange={(e) => {
+                update('email', e.target.value)
+                setEmailError('')
+              }}
+              onBlur={(e) => checkEmailExists(e.target.value)}
+              className={`w-full px-4 py-3.5 rounded-xl border-2 focus:outline-none text-lg transition-colors ${
+                emailError ? 'border-red focus:border-red' : 'border-gray-200 focus:border-teal'
+              }`}
+              autoFocus
+            />
+            {emailError && (
+              <div className="text-sm">
+                <p className="text-red">{emailError}</p>
+                {emailError.includes('cadastrado') && (
+                  <button onClick={() => navigate('/auth/callback')} className="text-teal font-semibold mt-1">
+                    Ir para login
+                  </button>
+                )}
+              </div>
+            )}
+            <p className="text-xs text-gray-400 text-center">Confira se o email esta correto. Voce precisara dele para recuperar sua senha.</p>
+          </div>
+        )}
+
+        {/* Step 2: Name */}
+        {step === 2 && (
           <div className="space-y-4">
             <div className="text-center">
               <span className="text-5xl">{'\u{1F44B}'}</span>
@@ -431,53 +529,26 @@ export default function Cadastro() {
           </div>
         )}
 
-        {/* Step 2: Email */}
-        {step === 2 && (
+        {/* Step 3: Password */}
+        {step === 3 && (
           <div className="space-y-4">
             <div className="text-center">
-              <span className="text-5xl">{'\u{1F4E7}'}</span>
-              <h2 className="text-2xl font-extrabold text-navy mt-2">Qual seu email?</h2>
-              <p className="text-gray-400 text-sm mt-1">Voce pode usar o Google para entrar mais rapido</p>
+              <span className="text-5xl">{'\u{1F512}'}</span>
+              <h2 className="text-2xl font-extrabold text-navy mt-2">Crie uma senha forte</h2>
+              <p className="text-gray-400 text-sm mt-1">Minimo 8 caracteres com variedade</p>
             </div>
-            <input
-              type="email"
-              placeholder="seu@email.com"
-              value={form.email}
-              onChange={(e) => {
-                update('email', e.target.value)
-                setEmailError('')
-              }}
-              className={`w-full px-4 py-3.5 rounded-xl border-2 focus:outline-none text-lg transition-colors ${
-                emailError ? 'border-red focus:border-red' : 'border-gray-200 focus:border-teal'
-              }`}
-              autoFocus
+            <PasswordInput
+              password={form.password}
+              confirmPassword={form.confirmPassword}
+              onPasswordChange={(v) => update('password', v)}
+              onConfirmChange={(v) => update('confirmPassword', v)}
+              onEnterAdvance={() => canAdvance() && handleNext()}
             />
-            {emailError && <p className="text-red text-sm">{emailError}</p>}
-            <div className="relative flex items-center my-2">
-              <div className="flex-1 h-px bg-gray-200" />
-              <span className="px-3 text-gray-400 text-sm">ou</span>
-              <div className="flex-1 h-px bg-gray-200" />
-            </div>
-            <button
-              onClick={handleGoogleSignIn}
-              disabled={googleLoading}
-              className={`w-full flex items-center justify-center gap-3 py-3.5 px-4 border-2 border-gray-200 rounded-xl transition-colors font-medium ${
-                googleLoading ? 'bg-gray-100 text-gray-400 cursor-wait' : 'hover:bg-gray-50 text-gray-700'
-              }`}
-            >
-              <svg width="20" height="20" viewBox="0 0 48 48">
-                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
-                <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
-                <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
-                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
-              </svg>
-              Entrar com Google
-            </button>
           </div>
         )}
 
-        {/* Step 3: Age */}
-        {step === 3 && (
+        {/* Step 4: Birth date */}
+        {step === 4 && (
           <div className="space-y-4">
             <div className="text-center">
               <span className="text-5xl">{'\u{1F382}'}</span>
@@ -510,75 +581,6 @@ export default function Cadastro() {
             {form.birthYear && (parseInt(form.birthYear) < minYear || parseInt(form.birthYear) > maxYear) && (
               <p className="text-red text-sm">Ano de nascimento invalido.</p>
             )}
-            {birthDateValid && isMinor && (
-              <div className="bg-yellow/10 border border-yellow/30 rounded-xl p-3 text-sm text-yellow-800">
-                <strong>Menor de 18 anos?</strong> Voce precisara do consentimento de um responsavel (LGPD).
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Step 4: Password */}
-        {step === 4 && (
-          <div className="space-y-4">
-            <div className="text-center">
-              <span className="text-5xl">{'\u{1F512}'}</span>
-              <h2 className="text-2xl font-extrabold text-navy mt-2">Crie uma senha forte</h2>
-              <p className="text-gray-400 text-sm mt-1">Minimo 8 caracteres com variedade</p>
-            </div>
-            <div className="relative">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                placeholder="Sua senha"
-                value={form.password}
-                onChange={(e) => update('password', e.target.value)}
-                className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors pr-12"
-                autoFocus
-              />
-              <button type="button" onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-              </button>
-            </div>
-            <div className="relative">
-              <input
-                type={showConfirm ? 'text' : 'password'}
-                placeholder="Confirme a senha"
-                value={form.confirmPassword}
-                onChange={(e) => update('confirmPassword', e.target.value)}
-                className={`w-full px-4 py-3.5 rounded-xl border-2 focus:outline-none text-lg transition-colors pr-12 ${
-                  form.confirmPassword && form.confirmPassword !== form.password
-                    ? 'border-red focus:border-red' : 'border-gray-200 focus:border-teal'
-                }`}
-              />
-              <button type="button" onClick={() => setShowConfirm(!showConfirm)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                {showConfirm ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-              </button>
-            </div>
-            {form.confirmPassword && form.confirmPassword !== form.password && (
-              <p className="text-red text-sm">As senhas nao coincidem</p>
-            )}
-            {/* Password strength meter */}
-            <div className="flex gap-1">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className={`h-1.5 flex-1 rounded-full transition-colors ${
-                  passwordStrength >= i
-                    ? i <= 2 ? 'bg-red' : i <= 3 ? 'bg-yellow' : 'bg-green'
-                    : 'bg-gray-200'
-                }`} />
-              ))}
-            </div>
-            {/* Password requirements */}
-            {form.password && !passwordValidation.valid && (
-              <div className="text-xs space-y-1">
-                {passwordValidation.errors.map((err) => (
-                  <p key={err} className="text-red flex items-center gap-1">
-                    <span className="w-1 h-1 rounded-full bg-red inline-block" /> {err}
-                  </p>
-                ))}
-              </div>
-            )}
           </div>
         )}
 
@@ -590,69 +592,176 @@ export default function Cadastro() {
               <h2 className="text-2xl font-extrabold text-navy mt-2">Sua escola</h2>
               <p className="text-gray-400 text-sm mt-1">Selecione estado, cidade e escola</p>
             </div>
-            <select value={form.state} onChange={(e) => { update('state', e.target.value); update('city', ''); update('schoolId', ''); update('grade', '') }}
+
+            {/* State select */}
+            <select value={form.state} onChange={(e) => {
+              update('state', e.target.value)
+              update('city', ''); update('citySearch', '')
+              update('schoolId', ''); update('schoolSearch', '')
+              update('grade', ''); update('schoolType', '')
+              setCitySuggestions([]); setSchoolSuggestions([])
+            }}
               className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors bg-white">
               <option value="">Selecione o estado</option>
-              {states.map((s) => (<option key={s} value={s}>{s}</option>))}
+              {BRAZILIAN_STATES.map((s) => (
+                <option key={s} value={s}>{s} - {STATE_NAMES[s]}</option>
+              ))}
             </select>
 
-            <select value={form.city} onChange={(e) => { update('city', e.target.value); update('schoolId', ''); update('grade', '') }}
-              disabled={!form.state}
-              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors bg-white disabled:opacity-50">
-              <option value="">Selecione a cidade</option>
-              {cities.map((c) => (<option key={c} value={c}>{c}</option>))}
-            </select>
-
-            {form.city && (
-              <input type="text" placeholder="Buscar escola pelo nome..." value={form.schoolSearch}
-                onChange={(e) => update('schoolSearch', e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors" />
+            {/* City autocomplete */}
+            {form.state && (
+              <div className="relative">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Digite 3+ letras da cidade..."
+                    value={form.city || form.citySearch}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      update('citySearch', val)
+                      if (form.city) {
+                        update('city', '')
+                        update('schoolId', ''); update('schoolSearch', '')
+                        update('grade', ''); update('schoolType', '')
+                      }
+                      searchCities(form.state, val)
+                    }}
+                    onFocus={() => citySuggestions.length > 0 && setShowCityDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowCityDropdown(false), 200)}
+                    className="w-full pl-10 pr-10 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors"
+                  />
+                  {cityLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-teal animate-spin" />}
+                </div>
+                {showCityDropdown && citySuggestions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border-2 border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                    {citySuggestions.map((c) => (
+                      <button key={c} type="button"
+                        onMouseDown={() => {
+                          update('city', c); update('citySearch', '')
+                          setShowCityDropdown(false)
+                          setSchoolSuggestions([])
+                          update('schoolId', ''); update('schoolSearch', '')
+                          update('grade', ''); update('schoolType', '')
+                        }}
+                        className="w-full text-left px-4 py-2.5 hover:bg-teal/10 text-sm transition-colors">
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
 
-            <select value={form.schoolId} onChange={(e) => { update('schoolId', e.target.value); update('grade', '') }}
-              disabled={!form.city}
-              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors bg-white disabled:opacity-50">
-              <option value="">Selecione a escola</option>
-              {schoolsList.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
-            </select>
+            {/* School autocomplete */}
+            {form.city && (
+              <div className="relative">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Digite o nome da escola..."
+                    value={form.schoolId ? schoolSuggestions.find(s => s.id === form.schoolId)?.name || form.schoolSearch : form.schoolSearch}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      update('schoolSearch', val)
+                      if (form.schoolId) {
+                        update('schoolId', ''); update('grade', ''); update('schoolType', '')
+                      }
+                      searchSchools(form.state, form.city, val)
+                    }}
+                    onFocus={() => {
+                      if (form.schoolId) {
+                        update('schoolSearch', '')
+                        update('schoolId', ''); update('grade', ''); update('schoolType', '')
+                      }
+                      schoolSuggestions.length > 0 && setShowSchoolDropdown(true)
+                    }}
+                    onBlur={() => setTimeout(() => setShowSchoolDropdown(false), 200)}
+                    className="w-full pl-10 pr-10 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors"
+                  />
+                  {schoolLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-teal animate-spin" />}
+                </div>
+                {showSchoolDropdown && schoolSuggestions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border-2 border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                    {schoolSuggestions.map((s) => (
+                      <button key={s.id} type="button"
+                        onMouseDown={() => {
+                          update('schoolId', s.id)
+                          update('schoolSearch', s.name)
+                          update('schoolType', s.school_type)
+                          update('grade', '')
+                          setShowSchoolDropdown(false)
+                        }}
+                        className="w-full text-left px-4 py-2.5 hover:bg-teal/10 text-sm transition-colors">
+                        {s.name}
+                        <span className="text-xs text-gray-400 ml-2">({s.school_type})</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
-            <div className="flex gap-3">
-              <select value={form.grade} onChange={(e) => update('grade', e.target.value)}
-                className="flex-1 px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white">
-                <option value="">Serie</option>
-                {availableGrades.map((g) => (<option key={g} value={g}>{g}</option>))}
-              </select>
-              <select value={form.section} onChange={(e) => update('section', e.target.value)}
-                className="w-24 px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white">
-                <option value="">Turma</option>
-                {sections.map((s) => (<option key={s} value={s}>{s}</option>))}
-              </select>
-            </div>
-
-            {/* WhatsApp optional */}
-            <div>
-              <label className="text-sm text-gray-500 mb-1 block">WhatsApp (opcional)</label>
-              <input type="tel" placeholder="(XX) XXXXX-XXXX" value={form.whatsapp}
-                onChange={(e) => update('whatsapp', formatWhatsApp(e.target.value))}
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors" />
-            </div>
+            {/* Grade + Section */}
+            {form.schoolId && (
+              <div className="flex gap-3">
+                <select value={form.grade} onChange={(e) => update('grade', e.target.value)}
+                  className="flex-1 px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white">
+                  <option value="">Serie</option>
+                  {availableGrades.map((g) => (<option key={g} value={g}>{g}</option>))}
+                </select>
+                <select value={form.section} onChange={(e) => update('section', e.target.value)}
+                  className="w-24 px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white">
+                  <option value="">Turma</option>
+                  {sections.map((s) => (<option key={s} value={s}>{s}</option>))}
+                </select>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Step 6: LGPD */}
+        {/* Step 6: WhatsApp (optional) */}
         {step === 6 && (
           <div className="space-y-4">
             <div className="text-center">
-              <span className="text-5xl">{'\u{1F6E1}\uFE0F'}</span>
-              <h2 className="text-2xl font-extrabold text-navy mt-2">Consentimento do Responsavel</h2>
-              <p className="text-gray-400 text-sm mt-1">Conforme a LGPD, menores de 18 anos precisam de autorizacao</p>
+              <span className="text-5xl">{'\u{1F4F1}'}</span>
+              <h2 className="text-2xl font-extrabold text-navy mt-2">Seu WhatsApp</h2>
+              <p className="text-gray-400 text-sm mt-1">Opcional — para notificacoes e comunicacao</p>
             </div>
-            <input type="text" placeholder="Nome do responsavel" value={form.parentName}
-              onChange={(e) => update('parentName', e.target.value)}
-              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors" autoFocus />
+            <input type="tel" placeholder="(XX) XXXXX-XXXX" value={form.whatsapp}
+              onChange={(e) => update('whatsapp', formatWhatsApp(e.target.value))}
+              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors"
+              autoFocus />
+            <p className="text-xs text-gray-400 text-center">Voce pode pular este passo</p>
+          </div>
+        )}
+
+        {/* Step 7: LGPD (only for < 12 years old) */}
+        {step === 7 && (
+          <div className="space-y-4">
+            <div className="text-center">
+              <span className="text-5xl">{'\u{1F389}'}</span>
+              <h2 className="text-2xl font-extrabold text-navy mt-2">Voce esta quase la!</h2>
+              <p className="text-gray-400 text-sm mt-1 leading-relaxed">
+                Como voce tem menos de 12 anos, precisamos que informe o contato de um responsavel para tudo ficar certinho com a LGPD.
+              </p>
+            </div>
             <input type="email" placeholder="Email do responsavel" value={form.parentEmail}
               onChange={(e) => update('parentEmail', e.target.value)}
+              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors"
+              autoFocus />
+            <input type="tel" placeholder="Telefone com DDD do responsavel" value={form.parentPhone}
+              onChange={(e) => update('parentPhone', formatPhone(e.target.value))}
               className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors" />
+            <select value={form.parentRelation} onChange={(e) => update('parentRelation', e.target.value)}
+              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors bg-white">
+              <option value="">Relacao com o responsavel</option>
+              <option value="pai">Pai</option>
+              <option value="mae">Mae</option>
+              <option value="tutor">Tutor(a)</option>
+              <option value="responsavel">Outro responsavel</option>
+            </select>
             <label className={`flex items-start gap-3 p-4 rounded-xl border-2 transition-colors cursor-pointer ${
               form.lgpdConsent ? 'border-teal bg-teal/5' : 'border-gray-200 hover:border-teal/50'
             }`}>
@@ -667,13 +776,16 @@ export default function Cadastro() {
                 Os dados serao usados exclusivamente para o funcionamento da plataforma educacional.
               </span>
             </label>
+            <p className="text-xs text-gray-400 text-center">
+              Enviaremos uma mensagem pedindo a autorizacao. Enquanto isso, voce ja pode explorar a plataforma!
+            </p>
           </div>
         )}
 
         {/* Navigation buttons */}
         <div className="flex gap-3 mt-6">
-          {stepIndex > 0 && (
-            <button onClick={() => setStepIndex(stepIndex - 1)}
+          {effectiveIndex > 0 && (
+            <button onClick={handleBack}
               className="flex items-center justify-center gap-1 px-5 py-3.5 rounded-xl border-2 border-gray-200 text-gray-500 font-semibold hover:bg-gray-50 transition-colors">
               <ChevronLeft className="w-5 h-5" /> Voltar
             </button>
@@ -683,14 +795,14 @@ export default function Cadastro() {
               ${canAdvance() && !submitting
                 ? 'bg-teal text-white hover:bg-teal/90 hover:shadow-lg active:scale-[0.98]'
                 : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
-            {submitting ? 'Salvando...' : stepIndex === stepSequence.length - 1 || (step === 5 && !isMinor) ? 'Concluir' : 'Proximo'}
+            {submitting ? 'Salvando...' : effectiveIndex === effectiveSteps.length - 1 || (step === 6 && !needsConsent) ? 'Concluir' : 'Proximo'}
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>
       </div>
 
       <p className="mt-4 text-gray-400 text-sm">
-        Passo {stepIndex + 1} de {isMinor ? totalVisibleSteps : Math.max(totalVisibleSteps - 1, 1)}
+        Passo {effectiveIndex + 1} de {totalVisibleSteps}
       </p>
 
       <style>{`

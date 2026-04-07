@@ -275,6 +275,11 @@ export default function EscolhaTribo() {
               <div className="col-span-2 text-center py-8">
                 <div className="w-8 h-8 border-4 border-teal border-t-transparent rounded-full animate-spin mx-auto mb-2" />
               </div>
+            ) : types.length === 0 ? (
+              <div className="col-span-2 bg-white rounded-2xl shadow-md p-8 text-center">
+                <p className="text-gray-400">Nenhum tipo disponivel nesta categoria.</p>
+                <button onClick={handleBack} className="mt-4 text-teal font-semibold">Voltar e escolher outra categoria</button>
+              </div>
             ) : types.map((type) => (
               <button
                 key={type.id}
@@ -298,6 +303,11 @@ export default function EscolhaTribo() {
             {loading ? (
               <div className="col-span-2 text-center py-8">
                 <div className="w-8 h-8 border-4 border-teal border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              </div>
+            ) : communities.length === 0 ? (
+              <div className="col-span-2 bg-white rounded-2xl shadow-md p-8 text-center">
+                <p className="text-gray-400">Nenhuma comunidade disponivel neste tipo.</p>
+                <button onClick={handleBack} className="mt-4 text-teal font-semibold">Voltar e escolher outro tipo</button>
               </div>
             ) : communities.map((comm) => (
               <button

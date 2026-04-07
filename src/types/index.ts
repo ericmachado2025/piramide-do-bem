@@ -144,6 +144,7 @@ export interface Student {
   parent_consent: boolean
   parent_name: string | null
   parent_email: string | null
+  parent_phone: string | null
   created_at: string
   school?: School
   community?: Community

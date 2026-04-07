@@ -73,14 +73,19 @@ export default function EscolhaPersonagem() {
 
       const { data: chars } = await supabase
         .from('characters')
-        .select('*')
+        .select('*, level:community_levels(*)')
         .eq('community_id', studentData.community_id)
         .eq('archetype', archetype)
-        .order('tier')
+        .eq('status', 'ACTIVE')
+        .order('display_order')
 
-      // Filter by gender: show matching gender or NEUTRAL
+      // Filter by gender: show matching gender or OTHER (neutral)
       const filtered = (chars || []).filter(
-        (c) => c.gender === 'NEUTRAL' || c.gender === gender
+        (c) => c.gender === 'OTHER' || c.gender === gender
+      )
+      // Sort by tier
+      filtered.sort((a: Character, b: Character) =>
+        (a.level?.tier ?? 0) - (b.level?.tier ?? 0)
       )
       setTribeCharacters(filtered)
       setLoading(false)
