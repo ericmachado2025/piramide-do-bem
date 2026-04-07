@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import type {} from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Calendar } from 'lucide-react'
 

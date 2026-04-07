@@ -70,9 +70,9 @@ export default function Mapa() {
         ) : !hasValidPins ? (
           <div className="h-full flex flex-col items-center justify-center p-8 text-center">
             <span className="text-6xl mb-4">{'\u{1F5FA}\uFE0F'}</span>
-            <h2 className="text-xl font-bold text-navy mb-2">Mapa em construcao</h2>
+            <h2 className="text-xl font-bold text-navy mb-2">Nenhuma escola ativa ainda</h2>
             <p className="text-gray-500 text-sm max-w-md">
-              O mapa sera populado quando escolas tiverem coordenadas cadastradas e alunos vinculados.
+              Seja o primeiro! Cadastre-se e sua escola aparecera no mapa.
             </p>
           </div>
         ) : (

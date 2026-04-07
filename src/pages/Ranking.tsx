@@ -71,77 +71,92 @@ export default function Ranking() {
   const [students, setStudents] = useState<RankedStudent[]>([])
   const [, setCurrentStudentId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [tribeTotals, setTribeTotals] = useState<{ name: string; icon: string; total: number; color: string }[]>([])
 
   useEffect(() => {
     async function loadData() {
-      // Get current user's student ID
-      let myStudentId: string | null = null
-      if (user) {
-        const { data: me } = await supabase
+      try {
+        // Get current user's student ID
+        let myStudentId: string | null = null
+        if (user) {
+          const { data: me, error: meError } = await supabase
+            .from('students')
+            .select('id')
+            .eq('user_id', user.id)
+            .single()
+          if (meError) {
+            console.error('Ranking: error loading current student:', meError)
+          }
+          if (me) {
+            myStudentId = me.id
+            setCurrentStudentId(me.id)
+          }
+        }
+
+        // Load students with tribe info
+        const { data, error: queryError } = await supabase
           .from('students')
-          .select('id')
-          .eq('user_id', user.id)
-          .single()
-        if (me) {
-          myStudentId = me.id
-          setCurrentStudentId(me.id)
+          .select('id, name, total_points, tribe:tribes!left(name, icon_class, color_hex)')
+          .order('total_points', { ascending: false })
+          .limit(100)
+
+        if (queryError) {
+          console.error('Ranking: error loading students:', queryError)
+          setError('Erro ao carregar ranking. Tente novamente mais tarde.')
+          return
         }
-      }
 
-      // Load students with tribe info
-      const { data } = await supabase
-        .from('students')
-        .select('id, name, total_points, tribe:tribes(name, icon_class, color_hex)')
-        .order('total_points', { ascending: false })
-        .limit(100)
+        if (data && data.length > 0) {
+          const total = data.length
+          const sorted = [...data].sort((a, b) => a.total_points - b.total_points)
 
-      if (data && data.length > 0) {
-        const total = data.length
-        const sorted = [...data].sort((a, b) => a.total_points - b.total_points)
-
-        const ranked: RankedStudent[] = sorted.map((s, idx) => {
-          const percentile = ((idx + 1) / total) * 100
-          const tribe = s.tribe as unknown as { name: string; icon_class: string | null; color_hex: string | null } | null
-          let faixaId = 'crescimento'
-          for (const f of FAIXAS) {
-            if (percentile >= f.minPercentile) { faixaId = f.id; break }
-          }
-          return {
-            id: s.id,
-            name: s.name,
-            tribeIcon: tribe?.icon_class ? (ICON_MAP[tribe.icon_class] ?? '\u{1F5A4}') : '\u{1F5A4}',
-            tribeName: tribe?.name ?? 'Desconhecida',
-            tribeColor: tribe?.color_hex ?? null,
-            tier: getTier(s.total_points),
-            totalPoints: s.total_points,
-            percentile,
-            faixaId,
-            isCurrentUser: s.id === myStudentId,
-          }
-        })
-        setStudents(ranked)
-
-        // Calculate tribe totals
-        const tribeMap: Record<string, { name: string; icon: string; total: number; color: string }> = {}
-        for (const s of data) {
-          const tribe = s.tribe as unknown as { name: string; icon_class: string | null; color_hex: string | null } | null
-          if (!tribe) continue
-          const key = tribe.name
-          if (!tribeMap[key]) {
-            tribeMap[key] = {
-              name: tribe.name,
-              icon: tribe.icon_class ? (ICON_MAP[tribe.icon_class] ?? '\u{1F5A4}') : '\u{1F5A4}',
-              total: 0,
-              color: tribe.color_hex ?? '#028090',
+          const ranked: RankedStudent[] = sorted.map((s, idx) => {
+            const percentile = ((idx + 1) / total) * 100
+            const tribe = s.tribe as unknown as { name: string; icon_class: string | null; color_hex: string | null } | null
+            let faixaId = 'crescimento'
+            for (const f of FAIXAS) {
+              if (percentile >= f.minPercentile) { faixaId = f.id; break }
             }
-          }
-          tribeMap[key].total += s.total_points
-        }
-        setTribeTotals(Object.values(tribeMap).sort((a, b) => b.total - a.total))
-      }
+            return {
+              id: s.id,
+              name: s.name,
+              tribeIcon: tribe?.icon_class ? (ICON_MAP[tribe.icon_class] ?? '\u{1F5A4}') : '\u{1F5A4}',
+              tribeName: tribe?.name ?? 'Desconhecida',
+              tribeColor: tribe?.color_hex ?? null,
+              tier: getTier(s.total_points),
+              totalPoints: s.total_points,
+              percentile,
+              faixaId,
+              isCurrentUser: s.id === myStudentId,
+            }
+          })
+          setStudents(ranked)
 
-      setLoading(false)
+          // Calculate tribe totals
+          const tribeMap: Record<string, { name: string; icon: string; total: number; color: string }> = {}
+          for (const s of data) {
+            const tribe = s.tribe as unknown as { name: string; icon_class: string | null; color_hex: string | null } | null
+            if (!tribe) continue
+            const key = tribe.name
+            if (!tribeMap[key]) {
+              tribeMap[key] = {
+                name: tribe.name,
+                icon: tribe.icon_class ? (ICON_MAP[tribe.icon_class] ?? '\u{1F5A4}') : '\u{1F5A4}',
+                total: 0,
+                color: tribe.color_hex ?? '#028090',
+              }
+            }
+            tribeMap[key].total += s.total_points
+          }
+          setTribeTotals(Object.values(tribeMap).sort((a, b) => b.total - a.total))
+        }
+      } catch (err) {
+        console.error('Ranking: unexpected error:', err)
+        setError('Erro inesperado ao carregar ranking.')
+      } finally {
+        setLoading(false)
+      }
     }
     loadData()
   }, [user])
@@ -178,12 +193,18 @@ export default function Ranking() {
       </div>
 
       <div className="px-4 max-w-lg mx-auto space-y-6 -mt-4">
-        {students.length === 0 ? (
+        {error ? (
+          <div className="bg-white rounded-2xl shadow-sm p-8 text-center mt-8">
+            <span className="text-5xl block mb-3">{'\u26A0\uFE0F'}</span>
+            <h2 className="text-lg font-bold text-navy mb-2">Ops, algo deu errado</h2>
+            <p className="text-gray-400 text-sm">{error}</p>
+          </div>
+        ) : students.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-sm p-8 text-center mt-8">
             <span className="text-5xl block mb-3">{'\u{1F3C6}'}</span>
-            <h2 className="text-lg font-bold text-navy mb-2">Nenhum aluno cadastrado ainda</h2>
+            <h2 className="text-lg font-bold text-navy mb-2">Ranking em breve</h2>
             <p className="text-gray-400 text-sm">
-              Quando alunos se cadastrarem, o ranking aparecera aqui.
+              Ranking ser&aacute; exibido quando mais alunos participarem.
             </p>
           </div>
         ) : (

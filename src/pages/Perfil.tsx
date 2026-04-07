@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
-import { X, ChevronRight, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import { X, ChevronRight, Clock, CheckCircle, XCircle, AlertCircle, RefreshCw } from 'lucide-react'
 import BottomNav from '../components/BottomNav'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -56,7 +56,9 @@ const statusConfig: Record<string, { icon: typeof CheckCircle; label: string; cl
 
 export default function Perfil() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [showQrModal, setShowQrModal] = useState(false)
+  const [showTribeModal, setShowTribeModal] = useState(false)
   const [student, setStudent] = useState<Student | null>(null)
   const [actions, setActions] = useState<(Action & { action_type?: ActionType })[]>([])
   const [badges, setBadges] = useState<{ badge: Badge; earned_at: string }[]>([])
@@ -223,6 +225,13 @@ export default function Perfil() {
             >
               Ver ranking completo <ChevronRight className="w-4 h-4" />
             </Link>
+            <button
+              onClick={() => setShowTribeModal(true)}
+              className="mt-3 flex items-center gap-2 text-gray-500 text-sm font-medium border border-gray-300 rounded-full px-4 py-2 hover:bg-gray-50 transition-colors"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Trocar de Tribo
+            </button>
           </div>
         </section>
 
@@ -365,6 +374,52 @@ export default function Perfil() {
             />
             <p className="text-xs text-gray-400 mt-4">{student.name}</p>
             <p className="text-[10px] text-gray-300">{student.email}</p>
+          </div>
+        </div>
+      )}
+
+      {/* ===== TRIBE CHANGE MODAL ===== */}
+      {showTribeModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6"
+          onClick={() => setShowTribeModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl p-8 flex flex-col items-center max-w-sm w-full shadow-2xl relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowTribeModal(false)}
+              className="absolute top-3 right-3 text-gray-400 hover:text-gray-700"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <span className="text-4xl mb-3">{'\u{1F504}'}</span>
+            <h3 className="text-navy font-bold text-lg mb-2">Trocar de Tribo</h3>
+            <p className="text-gray-500 text-sm text-center mb-6">
+              Ao trocar de tribo, voc&ecirc; manter&aacute; seus pontos e n&iacute;vel, mas receber&aacute; o personagem equivalente da nova tribo. Deseja continuar?
+            </p>
+            <div className="flex gap-3 w-full">
+              <button
+                onClick={() => setShowTribeModal(false)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-300 text-gray-600 font-semibold text-sm hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={async () => {
+                  await supabase
+                    .from('students')
+                    .update({ tribe_id: null, current_character_id: null })
+                    .eq('id', student.id)
+                  setShowTribeModal(false)
+                  navigate('/tribo')
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-teal text-white font-semibold text-sm hover:bg-teal/90 transition-colors"
+              >
+                Sim, trocar
+              </button>
+            </div>
           </div>
         </div>
       )}

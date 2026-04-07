@@ -9,7 +9,7 @@ type DashTab = 'resumo' | 'acoes' | 'notificacoes'
 
 export default function AreaPais() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user: _user } = useAuth()
   const [tab, setTab] = useState<Tab>('login')
   const [dashTab, setDashTab] = useState<DashTab>('resumo')
 
@@ -63,7 +63,7 @@ export default function AreaPais() {
         const { data: actions } = await supabase
           .from('actions')
           .select('id, points_awarded, status, created_at, action_type:action_types(name)')
-          .eq('author_id', (parentData.student as { id: string }).id)
+          .eq('author_id', (parentData.student as unknown as { id: string }).id)
           .order('created_at', { ascending: false })
           .limit(10)
 

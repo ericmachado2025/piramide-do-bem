@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react'
-import { ArrowLeft, ScanLine, CheckCircle2, XCircle, Clock, User, Shield } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { ArrowLeft, ScanLine, CheckCircle2, XCircle, Clock, User, Shield, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import BottomNav from '../components/BottomNav'
 import ConfettiEffect from '../components/ConfettiEffect'
 import { QRCodeSVG } from 'qrcode.react'
+import { Html5Qrcode } from 'html5-qrcode'
 
 type Tab = 'validar' | 'minhas'
 
@@ -52,6 +53,9 @@ export default function ValidarAcao() {
   const [showQr, setShowQr] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [studentId, setStudentId] = useState<string | null>(null)
+  const [scannerActive, setScannerActive] = useState(false)
+  const [scanError, setScanError] = useState<string | null>(null)
+  const html5QrCodeRef = useRef<Html5Qrcode | null>(null)
 
   useEffect(() => {
     if (!user) return
@@ -114,12 +118,111 @@ export default function ValidarAcao() {
     loadData()
   }, [user])
 
+  const stopScanner = useCallback(async () => {
+    try {
+      if (html5QrCodeRef.current) {
+        const state = html5QrCodeRef.current.getState()
+        // State 2 = SCANNING, 3 = PAUSED
+        if (state === 2 || state === 3) {
+          await html5QrCodeRef.current.stop()
+        }
+        html5QrCodeRef.current.clear()
+        html5QrCodeRef.current = null
+      }
+    } catch {
+      // Ignore cleanup errors
+    }
+    setScannerActive(false)
+    setScanning(false)
+  }, [])
+
+  // Cleanup scanner on unmount
+  useEffect(() => {
+    return () => {
+      if (html5QrCodeRef.current) {
+        try {
+          const state = html5QrCodeRef.current.getState()
+          if (state === 2 || state === 3) {
+            html5QrCodeRef.current.stop().then(() => {
+              html5QrCodeRef.current?.clear()
+            })
+          } else {
+            html5QrCodeRef.current.clear()
+          }
+        } catch {
+          // Ignore cleanup errors on unmount
+        }
+      }
+    }
+  }, [])
+
   function handleScan() {
+    setScanError(null)
+    setScannerActive(true)
     setScanning(true)
-    setTimeout(() => {
-      setScanning(false)
-      if (pendingActions.length > 0) setSelectedAction(pendingActions[0])
-    }, 1500)
+
+    // Wait for the DOM element to render
+    setTimeout(async () => {
+      const readerElement = document.getElementById('qr-reader')
+      if (!readerElement) {
+        setScannerActive(false)
+        setScanning(false)
+        return
+      }
+
+      try {
+        const html5QrCode = new Html5Qrcode('qr-reader')
+        html5QrCodeRef.current = html5QrCode
+
+        await html5QrCode.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          async (decodedText: string) => {
+            // On successful scan
+            try {
+              await html5QrCode.stop()
+              html5QrCode.clear()
+              html5QrCodeRef.current = null
+            } catch {
+              // Ignore stop errors
+            }
+            setScanning(false)
+            setScannerActive(false)
+
+            // Look up the action by QR token
+            const { data: action, error } = await supabase
+              .from('actions')
+              .select('id, points_awarded, created_at, author:students!actions_author_id_fkey(name), action_type:action_types(name, icon), beneficiary:students!actions_beneficiary_id_fkey(name)')
+              .eq('qr_code_token', decodedText)
+              .eq('status', 'pending')
+              .single()
+
+            if (error || !action) {
+              setScanError('QR Code nao reconhecido ou acao ja validada')
+              return
+            }
+
+            const a = action as Record<string, unknown>
+            setSelectedAction({
+              id: a.id as string,
+              authorName: (a.author as { name: string } | null)?.name ?? 'Desconhecido',
+              actionTypeName: (a.action_type as { name: string; icon: string | null } | null)?.name ?? 'Boa acao',
+              actionIcon: (a.action_type as { name: string; icon: string | null } | null)?.icon ?? '\u{1F91D}',
+              beneficiaryName: (a.beneficiary as { name: string } | null)?.name ?? 'Colega',
+              points: (a.points_awarded as number) ?? 0,
+              createdAt: a.created_at as string,
+            })
+          },
+          () => {
+            // onScanFailure - ignore, camera keeps scanning
+          }
+        )
+      } catch {
+        setScanError('Permissao de camera necessaria')
+        setScannerActive(false)
+        setScanning(false)
+      }
+    }, 100)
   }
 
   async function handleConfirm() {
@@ -217,6 +320,7 @@ export default function ValidarAcao() {
     setSelectedAction(null)
     setShowResult(null)
     setShowConfetti(false)
+    setScanError(null)
   }
 
   if (loading) {
@@ -319,11 +423,39 @@ export default function ValidarAcao() {
 
             {!showResult && !selectedAction && (
               <>
+                {scannerActive && (
+                  <div className="fixed inset-0 z-50 bg-black/80 flex flex-col items-center justify-center">
+                    <div className="relative w-full max-w-sm mx-auto px-4">
+                      <button
+                        onClick={stopScanner}
+                        className="absolute -top-12 right-4 z-50 bg-white/20 hover:bg-white/30 text-white rounded-full p-2 transition-colors"
+                      >
+                        <X size={24} />
+                      </button>
+                      <div className="bg-black rounded-2xl overflow-hidden">
+                        <div id="qr-reader" className="w-full" />
+                      </div>
+                      <p className="text-white/70 text-center text-sm mt-4">Aponte a camera para o QR Code</p>
+                      <button
+                        onClick={stopScanner}
+                        className="mt-4 w-full py-3 rounded-xl bg-white/20 text-white font-bold text-sm hover:bg-white/30 transition-colors"
+                      >
+                        Fechar Scanner
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100">
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-2xl">{'\u{1F4F7}'}</span>
                     <h2 className="font-bold text-navy text-lg">Escanear QR Code</h2>
                   </div>
+                  {scanError && (
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-3">
+                      <p className="text-red-700 text-sm font-medium">{scanError}</p>
+                    </div>
+                  )}
                   <button onClick={handleScan} disabled={scanning} className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold transition-all ${scanning ? 'bg-teal/50 text-white cursor-wait' : 'bg-teal text-white hover:bg-teal/90 shadow-md'}`}>
                     <ScanLine size={20} className={scanning ? 'animate-pulse' : ''} />
                     {scanning ? 'Escaneando...' : 'Abrir Scanner'}

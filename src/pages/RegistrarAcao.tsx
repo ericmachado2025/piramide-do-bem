@@ -102,7 +102,7 @@ export default function RegistrarAcao() {
   function canProceed() {
     if (step === 1) return selectedAction !== null
     if (step === 2) return selectedBeneficiaries.length > 0
-    if (step === 3 && isOtherAction) return customTitle.trim().length >= 3 && description.trim().length >= 5
+    if (step === 3 && isOtherAction) return customTitle.trim().length >= 3 && description.trim().length >= 10
     return true
   }
 
@@ -202,7 +202,10 @@ export default function RegistrarAcao() {
                     key={at.id}
                     onClick={() => {
                       handleActionSelect(at.id)
-                      setTimeout(() => setStep(2), 200)
+                      const isOutra = at.name?.toLowerCase().includes('outr') ?? false
+                      if (!isOutra) {
+                        setTimeout(() => setStep(2), 200)
+                      }
                     }}
                     className={`relative bg-white rounded-2xl p-4 text-left transition-all duration-200 shadow-sm hover:shadow-md active:scale-95 ${
                       selectedAction === at.id
@@ -222,6 +225,43 @@ export default function RegistrarAcao() {
                     )}
                   </button>
                 ))}
+              </div>
+            )}
+
+            {/* Custom action fields shown inline when "outra" is selected */}
+            {isOtherAction && selectedAction && (
+              <div className="mt-5 space-y-3 animate-fade-in">
+                <h3 className="font-semibold text-navy text-sm">Descreva sua boa acao personalizada:</h3>
+                <input
+                  type="text"
+                  value={customTitle}
+                  onChange={(e) => setCustomTitle(e.target.value.slice(0, 50))}
+                  placeholder="Titulo da acao (min 3 caracteres)"
+                  className="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal"
+                />
+                <div className="relative">
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value.slice(0, 200))}
+                    placeholder="Descreva o que voce fez (min 10 caracteres)..."
+                    rows={4}
+                    className="w-full bg-white border border-gray-200 rounded-xl p-4 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal resize-none"
+                  />
+                  <span className={`absolute bottom-3 right-3 text-xs ${description.length >= 180 ? 'text-red' : 'text-gray-400'}`}>
+                    {description.length}/200
+                  </span>
+                </div>
+                <button
+                  onClick={() => setStep(2)}
+                  disabled={customTitle.trim().length < 3 || description.trim().length < 10}
+                  className={`w-full py-3.5 rounded-xl font-bold text-white transition-all duration-200 active:scale-[0.98] ${
+                    customTitle.trim().length >= 3 && description.trim().length >= 10
+                      ? 'bg-teal shadow-md hover:shadow-lg hover:bg-teal/90'
+                      : 'bg-gray-300 cursor-not-allowed'
+                  }`}
+                >
+                  Proximo {'\u2192'}
+                </button>
               </div>
             )}
           </div>
@@ -291,27 +331,19 @@ export default function RegistrarAcao() {
         {step === 3 && (
           <div>
             <h2 className="text-xl font-bold text-navy mb-1">
-              {isOtherAction ? 'Descreva sua boa acao' : 'Quer descrever o que aconteceu?'}
+              {isOtherAction ? 'Confirme sua boa acao' : 'Quer descrever o que aconteceu?'}
             </h2>
             <p className="text-gray-500 text-sm mb-4">
-              {isOtherAction ? 'De um titulo e descreva (obrigatorio)' : 'Opcional - conte mais sobre sua boa acao'}
+              {isOtherAction ? 'Revise os detalhes antes de registrar' : 'Opcional - conte mais sobre sua boa acao'}
             </p>
-
-            {isOtherAction && (
-              <input
-                type="text"
-                value={customTitle}
-                onChange={(e) => setCustomTitle(e.target.value.slice(0, 50))}
-                placeholder="Titulo da acao (max 50 caracteres)"
-                className="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal mb-3"
-              />
-            )}
 
             <div className="bg-white rounded-2xl shadow-sm p-4 mb-4 border border-gray-100">
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-2xl">{selectedActionType?.icon ?? '\u{1F91D}'}</span>
                 <div>
-                  <p className="font-semibold text-navy text-sm">{selectedActionType?.name}</p>
+                  <p className="font-semibold text-navy text-sm">
+                    {isOtherAction ? customTitle : selectedActionType?.name}
+                  </p>
                   <p className="text-teal text-xs font-bold">+{selectedActionType?.points} pts</p>
                 </div>
               </div>
@@ -321,20 +353,25 @@ export default function RegistrarAcao() {
                   .filter(Boolean)
                   .join(', ') || '---'}
               </p>
+              {isOtherAction && (
+                <p className="text-gray-600 text-xs mt-2 italic">{description}</p>
+              )}
             </div>
 
-            <div className="relative">
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value.slice(0, 200))}
-                placeholder="Ex: Ajudei a Maria a entender a materia de matematica durante o intervalo..."
-                rows={5}
-                className="w-full bg-white border border-gray-200 rounded-xl p-4 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all resize-none"
-              />
-              <span className={`absolute bottom-3 right-3 text-xs ${description.length >= 180 ? 'text-red' : 'text-gray-400'}`}>
-                {description.length}/200
-              </span>
-            </div>
+            {!isOtherAction && (
+              <div className="relative">
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value.slice(0, 200))}
+                  placeholder="Ex: Ajudei a Maria a entender a materia de matematica durante o intervalo..."
+                  rows={5}
+                  className="w-full bg-white border border-gray-200 rounded-xl p-4 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all resize-none"
+                />
+                <span className={`absolute bottom-3 right-3 text-xs ${description.length >= 180 ? 'text-red' : 'text-gray-400'}`}>
+                  {description.length}/200
+                </span>
+              </div>
+            )}
           </div>
         )}
 
@@ -384,7 +421,7 @@ export default function RegistrarAcao() {
         )}
 
         {/* Navigation Buttons */}
-        {step < 4 && (
+        {step < 4 && !(step === 1 && isOtherAction) && step !== 1 && (
           <div className="mt-8">
             <button
               onClick={handleNext}
