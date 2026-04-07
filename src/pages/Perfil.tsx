@@ -5,6 +5,7 @@ import { X, ChevronRight, Clock, CheckCircle, XCircle, AlertCircle, RefreshCw, L
 import BottomNav from '../components/BottomNav'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { getCharacterDisplayName, getTierLabel } from '../lib/database'
 import type { Student, Badge, Action, ActionType } from '../types'
 
 const ICON_MAP: Record<string, string> = {
@@ -134,7 +135,7 @@ export default function Perfil() {
     ? (ICON_MAP[student.community.icon_class] ?? '\u{1F3AE}')
     : '\u{1F3AE}'
   const tribeName = student.community?.name ?? 'Sem comunidade'
-  const charName = student.character?.name ?? 'Aprendiz'
+  const charName = student.character ? getCharacterDisplayName(student.character, student.character.level) : 'Aprendiz'
   const tierInfo = getTierInfo(student.total_points)
   const faixa = getFaixa(student.total_points)
   const pointsToNext = tierInfo.next ? tierInfo.next.min - student.total_points : 0
@@ -157,7 +158,7 @@ export default function Perfil() {
           <span className="text-7xl mb-2 drop-shadow-lg">{tribeIcon}</span>
           <h1 className="text-2xl font-bold text-white">{student.name}</h1>
           <p className="text-white/80 text-sm mt-1 text-center">
-            {tribeName} &mdash; {charName} (Tier {tierInfo.current.tier})
+            {tribeName} &mdash; {charName} ({getTierLabel(tierInfo.current.tier)})
           </p>
 
           {/* progress bar */}

@@ -2,11 +2,10 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ChevronRight, Clock, CheckCircle2, Sparkles } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { getCharacterDisplayName, getTierLabel } from '../lib/database'
 import { useAuth } from '../contexts/AuthContext'
 import BottomNav from '../components/BottomNav'
 import type { Student, Action, ActionType } from '../types'
-
-const TIERS = ['Aprendiz', 'Guardiao', 'Protetor', 'Heroi', 'Lenda']
 
 const iconClassToEmoji: Record<string, string> = {
   'fa-mask': '🦸',
@@ -127,9 +126,11 @@ export default function Home() {
             <div className="text-4xl">{tribeEmoji}</div>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <span className="text-white font-semibold text-sm">{TIERS[currentTier - 1] ?? 'Aprendiz'}</span>
+                <span className="text-white font-semibold text-sm">
+                  {student.character ? getCharacterDisplayName(student.character, student.character.level) : 'Aprendiz'}
+                </span>
                 <span className="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full">
-                  Tier {currentTier}
+                  {getTierLabel(currentTier)}
                 </span>
               </div>
               <div className="mt-2 h-2 bg-white/20 rounded-full overflow-hidden">

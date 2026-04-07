@@ -62,6 +62,8 @@ export interface CommunityLevel {
   min_points: number
   max_points: number | null
   color_hex: string | null
+  display_prefix: string | null
+  prefix_connector: string | null
   display_order: number
 }
 

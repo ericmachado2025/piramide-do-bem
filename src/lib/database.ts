@@ -1,6 +1,20 @@
 import { supabase } from './supabase'
 import type { School, Character, ActionType, Badge, Reward, Student, Action, Teacher, Subject, Classroom, Sponsor, TeacherAssignment, Parent, ParentStudent, FraudAlert, Redemption, CommunityCategory, CommunityType, Community, CommunityLevel } from '../types'
 
+// === Character Display Name ===
+const TIER_LABELS = ['Iniciante', 'Aprendiz', 'Destaque', 'Lider', 'Lenda']
+
+export function getCharacterDisplayName(character: Character, level?: CommunityLevel | null): string {
+  if (!level) return character.name
+  const prefix = level.display_prefix || level.name
+  const connector = level.prefix_connector || ' '
+  return `${prefix}${connector}${character.name}`
+}
+
+export function getTierLabel(tier: number): string {
+  return TIER_LABELS[(tier || 1) - 1] || ''
+}
+
 // === Schools ===
 export async function searchSchools(state: string, city?: string, query?: string) {
   let q = supabase.from('schools').select('*').eq('state', state).eq('active', true)

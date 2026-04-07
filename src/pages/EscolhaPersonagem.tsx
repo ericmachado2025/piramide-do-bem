@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Lock, Star, Zap, ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { getCharacterDisplayName, getTierLabel } from '../lib/database'
 import { useAuth } from '../contexts/AuthContext'
 import type { Tribe, Character, Student } from '../types'
 
@@ -112,8 +113,7 @@ export default function EscolhaPersonagem() {
   const nextTierPoints = tribeCharacters[1]?.level?.min_points || 1000
   const progress = nextTierPoints > 0 ? Math.min((currentPoints / nextTierPoints) * 100, 100) : 0
   const nextLevel = tribeCharacters[1]?.level
-  const nextTierLabel = ['Iniciante','Aprendiz','Destaque','Lider','Lenda'][(nextLevel?.tier ?? 2) - 1]
-  const nextLevelDisplay = nextLevel ? `${nextLevel.name} (${nextTierLabel})` : 'Aprendiz'
+  const nextLevelDisplay = nextLevel ? `${nextLevel.name} (${getTierLabel(nextLevel.tier)})` : 'Aprendiz'
 
   const handleStart = () => {
     navigate('/home')
@@ -190,14 +190,14 @@ export default function EscolhaPersonagem() {
                         }`}
                           style={char.level?.color_hex ? { backgroundColor: isActive ? char.level.color_hex : undefined } : undefined}
                         >
-                          {char.level?.name || `Tier ${char.level?.tier ?? 0}`} ({['Iniciante','Aprendiz','Destaque','Lider','Lenda'][(char.level?.tier ?? 1) - 1]})
+                          {char.level?.name || `Tier ${char.level?.tier ?? 0}`} ({getTierLabel(char.level?.tier ?? 1)})
                         </span>
                         {[...Array((char.level?.tier ?? 0))].map((_, i) => (
                           <Star key={i} className={`w-3.5 h-3.5 ${isActive ? 'text-yellow fill-yellow' : 'text-gray-300'}`} />
                         ))}
                       </div>
                       <h3 className={`font-bold text-lg mt-1 ${isActive ? 'text-navy' : 'text-gray-400'}`}>
-                        {char.name}
+                        {getCharacterDisplayName(char, char.level)}
                       </h3>
                       <p className={`text-xs mt-0.5 ${isActive ? 'text-gray-500' : 'text-gray-300'}`}>
                         {char.description}

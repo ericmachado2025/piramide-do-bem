@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronRight, ArrowLeft, Shield, Skull, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { getCharacterDisplayName, getTierLabel } from '../lib/database'
 import { useAuth } from '../contexts/AuthContext'
 import type { CommunityCategory, CommunityType, Community, Character } from '../types'
 
@@ -396,7 +397,7 @@ export default function EscolhaTribo() {
                         {getEmoji(selectedCommunity?.icon_class ?? null)}
                       </div>
                       <div className="text-left flex-1">
-                        <h4 className="font-bold text-navy">{char.name}</h4>
+                        <h4 className="font-bold text-navy">{getCharacterDisplayName(char, char.level)}</h4>
                         {char.real_name && (
                           <p className="text-gray-400 text-xs">{char.real_name}</p>
                         )}
@@ -413,9 +414,8 @@ export default function EscolhaTribo() {
                     {[1, 2, 3, 4, 5].map(tier => {
                       const tierChars = characters.filter(c => c.level?.tier === tier)
                       const tierLevel = tierChars[0]?.level
-                      const tierLabels = ['Iniciante', 'Aprendiz', 'Destaque', 'Lider', 'Lenda']
-                      const levelName = tierLevel?.name || tierLabels[tier - 1]
-                      const label = tierLabels[tier - 1]
+                      const levelName = tierLevel?.name || getTierLabel(tier)
+                      const label = getTierLabel(tier)
                       return (
                         <div key={tier} className={`flex-shrink-0 w-24 text-center rounded-xl p-2 ${
                           tier === 1 ? 'bg-teal/10 border border-teal/30' : 'bg-white border border-gray-100 opacity-50'

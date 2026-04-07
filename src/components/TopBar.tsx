@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Bell } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { getTierLabel } from '../lib/database'
 
 const ICON_MAP: Record<string, string> = {
   'fa-mask': '\u{1F9B8}',
@@ -21,7 +22,7 @@ export default function TopBar() {
     name: string
     total_points: number
     community?: { icon_class: string | null; name: string } | null
-    character?: { name: string; tier: number } | null
+    character?: { name: string; level?: { name: string; tier: number; display_prefix: string | null; prefix_connector: string | null } | null } | null
   } | null>(null)
   const [unreadCount, setUnreadCount] = useState(0)
 
@@ -29,7 +30,7 @@ export default function TopBar() {
     if (!user) return
     supabase
       .from('students')
-      .select('name, total_points, community:communities(icon_class, name), character:characters(name, tier)')
+      .select('name, total_points, community:communities(icon_class, name), character:characters(name, level:community_levels(name, tier, display_prefix, prefix_connector))')
       .eq('user_id', user.id)
       .single()
       .then(({ data }) => {
@@ -52,8 +53,11 @@ export default function TopBar() {
   const tribeEmoji = student.community?.icon_class
     ? (ICON_MAP[student.community.icon_class] ?? '\u{1F3AE}')
     : '\u{1F3AE}'
-  const tierNum = student.character?.tier ?? 1
-  const charName = student.character?.name ?? 'Aprendiz'
+  const level = student.character?.level
+  const tierNum = level?.tier ?? 1
+  const prefix = level?.display_prefix || level?.name || ''
+  const connector = level?.prefix_connector || ' '
+  const charName = student.character ? `${prefix}${connector}${student.character.name}` : 'Aprendiz'
 
   return (
     <div className="bg-white/95 backdrop-blur-lg border-b border-gray-100 px-4 py-2 sticky top-0 z-20">
@@ -62,7 +66,7 @@ export default function TopBar() {
           <span className="text-2xl">{tribeEmoji}</span>
           <div>
             <p className="text-xs font-bold text-navy leading-tight">{student.name}</p>
-            <p className="text-[10px] text-gray-400">Tier {tierNum} &mdash; {charName}</p>
+            <p className="text-[10px] text-gray-400">{getTierLabel(tierNum)} &mdash; {charName}</p>
           </div>
         </Link>
 
