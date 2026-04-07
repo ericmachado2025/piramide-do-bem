@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
 
 export default function AuthCallback() {
   const navigate = useNavigate()
@@ -9,48 +10,33 @@ export default function AuthCallback() {
   useEffect(() => {
     if (loading) return
 
-    if (user) {
-      // Check if user has completed profile setup
-      const stored = localStorage.getItem('piramide-user')
-      if (stored) {
-        try {
-          const profile = JSON.parse(stored)
-          if (profile.tribeId) {
-            navigate('/home', { replace: true })
-            return
-          }
-        } catch { /* ignore */ }
-      }
-
-      // User authenticated via Google but needs to complete profile
-      // Pre-fill what we can from Google profile
-      const googleProfile = {
-        name: user.user_metadata?.full_name || user.user_metadata?.name || '',
-        email: user.email || '',
-        birthDay: '',
-        birthMonth: '',
-        birthYear: '',
-        birthDate: '',
-        schoolId: '',
-        classroomGrade: '',
-        classroomSection: '',
-        parentName: '',
-        parentEmail: '',
-        tribeId: '',
-        tribeEmoji: '',
-        tribeName: '',
-        characterTier: 1,
-        characterName: '',
-        totalPoints: 0,
-        availablePoints: 0,
-        redeemedPoints: 0,
-      }
-      localStorage.setItem('piramide-user', JSON.stringify(googleProfile))
-      // Skip name + email steps, go to birth date (step 3)
-      navigate('/cadastro?step=3&from=google', { replace: true })
-    } else {
+    if (!user) {
       navigate('/login', { replace: true })
+      return
     }
+
+    async function checkProfile() {
+      // Check if user already has a student record
+      const { data: student } = await supabase
+        .from('students')
+        .select('id, tribe_id')
+        .eq('user_id', user!.id)
+        .maybeSingle()
+
+      if (student?.tribe_id) {
+        // Perfil completo — direto para home
+        navigate('/home', { replace: true })
+      } else if (student && !student.tribe_id) {
+        // Tem registro mas falta tribo
+        navigate('/tribo', { replace: true })
+      } else {
+        // Usuário novo via Google — precisa completar cadastro
+        // Passa from=google para pular passos de nome/email/senha
+        navigate('/cadastro?from=google', { replace: true })
+      }
+    }
+
+    checkProfile()
   }, [user, loading, navigate])
 
   return (

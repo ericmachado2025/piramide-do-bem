@@ -41,12 +41,16 @@ interface FormData {
   schoolSearch: string
 }
 
+// Passos para login normal: 1=Nome, 2=Email, 3=Nascimento, 4=Senha, 5=Escola, 6=LGPD
+// Passos para Google OAuth: 3=Nascimento, 5=Escola, 6=LGPD (pula nome, email, senha)
+const GOOGLE_STEPS = [3, 5, 6]
+const NORMAL_STEPS = [1, 2, 3, 4, 5, 6]
+
 export default function Cadastro() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { user, signInWithGoogle, signUpWithEmail } = useAuth()
   const fromGoogle = searchParams.get('from') === 'google'
-  const initialStep = fromGoogle ? parseInt(searchParams.get('step') || '1') : 1
 
   // Redirect if already has a student record
   useEffect(() => {
@@ -55,7 +59,7 @@ export default function Cadastro() {
       .from('students')
       .select('id, tribe_id')
       .eq('user_id', user.id)
-      .single()
+      .maybeSingle()
       .then(({ data }) => {
         if (data?.tribe_id) {
           navigate('/home', { replace: true })
@@ -63,14 +67,18 @@ export default function Cadastro() {
       })
   }, [user, navigate])
 
-  const [step, setStep] = useState(initialStep)
+  const stepSequence = fromGoogle ? GOOGLE_STEPS : NORMAL_STEPS
+  const [stepIndex, setStepIndex] = useState(0)
+  const step = stepSequence[stepIndex] ?? stepSequence[0]
+  const totalVisibleSteps = stepSequence.length
+
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [emailError, setEmailError] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [form, setForm] = useState<FormData>({
-    name: '',
-    email: '',
+  const [form, setForm] = useState<FormData>(() => ({
+    name: fromGoogle && user ? (user.user_metadata?.full_name || user.user_metadata?.name || '') : '',
+    email: fromGoogle && user ? (user.email || '') : '',
     birthDay: '',
     birthMonth: '',
     birthYear: '',
@@ -86,7 +94,18 @@ export default function Cadastro() {
     parentEmail: '',
     lgpdConsent: false,
     schoolSearch: '',
-  })
+  }))
+
+  // Pre-fill name/email from Google metadata when user becomes available
+  useEffect(() => {
+    if (fromGoogle && user && !form.name) {
+      setForm(prev => ({
+        ...prev,
+        name: user.user_metadata?.full_name || user.user_metadata?.name || prev.name,
+        email: user.email || prev.email,
+      }))
+    }
+  }, [user, fromGoogle])
 
   // Dynamic school data from Supabase
   const [states, setStates] = useState<string[]>([])
@@ -143,8 +162,6 @@ export default function Cadastro() {
     })
   }, [form.state, form.city, form.schoolSearch])
 
-  const totalSteps = 6
-
   const currentYear = new Date().getFullYear()
   const minYear = currentYear - 80
   const maxYear = currentYear - 5
@@ -200,13 +217,14 @@ export default function Cadastro() {
   }
 
   const handleNext = () => {
-    if (step < totalSteps) {
-      // Skip LGPD step for adults
-      if (step === 5 && !isMinor) {
-        handleComplete()
-        return
-      }
-      setStep(step + 1)
+    // Check if we're on the school step and user is adult → skip LGPD, complete
+    if (step === 5 && !isMinor) {
+      handleComplete()
+      return
+    }
+
+    if (stepIndex < stepSequence.length - 1) {
+      setStepIndex(stepIndex + 1)
     } else {
       handleComplete()
     }
@@ -284,25 +302,25 @@ export default function Cadastro() {
     <div className="min-h-screen bg-bg flex flex-col items-center justify-start pt-8 px-4 pb-8">
       {/* Step indicator */}
       <div className="flex items-center gap-0 mb-8 max-w-xs w-full justify-center">
-        {Array.from({ length: totalSteps }, (_, i) => i + 1).map((s) => (
-          <div key={s} className="flex items-center">
+        {stepSequence.map((_, i) => (
+          <div key={i} className="flex items-center">
             <div
               className={`
                 w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-300
-                ${s < step
+                ${i < stepIndex
                   ? 'bg-green text-white'
-                  : s === step
+                  : i === stepIndex
                     ? 'bg-teal text-white shadow-lg scale-110'
                     : 'bg-gray-200 text-gray-400'
                 }
               `}
             >
-              {s < step ? <CheckCircle2 className="w-5 h-5" /> : s}
+              {i < stepIndex ? <CheckCircle2 className="w-5 h-5" /> : i + 1}
             </div>
-            {s < totalSteps && (
+            {i < stepSequence.length - 1 && (
               <div
                 className={`w-6 h-1 rounded-full transition-colors duration-300 ${
-                  s < step ? 'bg-green' : 'bg-gray-200'
+                  i < stepIndex ? 'bg-green' : 'bg-gray-200'
                 }`}
               />
             )}
@@ -639,9 +657,9 @@ export default function Cadastro() {
 
         {/* Navigation buttons */}
         <div className="flex gap-3 mt-6">
-          {step > 1 && (
+          {stepIndex > 0 && (
             <button
-              onClick={() => setStep(step - 1)}
+              onClick={() => setStepIndex(stepIndex - 1)}
               className="flex items-center justify-center gap-1 px-5 py-3.5 rounded-xl border-2 border-gray-200 text-gray-500 font-semibold hover:bg-gray-50 transition-colors"
             >
               <ChevronLeft className="w-5 h-5" />
@@ -659,7 +677,7 @@ export default function Cadastro() {
               }
             `}
           >
-            {submitting ? 'Salvando...' : step === totalSteps || (step === 5 && !isMinor) ? 'Concluir' : 'Proximo'}
+            {submitting ? 'Salvando...' : stepIndex === stepSequence.length - 1 || (step === 5 && !isMinor) ? 'Concluir' : 'Proximo'}
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>
@@ -667,7 +685,7 @@ export default function Cadastro() {
 
       {/* Progress text */}
       <p className="mt-4 text-gray-400 text-sm">
-        Passo {step} de {isMinor ? totalSteps : totalSteps - 1}
+        Passo {stepIndex + 1} de {isMinor ? totalVisibleSteps : Math.max(totalVisibleSteps - 1, 1)}
       </p>
 
       <style>{`
