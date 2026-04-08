@@ -5,7 +5,7 @@ import { X, ChevronRight, Clock, CheckCircle, XCircle, AlertCircle, RefreshCw, L
 import BottomNav from '../components/BottomNav'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { getCharacterDisplayName, getTierLabel } from '../lib/database'
+import { getCharacterDisplayName, getTierLabel, getStudentStreak, generateReferralCode } from '../lib/database'
 import type { Student, Badge, Action, ActionType } from '../types'
 
 const ICON_MAP: Record<string, string> = {
@@ -66,6 +66,8 @@ export default function Perfil() {
   const [allBadges, setAllBadges] = useState<Badge[]>([])
   const [loading, setLoading] = useState(true)
   const [nextCharName, setNextCharName] = useState<string | null>(null)
+  const [streak, setStreak] = useState(0)
+  const [referralCode, setReferralCode] = useState('')
 
   useEffect(() => {
     if (!user) return
@@ -116,6 +118,12 @@ export default function Perfil() {
         .select('*')
         .order('id')
       if (allBadgesData) setAllBadges(allBadgesData)
+
+      // Load streak and referral code
+      if (studentData) {
+        getStudentStreak(studentData.id).then(s => setStreak(s))
+        generateReferralCode(studentData.id).then(c => setReferralCode(c))
+      }
 
       setLoading(false)
     }
@@ -207,6 +215,34 @@ export default function Perfil() {
             ))}
           </div>
         </section>
+
+        {/* ===== STREAK + REFERRAL ===== */}
+        <div className="flex gap-3">
+          {streak > 0 && (
+            <div className="flex-1 bg-orange-50 border border-orange-200 rounded-xl p-4 text-center">
+              <span className="text-3xl block">{streak >= 30 ? '\u{1F525}\u{1F525}' : streak >= 7 ? '\u{1F525}' : '\u{1F4AA}'}</span>
+              <p className="text-sm font-bold text-navy mt-1">Sequencia de {streak} {streak === 1 ? 'dia' : 'dias'}!</p>
+              {streak >= 7 && <p className="text-xs text-orange-600 mt-0.5">Pontos x{streak >= 30 ? '2.0' : '1.5'}!</p>}
+            </div>
+          )}
+          {referralCode && (
+            <div className="flex-1 bg-teal/5 border border-teal/20 rounded-xl p-4 text-center">
+              <span className="text-3xl block">{'\u{1F517}'}</span>
+              <p className="text-xs text-gray-500 mt-1">Convide amigos:</p>
+              <button
+                onClick={() => {
+                  const url = `${window.location.origin}/cadastro/perfil?ref=${referralCode}`
+                  navigator.clipboard.writeText(url)
+                  alert('Link copiado!')
+                }}
+                className="mt-1 bg-teal text-white text-xs font-bold px-3 py-1.5 rounded-lg"
+              >
+                Copiar link
+              </button>
+              <p className="text-[10px] text-gray-400 mt-1">Codigo: {referralCode}</p>
+            </div>
+          )}
+        </div>
 
         {/* ===== QUALISCORE ===== */}
         <section>

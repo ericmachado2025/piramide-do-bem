@@ -342,6 +342,115 @@ export async function getPublicStats() {
   }
 }
 
+// === Streak ===
+export async function getStudentStreak(studentId: string): Promise<number> {
+  const { data } = await supabase
+    .from('actions')
+    .select('created_at')
+    .eq('author_id', studentId)
+    .eq('status', 'validated')
+    .order('created_at', { ascending: false })
+    .limit(60)
+  if (!data || data.length === 0) return 0
+
+  const actionDates = new Set(data.map(a => new Date(a.created_at).toISOString().slice(0, 10)))
+  let streak = 0
+  const today = new Date()
+  for (let i = 0; i < 60; i++) {
+    const d = new Date(today)
+    d.setDate(d.getDate() - i)
+    const dateStr = d.toISOString().slice(0, 10)
+    if (actionDates.has(dateStr)) {
+      streak++
+    } else if (i > 0) {
+      break
+    }
+  }
+  return streak
+}
+
+// === Referral ===
+export async function generateReferralCode(studentId: string): Promise<string> {
+  // Check if student already has a code
+  const { data: student } = await supabase
+    .from('students')
+    .select('referral_code')
+    .eq('id', studentId)
+    .single()
+  if (student?.referral_code) return student.referral_code
+
+  const code = Math.random().toString(36).substring(2, 8).toUpperCase()
+  await supabase.from('students').update({ referral_code: code }).eq('id', studentId)
+  return code
+}
+
+export async function applyReferral(referralCode: string, newStudentId: string) {
+  const { data: referrer } = await supabase
+    .from('students')
+    .select('id')
+    .eq('referral_code', referralCode)
+    .single()
+  if (!referrer) return null
+
+  const { data: existing } = await supabase
+    .from('referrals')
+    .select('id')
+    .eq('referred_id', newStudentId)
+    .maybeSingle()
+  if (existing) return null
+
+  // Count existing referrals
+  const { count } = await supabase
+    .from('referrals')
+    .select('id', { count: 'exact', head: true })
+    .eq('referrer_id', referrer.id)
+    .eq('status', 'credited')
+
+  const n = (count ?? 0) + 1
+  let ruleKey = 'referral_1_5'
+  if (n > 10) ruleKey = 'referral_11_plus'
+  else if (n > 5) ruleKey = 'referral_6_10'
+
+  const rule = await getScoringRule(ruleKey)
+  const pts = rule?.points ?? 25
+
+  await supabase.from('referrals').insert({
+    referrer_id: referrer.id,
+    referred_id: newStudentId,
+    referral_code: referralCode + '-' + newStudentId.slice(0, 8),
+    status: 'credited',
+    points_awarded: pts,
+  })
+
+  // Credit points to referrer
+  await supabase.rpc('increment_points', { student_id: referrer.id, pts })
+
+  return { referrerId: referrer.id, points: pts }
+}
+
+// === LGPD Email ===
+export async function sendLgpdConsentEmail(parentEmail: string, studentName: string, studentId: string) {
+  const consentUrl = `${window.location.origin}/lgpd/consent?student=${studentId}`
+  // Use Supabase Edge Function or fallback to auth email
+  try {
+    const { error } = await supabase.functions.invoke('send-lgpd-email', {
+      body: { parentEmail, studentName, consentUrl },
+    })
+    if (error) {
+      console.error('Edge function error, using auth fallback:', error)
+      // Fallback: use Supabase Auth magic link to the parent email
+      await supabase.auth.signInWithOtp({
+        email: parentEmail,
+        options: { data: { type: 'lgpd_consent', student_id: studentId, student_name: studentName } },
+      })
+    }
+    return true
+  } catch {
+    console.error('Failed to send LGPD email')
+    return false
+  }
+}
+
 // === Phone Verification ===
 export async function createPhoneVerification(userId: string, phone: string) {
   const code = String(Math.floor(100000 + Math.random() * 900000))

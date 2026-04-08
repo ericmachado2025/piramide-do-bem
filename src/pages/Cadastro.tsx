@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ChevronRight, ChevronLeft, CheckCircle2, Search, Loader2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { findOrCreateClassroom, createStudentEnrollment } from '../lib/database'
+import { findOrCreateClassroom, createStudentEnrollment, sendLgpdConsentEmail } from '../lib/database'
 import { calcAge } from '../lib/utils'
 import PasswordInput, { validatePassword } from '../components/PasswordInput'
 
@@ -404,6 +404,11 @@ export default function Cadastro() {
         } catch (err) {
           console.error('Error creating enrollment:', err)
         }
+      }
+
+      // Send LGPD consent email if minor
+      if (needsConsent && form.parentEmail && studentData?.id) {
+        sendLgpdConsentEmail(form.parentEmail, form.name, studentData.id)
       }
 
       sessionStorage.removeItem('cadastro_backup')
