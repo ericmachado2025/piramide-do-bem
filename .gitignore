@@ -38,4 +38,10 @@ scripts/inep_2023.zip
 scripts/inep_schools_active.csv
 scripts/communities-parsed.json
 scripts/communities_utf8.sql
+scripts/bairros_inep.json
+scripts/bairros_extra.json
+scripts/bairro_batches/
+
+# Prompts (contain secrets)
+prompts/
 

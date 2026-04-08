@@ -74,6 +74,16 @@ export default function Perfil() {
   const [editVisibility, setEditVisibility] = useState('private')
   const [saving, setSaving] = useState(false)
 
+  // Multi-profile support
+  const [profileType, setProfileType] = useState<'student' | 'teacher' | 'sponsor' | 'parent' | null>(null)
+  const [teacherData, setTeacherData] = useState<{ id: string; name: string; phone: string; cpf: string } | null>(null)
+  const [sponsorData, setSponsorData] = useState<{ id: string; business_name: string; contact_name: string; phone: string; document: string; city: string } | null>(null)
+  const [parentData, setParentData] = useState<{ id: string; name: string; phone: string; cpf: string } | null>(null)
+  const [editPhone, setEditPhone] = useState('')
+  const [editCpf, setEditCpf] = useState('')
+  const [editBusiness, setEditBusiness] = useState('')
+  const [editCity, setEditCity] = useState('')
+
   useEffect(() => {
     if (!user) return
 
@@ -85,6 +95,19 @@ export default function Perfil() {
         .eq('user_id', user!.id)
         .single()
 
+      // Detect profile type
+      if (!studentData) {
+        // Check other profiles
+        const { data: tData } = await supabase.from('teachers').select('id, name, phone, cpf').eq('user_id', user!.id).maybeSingle()
+        if (tData) { setTeacherData(tData); setProfileType('teacher'); setLoading(false); return }
+        const { data: sData } = await supabase.from('sponsors').select('id, business_name, contact_name, phone, document, city').eq('user_id', user!.id).maybeSingle()
+        if (sData) { setSponsorData(sData); setProfileType('sponsor'); setLoading(false); return }
+        const { data: pData } = await supabase.from('parents').select('id, name, phone, cpf').eq('user_id', user!.id).maybeSingle()
+        if (pData) { setParentData(pData); setProfileType('parent'); setLoading(false); return }
+        setLoading(false); return
+      }
+
+      setProfileType('student')
       if (studentData) {
         setStudent(studentData as Student)
 
@@ -136,10 +159,86 @@ export default function Perfil() {
     loadData()
   }, [user])
 
-  if (loading || !student) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center">
         <div className="animate-pulse text-teal text-lg">Carregando...</div>
+      </div>
+    )
+  }
+
+  // Non-student profile pages
+  if (profileType && profileType !== 'student') {
+    const data = profileType === 'teacher' ? teacherData : profileType === 'sponsor' ? sponsorData : parentData
+    const profileLabel = profileType === 'teacher' ? 'Professor' : profileType === 'sponsor' ? 'Patrocinador' : 'Responsavel'
+    return (
+      <div className="min-h-screen bg-bg pb-24">
+        <div className="gradient-bg px-6 pt-10 pb-8 rounded-b-3xl shadow-lg text-center">
+          <h1 className="text-2xl font-bold text-white">{(data as Record<string, string>)?.name || (data as Record<string, string>)?.contact_name || 'Perfil'}</h1>
+          <p className="text-white/80 text-sm mt-1">{profileLabel}</p>
+        </div>
+        <div className="px-4 mt-4 max-w-lg mx-auto space-y-4">
+          {!editing ? (
+            <button onClick={() => {
+              if (profileType === 'teacher' && teacherData) { setEditName(teacherData.name || ''); setEditPhone(teacherData.phone || ''); setEditCpf(teacherData.cpf || '') }
+              else if (profileType === 'sponsor' && sponsorData) { setEditName(sponsorData.contact_name || ''); setEditBusiness(sponsorData.business_name || ''); setEditPhone(sponsorData.phone || ''); setEditCpf(sponsorData.document || ''); setEditCity(sponsorData.city || '') }
+              else if (profileType === 'parent' && parentData) { setEditName(parentData.name || ''); setEditPhone(parentData.phone || ''); setEditCpf(parentData.cpf || '') }
+              setEditing(true)
+            }} className="w-full flex items-center justify-center gap-2 py-3 bg-white rounded-xl shadow-md text-navy font-semibold text-sm hover:bg-gray-50">
+              <Edit3 className="w-4 h-4" /> Editar meus dados
+            </button>
+          ) : (
+            <div className="bg-white rounded-xl shadow-md p-4 space-y-3">
+              <h3 className="font-bold text-navy text-sm">Editar dados</h3>
+              <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Nome"
+                className="w-full px-3 py-2.5 rounded-lg border border-gray-200 focus:border-teal focus:outline-none text-sm" />
+              {profileType === 'sponsor' && (
+                <>
+                  <input type="text" value={editBusiness} onChange={(e) => setEditBusiness(e.target.value)} placeholder="Nome da empresa"
+                    className="w-full px-3 py-2.5 rounded-lg border border-gray-200 focus:border-teal focus:outline-none text-sm" />
+                  <input type="text" value={editCity} onChange={(e) => setEditCity(e.target.value)} placeholder="Cidade"
+                    className="w-full px-3 py-2.5 rounded-lg border border-gray-200 focus:border-teal focus:outline-none text-sm" />
+                </>
+              )}
+              <input type="tel" value={editPhone} onChange={(e) => setEditPhone(e.target.value.replace(/\D/g, ''))} placeholder="Telefone"
+                className="w-full px-3 py-2.5 rounded-lg border border-gray-200 focus:border-teal focus:outline-none text-sm" />
+              <input type="text" value={editCpf} onChange={(e) => setEditCpf(e.target.value)} placeholder={profileType === 'sponsor' ? 'CNPJ/CPF' : 'CPF'}
+                className="w-full px-3 py-2.5 rounded-lg border border-gray-200 focus:border-teal focus:outline-none text-sm" />
+              <div className="flex gap-2">
+                <button onClick={() => setEditing(false)} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-500 text-sm font-semibold">Cancelar</button>
+                <button disabled={saving} onClick={async () => {
+                  setSaving(true)
+                  if (profileType === 'teacher' && teacherData) {
+                    await supabase.from('teachers').update({ name: editName, phone: editPhone, cpf: editCpf }).eq('id', teacherData.id)
+                    setTeacherData({ ...teacherData, name: editName, phone: editPhone, cpf: editCpf })
+                  } else if (profileType === 'sponsor' && sponsorData) {
+                    await supabase.from('sponsors').update({ contact_name: editName, business_name: editBusiness, phone: editPhone, document: editCpf, city: editCity }).eq('id', sponsorData.id)
+                    setSponsorData({ ...sponsorData, contact_name: editName, business_name: editBusiness, phone: editPhone, document: editCpf, city: editCity })
+                  } else if (profileType === 'parent' && parentData) {
+                    await supabase.from('parents').update({ name: editName, phone: editPhone, cpf: editCpf }).eq('id', parentData.id)
+                    setParentData({ ...parentData, name: editName, phone: editPhone, cpf: editCpf })
+                  }
+                  setEditing(false); setSaving(false)
+                }} className="flex-1 py-2.5 rounded-lg bg-teal text-white text-sm font-semibold flex items-center justify-center gap-1 disabled:opacity-50">
+                  <Save className="w-4 h-4" /> {saving ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </div>
+          )}
+          <button onClick={async () => { await supabase.auth.signOut(); navigate('/') }}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-red/30 text-red font-semibold hover:bg-red/5">
+            <LogOut className="w-5 h-5" /> Sair da conta
+          </button>
+        </div>
+        <BottomNav />
+      </div>
+    )
+  }
+
+  if (!student) {
+    return (
+      <div className="min-h-screen bg-bg flex items-center justify-center">
+        <div className="text-gray-500">Perfil nao encontrado.</div>
       </div>
     )
   }
