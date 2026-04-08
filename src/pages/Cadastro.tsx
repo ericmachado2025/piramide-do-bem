@@ -4,7 +4,26 @@ import { ChevronRight, ChevronLeft, CheckCircle2, Search, Loader2 } from 'lucide
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { findOrCreateClassroom, createStudentEnrollment } from '../lib/database'
+import { calcAge } from '../lib/utils'
 import PasswordInput, { validatePassword } from '../components/PasswordInput'
+
+const COUNTRY_CODES = [
+  { value: '+55', label: '+55 Brasil' },
+  { value: '+1', label: '+1 EUA/Canada' },
+  { value: '+351', label: '+351 Portugal' },
+  { value: '+54', label: '+54 Argentina' },
+  { value: '+598', label: '+598 Uruguai' },
+  { value: '+595', label: '+595 Paraguai' },
+  { value: '+56', label: '+56 Chile' },
+  { value: '+57', label: '+57 Colombia' },
+  { value: '+58', label: '+58 Venezuela' },
+  { value: '+34', label: '+34 Espanha' },
+  { value: '+39', label: '+39 Italia' },
+  { value: '+49', label: '+49 Alemanha' },
+  { value: '+33', label: '+33 Franca' },
+  { value: '+44', label: '+44 Reino Unido' },
+  { value: '+81', label: '+81 Japao' },
+]
 
 // 27 Brazilian states
 const BRAZILIAN_STATES = [
@@ -38,7 +57,7 @@ const ALL_GRADES = [
   '6o ano', '7o ano', '8o ano', '9o ano',
   '1o EM', '2o EM', '3o EM',
 ]
-const sections = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+const sections = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'N/A']
 
 const MONTHS = [
   'Janeiro', 'Fevereiro', 'Marco', 'Abril', 'Maio', 'Junho',
@@ -79,6 +98,8 @@ interface FormData {
   grade: string
   section: string
   whatsapp: string
+  whatsappCountryCode: string
+  whatsappVisibility: string
   parentEmail: string
   parentPhone: string
   parentRelation: string
@@ -117,29 +138,30 @@ export default function Cadastro() {
 
   const [emailError, setEmailError] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [form, setForm] = useState<FormData>(() => ({
+
+  const makeDefaultForm = (): FormData => ({
     name: fromGoogle && user ? (user.user_metadata?.full_name || user.user_metadata?.name || '') : '',
     email: fromGoogle && user ? (user.email || '') : '',
-    birthDay: '',
-    birthMonth: '',
-    birthYear: '',
-    birthDate: '',
-    password: '',
-    confirmPassword: '',
-    state: '',
-    city: '',
-    citySearch: '',
-    schoolId: '',
-    schoolSearch: '',
-    schoolType: '',
-    grade: '',
-    section: '',
-    whatsapp: '',
-    parentEmail: '',
-    parentPhone: '',
-    parentRelation: '',
+    birthDay: '', birthMonth: '', birthYear: '', birthDate: '',
+    password: '', confirmPassword: '',
+    state: '', city: '', citySearch: '',
+    schoolId: '', schoolSearch: '', schoolType: '',
+    grade: '', section: '',
+    whatsapp: '', whatsappCountryCode: '+55', whatsappVisibility: 'private',
+    parentEmail: '', parentPhone: '', parentRelation: '',
     lgpdConsent: false,
-  }))
+  })
+
+  const [form, setForm] = useState<FormData>(() => {
+    try {
+      const backup = sessionStorage.getItem('cadastro_backup')
+      if (backup) {
+        const { form: saved, fromGoogle: savedFrom } = JSON.parse(backup)
+        if (savedFrom === fromGoogle) return { ...makeDefaultForm(), ...saved }
+      }
+    } catch { /* ignore */ }
+    return makeDefaultForm()
+  })
 
   // Pre-fill from Google
   useEffect(() => {
@@ -152,10 +174,11 @@ export default function Cadastro() {
     }
   }, [user, fromGoogle])
 
-  // Browser back support
+  // Browser back support + sessionStorage backup
   useEffect(() => {
     window.history.pushState({ step: stepIndex }, '')
-  }, [stepIndex])
+    sessionStorage.setItem('cadastro_backup', JSON.stringify({ form, stepIndex, fromGoogle }))
+  }, [stepIndex, form, fromGoogle])
 
   useEffect(() => {
     const handlePopState = () => {
@@ -175,25 +198,25 @@ export default function Cadastro() {
   const [showCityDropdown, setShowCityDropdown] = useState(false)
   const cityDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const fetchCities = useCallback(async (state: string, query?: string) => {
+    setCityLoading(true)
+    let q = supabase.from('schools').select('city').eq('state', state)
+    if (query && query.length >= 3) q = q.ilike('city', `${query}%`)
+    q = q.limit(500)
+    const { data } = await q
+    if (data) {
+      const unique = [...new Set(data.map((r: { city: string }) => r.city))].sort()
+      setCitySuggestions(unique)
+    }
+    setCityLoading(false)
+    setShowCityDropdown(true)
+  }, [])
+
   const searchCities = useCallback((state: string, query: string) => {
     if (cityDebounceRef.current) clearTimeout(cityDebounceRef.current)
     if (!state || query.length < 3) { setCitySuggestions([]); return }
-    setCityLoading(true)
-    cityDebounceRef.current = setTimeout(async () => {
-      const { data } = await supabase
-        .from('schools')
-        .select('city')
-        .eq('state', state)
-        .ilike('city', `${query}%`)
-        .limit(200)
-      if (data) {
-        const unique = [...new Set(data.map((r: { city: string }) => r.city))].sort()
-        setCitySuggestions(unique)
-      }
-      setCityLoading(false)
-      setShowCityDropdown(true)
-    }, 300)
-  }, [])
+    cityDebounceRef.current = setTimeout(() => fetchCities(state, query), 300)
+  }, [fetchCities])
 
   // School autocomplete
   const [schoolSuggestions, setSchoolSuggestions] = useState<{ id: string; name: string; school_type: string }[]>([])
@@ -201,24 +224,22 @@ export default function Cadastro() {
   const [showSchoolDropdown, setShowSchoolDropdown] = useState(false)
   const schoolDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const fetchSchools = useCallback(async (state: string, city: string, query?: string) => {
+    setSchoolLoading(true)
+    let q = supabase.from('schools').select('id, name, school_type').eq('state', state).eq('city', city)
+    if (query && query.length >= 3) q = q.ilike('name', `%${query}%`)
+    q = q.order('name').limit(100)
+    const { data } = await q
+    if (data) setSchoolSuggestions(data)
+    setSchoolLoading(false)
+    setShowSchoolDropdown(true)
+  }, [])
+
   const searchSchools = useCallback((state: string, city: string, query: string) => {
     if (schoolDebounceRef.current) clearTimeout(schoolDebounceRef.current)
     if (!state || !city || query.length < 3) { setSchoolSuggestions([]); return }
-    setSchoolLoading(true)
-    schoolDebounceRef.current = setTimeout(async () => {
-      const { data } = await supabase
-        .from('schools')
-        .select('id, name, school_type')
-        .eq('state', state)
-        .eq('city', city)
-        .ilike('name', `%${query}%`)
-        .order('name')
-        .limit(20)
-      if (data) setSchoolSuggestions(data)
-      setSchoolLoading(false)
-      setShowSchoolDropdown(true)
-    }, 300)
-  }, [])
+    schoolDebounceRef.current = setTimeout(() => fetchSchools(state, city, query), 300)
+  }, [fetchSchools])
 
   // Get available grades based on selected school type
   const availableGrades = useMemo(() => {
@@ -257,12 +278,7 @@ export default function Cadastro() {
   // Age calculation — LGPD only for < 12
   const age = useMemo(() => {
     if (!birthDateValid || !birthDate) return null
-    const birth = new Date(birthDate)
-    const today = new Date()
-    let a = today.getFullYear() - birth.getFullYear()
-    const monthDiff = today.getMonth() - birth.getMonth()
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) a--
-    return a
+    return calcAge(birthDate)
   }, [birthDate, birthDateValid])
 
   const needsConsent = age !== null && age < 12
@@ -360,7 +376,9 @@ export default function Cadastro() {
         parent_email: form.parentEmail || null,
         parent_phone: form.parentPhone.replace(/\D/g, '') || null,
         parent_consent: form.lgpdConsent,
-        whatsapp: form.whatsapp.replace(/\D/g, '') || null,
+        whatsapp: form.whatsapp.replace(/\D/g, '') ? (form.whatsappCountryCode + form.whatsapp.replace(/\D/g, '')) : null,
+        whatsapp_country_code: form.whatsappCountryCode,
+        whatsapp_visibility: form.whatsappVisibility,
         total_points: 0,
         available_points: 0,
         redeemed_points: 0,
@@ -388,6 +406,7 @@ export default function Cadastro() {
         }
       }
 
+      sessionStorage.removeItem('cadastro_backup')
       navigate('/tribo')
     } catch {
       alert('Erro inesperado. Tente novamente.')
@@ -615,7 +634,7 @@ export default function Cadastro() {
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Digite 3+ letras da cidade..."
+                    placeholder="Digite 3+ letras ou Enter para ver todas"
                     value={form.city || form.citySearch}
                     onChange={(e) => {
                       const val = e.target.value
@@ -626,6 +645,9 @@ export default function Cadastro() {
                         update('grade', ''); update('schoolType', '')
                       }
                       searchCities(form.state, val)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); fetchCities(form.state) }
                     }}
                     onFocus={() => citySuggestions.length > 0 && setShowCityDropdown(true)}
                     onBlur={() => setTimeout(() => setShowCityDropdown(false), 200)}
@@ -660,7 +682,7 @@ export default function Cadastro() {
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Digite o nome da escola..."
+                    placeholder="Digite 3+ letras ou Enter para ver todas"
                     value={form.schoolId ? schoolSuggestions.find(s => s.id === form.schoolId)?.name || form.schoolSearch : form.schoolSearch}
                     onChange={(e) => {
                       const val = e.target.value
@@ -669,6 +691,9 @@ export default function Cadastro() {
                         update('schoolId', ''); update('grade', ''); update('schoolType', '')
                       }
                       searchSchools(form.state, form.city, val)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); fetchSchools(form.state, form.city) }
                     }}
                     onFocus={() => {
                       if (form.schoolId) {
@@ -714,7 +739,7 @@ export default function Cadastro() {
                 <select value={form.section} onChange={(e) => update('section', e.target.value)}
                   className="w-24 px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white">
                   <option value="">Turma</option>
-                  {sections.map((s) => (<option key={s} value={s}>{s}</option>))}
+                  {sections.map((s) => (<option key={s} value={s}>{s === 'N/A' ? 'Nao se aplica' : s}</option>))}
                 </select>
               </div>
             )}
@@ -729,10 +754,33 @@ export default function Cadastro() {
               <h2 className="text-2xl font-extrabold text-navy mt-2">Seu WhatsApp</h2>
               <p className="text-gray-400 text-sm mt-1">Opcional — para notificacoes e comunicacao</p>
             </div>
-            <input type="tel" placeholder="(XX) XXXXX-XXXX" value={form.whatsapp}
-              onChange={(e) => update('whatsapp', formatWhatsApp(e.target.value))}
-              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors"
-              autoFocus />
+            <div className="flex gap-2">
+              <select value={form.whatsappCountryCode} onChange={(e) => update('whatsappCountryCode', e.target.value)}
+                className="w-32 px-2 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-sm transition-colors bg-white">
+                {COUNTRY_CODES.map((c) => (<option key={c.value} value={c.value}>{c.label}</option>))}
+              </select>
+              <input type="tel" placeholder="(XX) XXXXX-XXXX" value={form.whatsapp}
+                onChange={(e) => update('whatsapp', formatWhatsApp(e.target.value))}
+                className="flex-1 px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors"
+                autoFocus />
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-gray-500">Visibilidade do WhatsApp:</p>
+              {[
+                { value: 'none', label: 'Nao informar' },
+                { value: 'private', label: 'Privado (apenas notificacoes do App)' },
+                { value: 'friends', label: 'Amigos (notificacoes + visivel para amigos)' },
+                ...(age !== null && age >= 12 ? [{ value: 'public', label: 'Publico' }] : []),
+              ].map((opt) => (
+                <label key={opt.value} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${
+                  form.whatsappVisibility === opt.value ? 'border-teal bg-teal/5' : 'border-gray-200 hover:border-teal/50'
+                }`}>
+                  <input type="radio" name="whatsappVis" value={opt.value} checked={form.whatsappVisibility === opt.value}
+                    onChange={() => update('whatsappVisibility', opt.value)} className="accent-teal" />
+                  <span className="text-sm text-gray-700">{opt.label}</span>
+                </label>
+              ))}
+            </div>
             <p className="text-xs text-gray-400 text-center">Voce pode pular este passo</p>
           </div>
         )}

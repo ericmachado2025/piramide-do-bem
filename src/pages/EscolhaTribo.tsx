@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ChevronRight, ArrowLeft, Shield, Skull, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { getCharacterDisplayName, getTierLabel } from '../lib/database'
+import { calcAge } from '../lib/utils'
 import { useAuth } from '../contexts/AuthContext'
 import type { CommunityCategory, CommunityType, Community, Character } from '../types'
 
@@ -71,12 +72,17 @@ export default function EscolhaTribo() {
 
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [studentAge, setStudentAge] = useState<number | null>(null)
 
-  // Load categories on mount
+  // Load categories + student age on mount
   useEffect(() => {
     supabase.from('community_categories').select('*').eq('status', 'ACTIVE').order('display_order')
       .then(({ data }) => { if (data) setCategories(data) })
-  }, [])
+    if (authUser) {
+      supabase.from('students').select('birth_date').eq('user_id', authUser.id).single()
+        .then(({ data }) => { if (data?.birth_date) setStudentAge(calcAge(data.birth_date)) })
+    }
+  }, [authUser])
 
   // Load types when category selected
   useEffect(() => {
@@ -172,7 +178,7 @@ export default function EscolhaTribo() {
         .single()
       if (!student) { setSaving(false); return }
 
-      await supabase
+      const { error: updateError } = await supabase
         .from('students')
         .update({
           community_id: selectedCommunity.id,
@@ -181,6 +187,12 @@ export default function EscolhaTribo() {
         })
         .eq('id', student.id)
 
+      if (updateError) {
+        console.error('handleConfirm updateError:', updateError)
+        alert(`Erro ao salvar personagem: ${updateError.message}`)
+        setSaving(false)
+        return
+      }
       navigate('/personagem')
     } catch (err) {
       console.error('Error choosing community:', err)
@@ -190,7 +202,7 @@ export default function EscolhaTribo() {
   }
 
   const stepTitles: Record<Step, string> = {
-    1: 'Como voce se identifica?',
+    1: 'Como seus personagens aparecem?',
     2: 'Qual universo voce curte?',
     3: `${selectedCategory?.name ?? 'Categoria'}`,
     4: `${selectedType?.name ?? 'Tipo'}`,
@@ -238,8 +250,8 @@ export default function EscolhaTribo() {
       <div className="px-4 -mt-6 max-w-2xl mx-auto">
         {/* Step 1: Gender */}
         {step === 1 && (
-          <div className="grid grid-cols-3 gap-3">
-            {genderOptions.map((opt) => (
+          <div className={`grid gap-3 ${studentAge !== null && studentAge < 13 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+            {genderOptions.filter(opt => opt.value !== 'nonbinary' || studentAge === null || studentAge >= 13).map((opt) => (
               <button
                 key={opt.value}
                 onClick={() => handleGenderSelect(opt.value)}
