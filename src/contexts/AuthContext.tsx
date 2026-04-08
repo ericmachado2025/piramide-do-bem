@@ -39,15 +39,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signInWithGoogle = useCallback(async () => {
-    // Use production URL as fallback to avoid localhost redirect issues
-    const origin = window.location.origin.includes('localhost')
-      ? 'https://piramidedobem.com.br'
-      : window.location.origin
-
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback`,
       },
     })
     if (error) {
