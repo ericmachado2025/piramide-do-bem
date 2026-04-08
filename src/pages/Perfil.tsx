@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
-import { X, ChevronRight, Clock, CheckCircle, XCircle, AlertCircle, RefreshCw, LogOut } from 'lucide-react'
+import { X, ChevronRight, Clock, CheckCircle, XCircle, AlertCircle, RefreshCw, LogOut, Edit3, Save } from 'lucide-react'
 import BottomNav from '../components/BottomNav'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -68,6 +68,11 @@ export default function Perfil() {
   const [nextCharName, setNextCharName] = useState<string | null>(null)
   const [streak, setStreak] = useState(0)
   const [referralCode, setReferralCode] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editWhatsapp, setEditWhatsapp] = useState('')
+  const [editVisibility, setEditVisibility] = useState('private')
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -195,6 +200,64 @@ export default function Perfil() {
       </div>
 
       <div className="px-4 -mt-4 space-y-6 max-w-lg mx-auto">
+        {/* ===== EDITAR DADOS ===== */}
+        <section>
+          {!editing ? (
+            <button
+              onClick={() => {
+                setEditName(student.name)
+                setEditWhatsapp(student.whatsapp || '')
+                setEditVisibility(student.whatsapp_visibility || 'private')
+                setEditing(true)
+              }}
+              className="w-full flex items-center justify-center gap-2 py-3 bg-white rounded-xl shadow-md text-navy font-semibold text-sm hover:bg-gray-50 transition-colors"
+            >
+              <Edit3 className="w-4 h-4" /> Editar meus dados
+            </button>
+          ) : (
+            <div className="bg-white rounded-xl shadow-md p-4 space-y-3">
+              <h3 className="font-bold text-navy text-sm">Editar dados</h3>
+              <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
+                placeholder="Nome" className="w-full px-3 py-2.5 rounded-lg border border-gray-200 focus:border-teal focus:outline-none text-sm" />
+              <input type="tel" value={editWhatsapp} onChange={(e) => setEditWhatsapp(e.target.value.replace(/\D/g, ''))}
+                placeholder="WhatsApp (apenas numeros)" className="w-full px-3 py-2.5 rounded-lg border border-gray-200 focus:border-teal focus:outline-none text-sm" />
+              <div className="space-y-1">
+                <p className="text-xs text-gray-500">Visibilidade:</p>
+                {[
+                  { v: 'private', l: 'Privado' },
+                  { v: 'friends', l: 'Amigos' },
+                  { v: 'public', l: 'Publico' },
+                ].map(o => (
+                  <label key={o.v} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer text-sm ${editVisibility === o.v ? 'bg-teal/5 border border-teal' : 'border border-gray-100'}`}>
+                    <input type="radio" checked={editVisibility === o.v} onChange={() => setEditVisibility(o.v)} className="accent-teal" />
+                    {o.l}
+                  </label>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setEditing(false)}
+                  className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-500 text-sm font-semibold">Cancelar</button>
+                <button
+                  disabled={saving}
+                  onClick={async () => {
+                    setSaving(true)
+                    await supabase.from('students').update({
+                      name: editName,
+                      whatsapp: editWhatsapp || null,
+                      whatsapp_visibility: editVisibility,
+                    }).eq('id', student.id)
+                    setStudent({ ...student, name: editName, whatsapp: editWhatsapp || null, whatsapp_visibility: editVisibility } as typeof student)
+                    setEditing(false)
+                    setSaving(false)
+                  }}
+                  className="flex-1 py-2.5 rounded-lg bg-teal text-white text-sm font-semibold flex items-center justify-center gap-1 disabled:opacity-50">
+                  <Save className="w-4 h-4" /> {saving ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+
         {/* ===== COFRINHOS ===== */}
         <section>
           <h2 className="text-lg font-bold text-navy mb-3 mt-6">Cofrinhos Digitais</h2>

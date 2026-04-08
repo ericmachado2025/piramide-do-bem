@@ -1,10 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ChevronRight,
   ChevronLeft,
   CheckCircle2,
-  Phone,
   Search,
   UserPlus,
   Loader2,
@@ -13,18 +12,46 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import PasswordInput, { validatePassword } from '../components/PasswordInput'
 
+const COUNTRY_CODES = [
+  { value: '+55', label: '+55 Brasil' },
+  { value: '+1', label: '+1 EUA/Canada' },
+  { value: '+351', label: '+351 Portugal' },
+  { value: '+54', label: '+54 Argentina' },
+  { value: '+598', label: '+598 Uruguai' },
+  { value: '+595', label: '+595 Paraguai' },
+  { value: '+56', label: '+56 Chile' },
+  { value: '+57', label: '+57 Colombia' },
+  { value: '+58', label: '+58 Venezuela' },
+  { value: '+34', label: '+34 Espanha' },
+  { value: '+39', label: '+39 Italia' },
+  { value: '+49', label: '+49 Alemanha' },
+  { value: '+33', label: '+33 Franca' },
+  { value: '+44', label: '+44 Reino Unido' },
+  { value: '+81', label: '+81 Japao' },
+]
+
+function formatCPF(value: string): string {
+  const d = value.replace(/\D/g, '').slice(0, 11)
+  if (d.length <= 3) return d
+  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`
+  if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`
+}
+
 interface StudentResult {
   id: string
   name: string
   school: { name: string } | null
 }
 
+const inputClass = "w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-[#028090] focus:outline-none text-lg transition-colors"
+
 export default function ResponsavelCadastro() {
   const navigate = useNavigate()
   const { user, signUpWithEmail } = useAuth()
 
   const [step, setStep] = useState(user ? 2 : 1)
-  const totalSteps = 4
+  const totalSteps = 3
 
   // Step 1
   const [email, setEmail] = useState('')
@@ -35,34 +62,52 @@ export default function ResponsavelCadastro() {
 
   // Step 2
   const [fullName, setFullName] = useState('')
+  const [cpf, setCpf] = useState('')
   const [phone, setPhone] = useState('')
+  const [countryCode, setCountryCode] = useState('+55')
 
-  // Step 3
-  const [verificationCode, setVerificationCode] = useState('')
-  const [generatedCode, setGeneratedCode] = useState('')
-  const [codeSent, setCodeSent] = useState(false)
-  const [codeVerified, setCodeVerified] = useState(false)
-  const [codeError, setCodeError] = useState('')
-
-  // Step 4
+  // Step 3 — Link students
+  const [autoLinkedStudents, setAutoLinkedStudents] = useState<StudentResult[]>([])
   const [studentQuery, setStudentQuery] = useState('')
   const [studentResults, setStudentResults] = useState<StudentResult[]>([])
-  const [selectedStudent, setSelectedStudent] = useState<StudentResult | null>(null)
+  const [selectedStudents, setSelectedStudents] = useState<StudentResult[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
+  const [showAllStudents, setShowAllStudents] = useState(false)
 
   const [submitting, setSubmitting] = useState(false)
   const [globalError, setGlobalError] = useState('')
 
-  // Step 1: Auth
+  // Step 1: Auth — try signIn first, then signUp
   const handleAuth = async () => {
     setAuthError('')
     setAuthLoading(true)
     try {
+      // Try login first
+      const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password })
+      if (!signInErr) {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session) { setStep(2); setAuthLoading(false); return }
+      }
+
+      // If not "Invalid login", show error
+      if (signInErr && !signInErr.message.includes('Invalid login')) {
+        const msg = signInErr.message.includes('rate limit') ? 'Muitas tentativas. Aguarde alguns minutos.' : signInErr.message
+        setAuthError(msg)
+        setAuthLoading(false)
+        return
+      }
+
+      // Create account
       const { error } = await signUpWithEmail(email, password)
       if (error && !error.includes('already registered')) {
         setAuthError(error)
         setAuthLoading(false)
         return
+      }
+      // Wait for session
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        await supabase.auth.signInWithPassword({ email, password })
       }
       setStep(2)
     } catch {
@@ -71,93 +116,102 @@ export default function ResponsavelCadastro() {
     setAuthLoading(false)
   }
 
-  // Step 3: Phone verification
-  const handleSendCode = async () => {
-    const code = String(Math.floor(100000 + Math.random() * 900000))
-    setGeneratedCode(code)
+  useEffect(() => { if (user && step === 1) setStep(2) }, [user, step])
 
-    try {
-      await supabase.from('phone_verifications').insert({
-        phone,
-        code,
-        verified: false,
-        created_at: new Date().toISOString(),
+  // Auto-detect linked students when reaching step 3
+  useEffect(() => {
+    if (step !== 3 || !user) return
+    const userEmail = user.email || email
+    if (!userEmail) return
+
+    supabase
+      .from('students')
+      .select('id, name, school:schools(name)')
+      .eq('parent_email', userEmail)
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          const students = data as unknown as StudentResult[]
+          setAutoLinkedStudents(students)
+          setSelectedStudents(students)
+        }
       })
-    } catch {
-      // continue even if insert fails
-    }
+  }, [step, user, email])
 
-    console.log(`[Piramide do Bem] Codigo de verificacao: ${code}`)
-    alert(`Codigo de verificacao enviado! (DEV: ${code})`)
-    setCodeSent(true)
-    setCodeError('')
-  }
+  // Search students
+  useEffect(() => {
+    if (!showAllStudents && studentQuery.length < 2) { setStudentResults([]); return }
+    const timer = setTimeout(async () => {
+      setSearchLoading(true)
+      let q = supabase.from('students').select('id, name, school:schools(name)')
+      if (studentQuery.length >= 2) {
+        q = q.ilike('name', `%${studentQuery}%`).limit(10)
+      } else {
+        q = q.order('name').limit(30)
+      }
+      const { data } = await q
+      if (data) setStudentResults(data as unknown as StudentResult[])
+      setSearchLoading(false)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [studentQuery, showAllStudents])
 
-  const handleVerifyCode = () => {
-    if (verificationCode === generatedCode) {
-      setCodeVerified(true)
-      setCodeError('')
-    } else {
-      setCodeError('Codigo incorreto. Tente novamente.')
-    }
-  }
-
-  // Step 4: Search students
-  const handleSearchStudents = async () => {
-    if (studentQuery.trim().length < 2) return
-    setSearchLoading(true)
-    try {
-      const { data, error } = await supabase
-        .from('students')
-        .select('id, name, school:schools(name)')
-        .ilike('name', `%${studentQuery.trim()}%`)
-        .limit(10)
-
-      if (error) throw error
-      setStudentResults((data as unknown as StudentResult[]) || [])
-    } catch {
-      setStudentResults([])
-    }
-    setSearchLoading(false)
+  const toggleStudent = (s: StudentResult) => {
+    setSelectedStudents(prev =>
+      prev.some(p => p.id === s.id) ? prev.filter(p => p.id !== s.id) : [...prev, s]
+    )
   }
 
   // Submit
   const handleSubmit = async () => {
-    if (!selectedStudent) return
+    if (selectedStudents.length === 0) return
     setSubmitting(true)
     setGlobalError('')
 
     try {
-      const userId = user?.id
+      let userId = user?.id
       if (!userId) {
-        setGlobalError('Voce precisa estar autenticado.')
-        setSubmitting(false)
-        return
+        if (email && password) {
+          const { data } = await supabase.auth.signInWithPassword({ email, password })
+          userId = data.user?.id
+        }
+        if (!userId) { setGlobalError('Voce precisa estar autenticado.'); setSubmitting(false); return }
       }
 
+      // Insert users record
+      const { data: usersRow } = await supabase.from('users').insert({
+        auth_id: userId,
+        name: fullName,
+        email: user?.email || email,
+        phone: countryCode + phone,
+        cpf: cpf.replace(/\D/g, '') || null,
+        phone_country_code: countryCode,
+      }).select('id').single()
+
+      // Insert parent
       const { data: parentData, error: parentError } = await supabase
         .from('parents')
         .insert({
           user_id: userId,
-          full_name: fullName,
-          phone,
-          email: user.email || email,
+          users_id: usersRow?.id || null,
+          name: fullName,
+          email: user?.email || email,
+          phone: countryCode + phone,
+          cpf: cpf.replace(/\D/g, '') || null,
         })
         .select('id')
         .single()
 
       if (parentError) throw parentError
 
-      const { error: linkError } = await supabase
-        .from('parent_students')
-        .insert({
+      // Link students
+      for (const s of selectedStudents) {
+        await supabase.from('parent_students').insert({
           parent_id: parentData.id,
-          student_id: selectedStudent.id,
+          student_id: s.id,
           relationship: 'responsavel',
           consent_given: false,
-        })
-
-      if (linkError) throw linkError
+        }).catch(() => {}) // ignore duplicate
+      }
 
       navigate('/responsavel/dashboard')
     } catch (err: unknown) {
@@ -171,23 +225,27 @@ export default function ResponsavelCadastro() {
     switch (step) {
       case 1: return email.includes('@') && validatePassword(password).valid && password === confirmPassword
       case 2: return fullName.trim().length >= 2 && phone.trim().length >= 10
-      case 3: return codeVerified
-      case 4: return selectedStudent !== null
+      case 3: return selectedStudents.length > 0
       default: return false
     }
   }
 
   const handleNext = () => {
-    if (step === 1 && !user) {
-      handleAuth()
-      return
-    }
-    if (step < totalSteps) {
-      setStep(step + 1)
-    } else {
-      handleSubmit()
-    }
+    if (step === 1 && !user) { handleAuth(); return }
+    if (step < totalSteps) { setStep(step + 1) } else { handleSubmit() }
   }
+
+  // Browser back support
+  useEffect(() => {
+    window.history.pushState({ step }, '')
+    sessionStorage.setItem('responsavel_backup', JSON.stringify({ step, fullName, cpf, phone, countryCode }))
+  }, [step, fullName, cpf, phone, countryCode])
+
+  useEffect(() => {
+    const handlePop = () => setStep(prev => prev > 1 ? prev - 1 : prev)
+    window.addEventListener('popstate', handlePop)
+    return () => window.removeEventListener('popstate', handlePop)
+  }, [])
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-start pt-8 px-4 pb-8" style={{ backgroundColor: '#f0fdfa' }}>
@@ -207,16 +265,13 @@ export default function ResponsavelCadastro() {
               {s < step ? <CheckCircle2 className="w-5 h-5" /> : s}
             </div>
             {s < totalSteps && (
-              <div
-                className="w-6 h-1 rounded-full transition-colors duration-300"
-                style={{ backgroundColor: s < step ? '#02C39A' : '#e5e7eb' }}
-              />
+              <div className="w-6 h-1 rounded-full transition-colors duration-300"
+                style={{ backgroundColor: s < step ? '#02C39A' : '#e5e7eb' }} />
             )}
           </div>
         ))}
       </div>
 
-      {/* Card */}
       <div className="bg-white rounded-2xl shadow-lg p-6 w-full max-w-md" key={step}>
         {/* Step 1: Auth */}
         {step === 1 && (
@@ -229,179 +284,110 @@ export default function ResponsavelCadastro() {
             {user ? (
               <div className="p-4 rounded-xl text-center" style={{ backgroundColor: '#f0fdfa', border: '1px solid #02C39A' }}>
                 <CheckCircle2 className="w-6 h-6 mx-auto mb-2" style={{ color: '#02C39A' }} />
-                <p className="text-sm" style={{ color: '#1F4E79' }}>Voce ja esta autenticado como <strong>{user.email}</strong></p>
+                <p className="text-sm" style={{ color: '#1F4E79' }}>Autenticado como <strong>{user.email}</strong></p>
               </div>
             ) : (
               <>
-                <input
-                  type="email"
-                  placeholder="Seu email"
-                  value={email}
+                <input type="email" placeholder="Seu email" value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:outline-none text-lg transition-colors"
-                  style={{ borderColor: undefined }}
-                  onFocus={(e) => (e.target.style.borderColor = '#028090')}
-                  onBlur={(e) => (e.target.style.borderColor = '#e5e7eb')}
+                  className={inputClass}
                   onKeyDown={(e) => e.key === 'Enter' && canAdvance() && handleNext()}
-                  autoFocus
-                />
-                <PasswordInput
-                  password={password}
-                  confirmPassword={confirmPassword}
-                  onPasswordChange={setPassword}
-                  onConfirmChange={setConfirmPassword}
-                  onEnterAdvance={() => canAdvance() && handleNext()}
-                />
+                  autoFocus />
+                <PasswordInput password={password} confirmPassword={confirmPassword}
+                  onPasswordChange={setPassword} onConfirmChange={setConfirmPassword}
+                  onEnterAdvance={() => canAdvance() && handleNext()} />
                 {authError && <p className="text-sm" style={{ color: '#dc2626' }}>{authError}</p>}
               </>
             )}
           </div>
         )}
 
-        {/* Step 2: Personal info */}
+        {/* Step 2: Personal data */}
         {step === 2 && (
           <div className="space-y-4">
             <div className="text-center">
               <UserPlus className="w-12 h-12 mx-auto" style={{ color: '#028090' }} />
               <h2 className="text-2xl font-extrabold mt-2" style={{ color: '#1F4E79' }}>Seus dados</h2>
-              <p className="text-gray-400 text-sm mt-1">Preencha seu nome completo e telefone</p>
+              <p className="text-gray-400 text-sm mt-1">Nome, CPF e telefone</p>
             </div>
-            <input
-              type="text"
-              placeholder="Nome completo"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:outline-none text-lg transition-colors"
-              onFocus={(e) => (e.target.style.borderColor = '#028090')}
-              onBlur={(e) => (e.target.style.borderColor = '#e5e7eb')}
-              onKeyDown={(e) => e.key === 'Enter' && canAdvance() && handleNext()}
-              autoFocus
-            />
-            <input
-              type="tel"
-              placeholder="Telefone (ex: 51999999999)"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:outline-none text-lg transition-colors"
-              onFocus={(e) => (e.target.style.borderColor = '#028090')}
-              onBlur={(e) => (e.target.style.borderColor = '#e5e7eb')}
-              onKeyDown={(e) => e.key === 'Enter' && canAdvance() && handleNext()}
-            />
+            <input type="text" placeholder="Nome completo" value={fullName}
+              onChange={(e) => setFullName(e.target.value)} className={inputClass}
+              onKeyDown={(e) => e.key === 'Enter' && canAdvance() && handleNext()} autoFocus />
+            <input type="text" placeholder="CPF" value={cpf}
+              onChange={(e) => setCpf(formatCPF(e.target.value))} className={inputClass}
+              onKeyDown={(e) => e.key === 'Enter' && canAdvance() && handleNext()} />
+            <div className="flex gap-2">
+              <select value={countryCode} onChange={(e) => setCountryCode(e.target.value)}
+                className="w-32 px-2 py-3.5 rounded-xl border-2 border-gray-200 focus:border-[#028090] focus:outline-none text-sm bg-white">
+                {COUNTRY_CODES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+              <input type="tel" placeholder="Telefone (ex: 51999999999)" value={phone}
+                onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
+                className={`flex-1 ${inputClass}`}
+                onKeyDown={(e) => e.key === 'Enter' && canAdvance() && handleNext()} />
+            </div>
           </div>
         )}
 
-        {/* Step 3: Phone verification */}
+        {/* Step 3: Link students */}
         {step === 3 && (
           <div className="space-y-4">
             <div className="text-center">
-              <Phone className="w-12 h-12 mx-auto" style={{ color: '#028090' }} />
-              <h2 className="text-2xl font-extrabold mt-2" style={{ color: '#1F4E79' }}>Verificar telefone</h2>
-              <p className="text-gray-400 text-sm mt-1">Enviaremos um codigo para {phone}</p>
-            </div>
-            {!codeSent ? (
-              <button
-                onClick={handleSendCode}
-                className="w-full py-3.5 rounded-xl font-bold text-white text-lg transition-all hover:opacity-90"
-                style={{ backgroundColor: '#028090' }}
-              >
-                Enviar codigo
-              </button>
-            ) : !codeVerified ? (
-              <>
-                <input
-                  type="text"
-                  placeholder="Digite o codigo de 6 digitos"
-                  value={verificationCode}
-                  onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:outline-none text-lg text-center tracking-widest transition-colors"
-                  onFocus={(e) => (e.target.style.borderColor = '#028090')}
-                  onBlur={(e) => (e.target.style.borderColor = '#e5e7eb')}
-                  autoFocus
-                  maxLength={6}
-                />
-                {codeError && <p className="text-sm text-center" style={{ color: '#dc2626' }}>{codeError}</p>}
-                <button
-                  onClick={handleVerifyCode}
-                  disabled={verificationCode.length !== 6}
-                  className="w-full py-3.5 rounded-xl font-bold text-white text-lg transition-all disabled:opacity-50"
-                  style={{ backgroundColor: '#028090' }}
-                >
-                  Verificar
-                </button>
-                <button
-                  onClick={handleSendCode}
-                  className="w-full text-sm underline"
-                  style={{ color: '#028090' }}
-                >
-                  Reenviar codigo
-                </button>
-              </>
-            ) : (
-              <div className="p-4 rounded-xl text-center" style={{ backgroundColor: '#f0fdfa', border: '1px solid #02C39A' }}>
-                <CheckCircle2 className="w-8 h-8 mx-auto mb-2" style={{ color: '#02C39A' }} />
-                <p className="font-semibold" style={{ color: '#1F4E79' }}>Telefone verificado!</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Step 4: Link student */}
-        {step === 4 && (
-          <div className="space-y-4">
-            <div className="text-center">
               <Search className="w-12 h-12 mx-auto" style={{ color: '#028090' }} />
-              <h2 className="text-2xl font-extrabold mt-2" style={{ color: '#1F4E79' }}>Vincular aluno</h2>
-              <p className="text-gray-400 text-sm mt-1">Busque o aluno pelo nome</p>
-            </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Nome do aluno"
-                value={studentQuery}
-                onChange={(e) => setStudentQuery(e.target.value)}
-                className="flex-1 px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:outline-none text-lg transition-colors"
-                onFocus={(e) => (e.target.style.borderColor = '#028090')}
-                onBlur={(e) => (e.target.style.borderColor = '#e5e7eb')}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearchStudents()}
-                autoFocus
-              />
-              <button
-                onClick={handleSearchStudents}
-                disabled={searchLoading || studentQuery.trim().length < 2}
-                className="px-4 py-3.5 rounded-xl text-white font-bold transition-all disabled:opacity-50"
-                style={{ backgroundColor: '#028090' }}
-              >
-                {searchLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
-              </button>
+              <h2 className="text-2xl font-extrabold mt-2" style={{ color: '#1F4E79' }}>Vincular filho(a)</h2>
+              <p className="text-gray-400 text-sm mt-1">Selecione seu filho(a) na plataforma</p>
             </div>
 
-            {studentResults.length > 0 && (
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {studentResults.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => setSelectedStudent(s)}
-                    className="w-full text-left p-3 rounded-xl border-2 transition-all"
-                    style={{
-                      borderColor: selectedStudent?.id === s.id ? '#02C39A' : '#e5e7eb',
-                      backgroundColor: selectedStudent?.id === s.id ? '#f0fdfa' : '#fff',
-                    }}
-                  >
-                    <p className="font-semibold" style={{ color: '#1F4E79' }}>{s.name}</p>
-                    <p className="text-sm text-gray-400">{s.school?.name || 'Escola nao informada'}</p>
-                  </button>
+            {autoLinkedStudents.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-500">Alunos que indicaram seu email:</p>
+                {autoLinkedStudents.map(s => (
+                  <div key={s.id} className="p-3 rounded-xl flex items-center gap-3" style={{ backgroundColor: '#f0fdfa', border: '1px solid #02C39A' }}>
+                    <CheckCircle2 className="w-5 h-5 flex-shrink-0" style={{ color: '#02C39A' }} />
+                    <div>
+                      <p className="font-semibold text-sm" style={{ color: '#1F4E79' }}>{s.name}</p>
+                      <p className="text-xs text-gray-400">{s.school?.name || ''}</p>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
 
-            {selectedStudent && (
-              <div className="p-3 rounded-xl flex items-center gap-3" style={{ backgroundColor: '#f0fdfa', border: '1px solid #02C39A' }}>
-                <CheckCircle2 className="w-5 h-5 flex-shrink-0" style={{ color: '#02C39A' }} />
-                <div>
-                  <p className="font-semibold text-sm" style={{ color: '#1F4E79' }}>{selectedStudent.name}</p>
-                  <p className="text-xs text-gray-400">{selectedStudent.school?.name || ''}</p>
-                </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input type="text" value={studentQuery}
+                onChange={(e) => { setStudentQuery(e.target.value); setShowAllStudents(false) }}
+                onKeyDown={(e) => { if (e.key === 'Enter' && studentQuery.length < 2) { e.preventDefault(); setShowAllStudents(true) } }}
+                placeholder="Buscar aluno ou Enter para ver todos"
+                className="w-full pl-10 pr-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-[#028090] focus:outline-none text-lg transition-colors" />
+              {searchLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#028090] animate-spin" />}
+            </div>
+
+            {studentResults.length > 0 && (
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {studentResults.map(s => {
+                  const isSelected = selectedStudents.some(p => p.id === s.id)
+                  return (
+                    <button key={s.id} onClick={() => toggleStudent(s)}
+                      className="w-full text-left p-3 rounded-xl border-2 transition-all"
+                      style={{ borderColor: isSelected ? '#02C39A' : '#e5e7eb', backgroundColor: isSelected ? '#f0fdfa' : '#fff' }}>
+                      <div className="flex items-center gap-2">
+                        {isSelected && <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: '#02C39A' }} />}
+                        <div>
+                          <p className="font-semibold text-sm" style={{ color: '#1F4E79' }}>{s.name}</p>
+                          <p className="text-xs text-gray-400">{s.school?.name || ''}</p>
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
+            )}
+
+            {selectedStudents.length > 0 && (
+              <p className="text-xs font-semibold" style={{ color: '#02C39A' }}>
+                {selectedStudents.length} aluno(s) selecionado(s)
+              </p>
             )}
           </div>
         )}
@@ -416,20 +402,15 @@ export default function ResponsavelCadastro() {
         {/* Navigation */}
         <div className="flex gap-3 mt-6">
           {step > 1 && (
-            <button
-              onClick={() => setStep(step - 1)}
-              className="flex items-center justify-center gap-1 px-5 py-3.5 rounded-xl border-2 border-gray-200 text-gray-500 font-semibold hover:bg-gray-50 transition-colors"
-            >
-              <ChevronLeft className="w-5 h-5" />
-              Voltar
+            <button onClick={() => setStep(step - 1)}
+              className="flex items-center justify-center gap-1 px-5 py-3.5 rounded-xl border-2 border-gray-200 text-gray-500 font-semibold hover:bg-gray-50 transition-colors">
+              <ChevronLeft className="w-5 h-5" /> Voltar
             </button>
           )}
-          <button
-            onClick={handleNext}
+          <button onClick={handleNext}
             disabled={!canAdvance() || authLoading || submitting}
             className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-lg text-white transition-all disabled:opacity-50"
-            style={{ backgroundColor: canAdvance() ? '#028090' : '#e5e7eb', color: canAdvance() ? '#fff' : '#9ca3af' }}
-          >
+            style={{ backgroundColor: canAdvance() ? '#028090' : '#e5e7eb', color: canAdvance() ? '#fff' : '#9ca3af' }}>
             {(authLoading || submitting) && <Loader2 className="w-5 h-5 animate-spin" />}
             {step === totalSteps ? 'Concluir cadastro' : step === 1 && !user ? 'Criar conta' : 'Proximo'}
             <ChevronRight className="w-5 h-5" />

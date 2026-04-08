@@ -200,13 +200,14 @@ export default function Cadastro() {
 
   const fetchCities = useCallback(async (state: string, query?: string) => {
     setCityLoading(true)
-    let q = supabase.from('schools').select('city').eq('state', state)
-    if (query && query.length >= 3) q = q.ilike('city', `${query}%`)
-    q = q.limit(500)
-    const { data } = await q
-    if (data) {
-      const unique = [...new Set(data.map((r: { city: string }) => r.city))].sort()
-      setCitySuggestions(unique)
+    // Use cities table via states FK (fixes Rio Grande-RS truncation bug)
+    const { data: stateRow } = await supabase.from('states').select('id').eq('abbreviation', state).single()
+    if (stateRow) {
+      let q = supabase.from('cities').select('name').eq('state_id', stateRow.id)
+      if (query && query.length >= 3) q = q.ilike('name', `${query}%`)
+      q = q.order('name')
+      const { data } = await q
+      if (data) setCitySuggestions(data.map((r: { name: string }) => r.name))
     }
     setCityLoading(false)
     setShowCityDropdown(true)
@@ -304,7 +305,7 @@ export default function Cadastro() {
       case 3: return passwordValidation.valid && form.password === form.confirmPassword
       case 4: return birthDateValid
       case 5: return form.schoolId !== '' && form.grade !== '' && form.section !== ''
-      case 6: return true // WhatsApp is optional
+      case 6: return form.whatsapp.replace(/\D/g, '').length >= 10
       case 7: return form.parentEmail.includes('@') && form.parentPhone.replace(/\D/g, '').length >= 10 && form.parentRelation !== '' && form.lgpdConsent
       default: return false
     }
@@ -351,17 +352,30 @@ export default function Cadastro() {
       let authUserId = user?.id
 
       if (!fromGoogle && form.email && form.password) {
-        const { error, user: newUser } = await signUpWithEmail(form.email, form.password)
-        if (error && !error.includes('already registered')) {
-          alert(`Erro no cadastro: ${error}`)
-          setSubmitting(false)
-          return
+        // Try signIn first (handles existing accounts / rate limit avoidance)
+        const { error: signInErr, data: signInData } = await supabase.auth.signInWithPassword({
+          email: form.email, password: form.password
+        })
+        if (!signInErr && signInData.user) {
+          authUserId = signInData.user.id
+        } else {
+          const { error, user: newUser } = await signUpWithEmail(form.email, form.password)
+          if (error && !error.includes('already registered')) {
+            setEmailError(error.includes('rate limit') ? 'Muitas tentativas. Aguarde alguns minutos.' : error)
+            setSubmitting(false)
+            return
+          }
+          if (newUser) authUserId = newUser.id
+          // Ensure session
+          if (!authUserId) {
+            const { data } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password })
+            authUserId = data.user?.id
+          }
         }
-        if (newUser) authUserId = newUser.id
       }
 
       if (!authUserId) {
-        alert('Erro: usuario nao autenticado. Tente novamente.')
+        setEmailError('Erro: usuario nao autenticado. Tente novamente.')
         setSubmitting(false)
         return
       }
@@ -639,7 +653,7 @@ export default function Cadastro() {
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Digite 3+ letras ou Enter para ver todas"
+                    placeholder="Digite o nome ou pressione Enter para ver todas"
                     value={form.city || form.citySearch}
                     onChange={(e) => {
                       const val = e.target.value
@@ -687,7 +701,7 @@ export default function Cadastro() {
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Digite 3+ letras ou Enter para ver todas"
+                    placeholder="Digite o nome ou pressione Enter para ver todas"
                     value={form.schoolId ? schoolSuggestions.find(s => s.id === form.schoolId)?.name || form.schoolSearch : form.schoolSearch}
                     onChange={(e) => {
                       const val = e.target.value
@@ -772,7 +786,6 @@ export default function Cadastro() {
             <div className="space-y-2">
               <p className="text-xs font-semibold text-gray-500">Visibilidade do WhatsApp:</p>
               {[
-                { value: 'none', label: 'Nao informar' },
                 { value: 'private', label: 'Privado (apenas notificacoes do App)' },
                 { value: 'friends', label: 'Amigos (notificacoes + visivel para amigos)' },
                 ...(age !== null && age >= 12 ? [{ value: 'public', label: 'Publico' }] : []),
@@ -786,7 +799,7 @@ export default function Cadastro() {
                 </label>
               ))}
             </div>
-            <p className="text-xs text-gray-400 text-center">Voce pode pular este passo</p>
+            <p className="text-xs text-gray-400 text-center">Informe seu telefone para receber notificacoes</p>
           </div>
         )}
 

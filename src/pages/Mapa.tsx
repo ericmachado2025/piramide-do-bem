@@ -30,6 +30,15 @@ interface AggData {
   schools: number
 }
 
+interface LegendCounts {
+  actions: number
+  students: number
+  mentors: number
+  requests: number
+  teachers: number
+  sponsors: number
+}
+
 // Component to programmatically fly to a location
 function FlyTo({ center, zoom }: { center: [number, number]; zoom: number }) {
   const map = useMap()
@@ -56,6 +65,7 @@ export default function Mapa() {
   const [selectedNeighborhood, setSelectedNeighborhood] = useState('')
   const [mapCenter, setMapCenter] = useState<[number, number]>([-14.235, -51.925])
   const [mapZoom, setMapZoom] = useState(4)
+  const [legendCounts, setLegendCounts] = useState<LegendCounts>({ actions: 0, students: 0, mentors: 0, requests: 0, teachers: 0, sponsors: 0 })
 
   useEffect(() => {
     async function load() {
@@ -71,12 +81,13 @@ export default function Mapa() {
         schoolCounts[sid] = (schoolCounts[sid] || 0) + 1
       }
 
-      // Get all schools (not just ones with students)
+      // Get schools with coordinates (geocoded ones) - these are the ones we can plot
       const { data: schools } = await supabase
         .from('schools')
         .select('id, name, state, city, neighborhood, latitude, longitude')
         .eq('active', true)
-        .limit(5000)
+        .not('latitude', 'is', null)
+        .limit(10000)
 
       if (schools) {
         const mapped = schools.map((s: { id: string; name: string; state: string; city: string; neighborhood: string | null; latitude: number | null; longitude: number | null }) => ({
@@ -95,6 +106,42 @@ export default function Mapa() {
     }
     load()
   }, [])
+
+  // Load legend counts based on current scope
+  useEffect(() => {
+    async function loadCounts() {
+      // Get school IDs in current scope
+      let scopeSchools = allSchoolData
+      if (selectedState) scopeSchools = scopeSchools.filter(s => s.state === selectedState)
+      if (selectedCity) scopeSchools = scopeSchools.filter(s => s.city === selectedCity)
+      if (selectedNeighborhood) scopeSchools = scopeSchools.filter(s => (s.neighborhood || 'Sem bairro') === selectedNeighborhood)
+
+      const schoolIds = scopeSchools.map(s => s.school_id)
+      const totalStudents = scopeSchools.reduce((sum, s) => sum + s.student_count, 0)
+
+      // Counts from DB - use head:true for efficient counting
+      const [actionsRes, mentorsRes, requestsRes, sponsorsRes] = await Promise.all([
+        schoolIds.length > 0
+          ? supabase.from('actions').select('*', { count: 'exact', head: true })
+          : Promise.resolve({ count: 0 }),
+        schoolIds.length > 0
+          ? supabase.from('students').select('*', { count: 'exact', head: true }).eq('is_mentor', true)
+          : Promise.resolve({ count: 0 }),
+        supabase.from('mentoring_requests').select('*', { count: 'exact', head: true }).eq('status', 'open').catch(() => ({ count: 0 })),
+        supabase.from('sponsors').select('*', { count: 'exact', head: true }).eq('active', true).catch(() => ({ count: 0 })),
+      ])
+
+      setLegendCounts({
+        actions: (actionsRes as { count: number | null }).count ?? 0,
+        students: totalStudents,
+        mentors: (mentorsRes as { count: number | null }).count ?? 0,
+        requests: (requestsRes as { count: number | null }).count ?? 0,
+        teachers: 0,
+        sponsors: (sponsorsRes as { count: number | null }).count ?? 0,
+      })
+    }
+    if (!loading) loadCounts()
+  }, [allSchoolData, selectedState, selectedCity, selectedNeighborhood, loading])
 
   // Aggregate by current drill level
   const markers = useMemo((): AggData[] => {
@@ -305,23 +352,23 @@ export default function Mapa() {
       </div>
 
       {/* Legend */}
-      <div className="absolute top-4 right-4 z-10 bg-white/95 backdrop-blur-md rounded-xl shadow-lg px-4 py-3">
+      <div className="absolute top-4 right-4 z-10 bg-white/95 backdrop-blur-md rounded-xl shadow-lg px-4 py-3 min-w-[180px]">
         <p className="text-xs font-bold text-[#1F4E79] mb-2">
           {drillLevel === 'states' ? 'Estados' : drillLevel === 'cities' ? 'Cidades' : drillLevel === 'neighborhoods' ? 'Bairros' : 'Escolas'}
+          {' '}({markers.length})
         </p>
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-[#02C39A]" />
-            <span className="text-xs text-gray-600">Com alunos</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-[#cbd5e1]" />
-            <span className="text-xs text-gray-600">Sem alunos (0)</span>
-          </div>
+        <div className="space-y-1 text-xs text-gray-600">
+          <div className="flex justify-between"><span>Boas Acoes</span><span className="font-bold text-[#1F4E79]">{legendCounts.actions}</span></div>
+          <div className="flex justify-between"><span>Alunos</span><span className="font-bold text-[#1F4E79]">{legendCounts.students}</span></div>
+          <div className="flex justify-between"><span>Monitores</span><span className="font-bold text-[#1F4E79]">{legendCounts.mentors}</span></div>
+          <div className="flex justify-between"><span>Pedidos Ajuda</span><span className="font-bold text-[#1F4E79]">{legendCounts.requests}</span></div>
+          <div className="flex justify-between"><span>Professores</span><span className="font-bold text-[#1F4E79]">{legendCounts.teachers}</span></div>
+          <div className="flex justify-between"><span>Patrocinadores</span><span className="font-bold text-[#1F4E79]">{legendCounts.sponsors}</span></div>
         </div>
-        <p className="text-[10px] text-gray-400 mt-2">
-          {markers.length} {drillLevel === 'states' ? 'estados' : drillLevel === 'cities' ? 'cidades' : drillLevel === 'neighborhoods' ? 'bairros' : 'escolas'}
-        </p>
+        <div className="flex items-center gap-3 mt-2 pt-2 border-t border-gray-100">
+          <div className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#02C39A]" /><span className="text-[10px] text-gray-500">Com alunos</span></div>
+          <div className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#cbd5e1]" /><span className="text-[10px] text-gray-500">Sem alunos</span></div>
+        </div>
       </div>
 
       <BottomNav />

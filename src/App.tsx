@@ -28,6 +28,8 @@ import ResponsavelCadastro from './pages/ResponsavelCadastro'
 import ResponsavelDashboard from './pages/ResponsavelDashboard'
 import PatrocinadorCadastro from './pages/PatrocinadorCadastro'
 import PatrocinadorDashboard from './pages/PatrocinadorDashboard'
+import AutorizarResponsavel from './pages/AutorizarResponsavel'
+import VerificationGuard from './components/VerificationGuard'
 
 export default function App() {
   return (
@@ -41,20 +43,21 @@ export default function App() {
           <Route path="/cadastro" element={<Cadastro />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/estatisticas" element={<Estatisticas />} />
+          <Route path="/autorizar" element={<AutorizarResponsavel />} />
 
-          {/* Aluno */}
+          {/* Aluno — protegido */}
           <Route path="/tribo" element={<EscolhaTribo />} />
           <Route path="/personagem" element={<EscolhaPersonagem />} />
-          <Route path="/home" element={<Home />} />
-          <Route path="/registrar" element={<RegistrarAcao />} />
-          <Route path="/validar" element={<ValidarAcao />} />
-          <Route path="/perfil" element={<Perfil />} />
-          <Route path="/ranking" element={<Ranking />} />
-          <Route path="/mapa" element={<Mapa />} />
-          <Route path="/recompensas" element={<Recompensas />} />
-          <Route path="/monitoria" element={<Monitoria />} />
-          <Route path="/notificacoes" element={<Notificacoes />} />
-          <Route path="/patrocinadores" element={<Patrocinadores />} />
+          <Route path="/home" element={<VerificationGuard><Home /></VerificationGuard>} />
+          <Route path="/registrar" element={<VerificationGuard><RegistrarAcao /></VerificationGuard>} />
+          <Route path="/validar" element={<VerificationGuard><ValidarAcao /></VerificationGuard>} />
+          <Route path="/perfil" element={<VerificationGuard><Perfil /></VerificationGuard>} />
+          <Route path="/ranking" element={<VerificationGuard><Ranking /></VerificationGuard>} />
+          <Route path="/mapa" element={<VerificationGuard><Mapa /></VerificationGuard>} />
+          <Route path="/recompensas" element={<VerificationGuard><Recompensas /></VerificationGuard>} />
+          <Route path="/monitoria" element={<VerificationGuard><Monitoria /></VerificationGuard>} />
+          <Route path="/notificacoes" element={<VerificationGuard><Notificacoes /></VerificationGuard>} />
+          <Route path="/patrocinadores" element={<VerificationGuard><Patrocinadores /></VerificationGuard>} />
 
           {/* Professor */}
           <Route path="/professor/cadastro" element={<ProfessorCadastro />} />

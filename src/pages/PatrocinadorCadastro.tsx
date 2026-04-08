@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ChevronRight,
@@ -8,6 +8,7 @@ import {
   Building2,
   MapPin,
   Loader2,
+  Search,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -17,6 +18,34 @@ const BR_STATES = [
   'AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT',
   'PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO',
 ]
+
+const STATE_NAMES: Record<string, string> = {
+  AC: 'Acre', AL: 'Alagoas', AM: 'Amazonas', AP: 'Amapa', BA: 'Bahia',
+  CE: 'Ceara', DF: 'Distrito Federal', ES: 'Espirito Santo', GO: 'Goias',
+  MA: 'Maranhao', MG: 'Minas Gerais', MS: 'Mato Grosso do Sul', MT: 'Mato Grosso',
+  PA: 'Para', PB: 'Paraiba', PE: 'Pernambuco', PI: 'Piaui', PR: 'Parana',
+  RJ: 'Rio de Janeiro', RN: 'Rio Grande do Norte', RO: 'Rondonia', RR: 'Roraima',
+  RS: 'Rio Grande do Sul', SC: 'Santa Catarina', SE: 'Sergipe', SP: 'Sao Paulo', TO: 'Tocantins',
+}
+
+function formatCNPJ(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 14)
+  if (digits.length <= 2) return digits
+  if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`
+  if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`
+  if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`
+}
+
+function formatCPF(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 11)
+  if (digits.length <= 3) return digits
+  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`
+  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`
+}
+
+const inputClass = "w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-[#028090] focus:outline-none text-lg transition-colors"
 
 export default function PatrocinadorCadastro() {
   const navigate = useNavigate()
@@ -33,13 +62,20 @@ export default function PatrocinadorCadastro() {
   const [authLoading, setAuthLoading] = useState(false)
 
   // Step 2
+  const [personType, setPersonType] = useState<'PJ' | 'PF'>('PJ')
   const [businessName, setBusinessName] = useState('')
+  const [document, setDocument] = useState('')
   const [contactName, setContactName] = useState('')
   const [phone, setPhone] = useState('')
 
   // Step 3
-  const [city, setCity] = useState('')
   const [state, setState] = useState('')
+  const [city, setCity] = useState('')
+  const [citySearch, setCitySearch] = useState('')
+  const [citySuggestions, setCitySuggestions] = useState<string[]>([])
+  const [cityLoading, setCityLoading] = useState(false)
+  const [showCityDropdown, setShowCityDropdown] = useState(false)
+  const cityDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Step 4
   const [verificationCode, setVerificationCode] = useState('')
@@ -51,16 +87,54 @@ export default function PatrocinadorCadastro() {
   const [submitting, setSubmitting] = useState(false)
   const [globalError, setGlobalError] = useState('')
 
-  // Step 1: Auth
+  // City autocomplete — uses cities table via states FK
+  const fetchCities = useCallback(async (st: string, query?: string) => {
+    setCityLoading(true)
+    const { data: stateRow } = await supabase.from('states').select('id').eq('abbreviation', st).single()
+    if (stateRow) {
+      let q = supabase.from('cities').select('name').eq('state_id', stateRow.id)
+      if (query && query.length >= 3) q = q.ilike('name', `${query}%`)
+      q = q.order('name')
+      const { data } = await q
+      if (data) setCitySuggestions(data.map((r: { name: string }) => r.name))
+    }
+    setCityLoading(false)
+    setShowCityDropdown(true)
+  }, [])
+
+  const searchCities = useCallback((st: string, query: string) => {
+    if (cityDebounceRef.current) clearTimeout(cityDebounceRef.current)
+    if (!st || query.length < 3) { setCitySuggestions([]); return }
+    cityDebounceRef.current = setTimeout(() => fetchCities(st, query), 300)
+  }, [fetchCities])
+
+  // Step 1: Auth — try signIn first, then signUp
   const handleAuth = async () => {
     setAuthError('')
     setAuthLoading(true)
     try {
+      // Try login first (handles existing accounts)
+      const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password })
+      if (!signInErr) {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session) { setStep(2); setAuthLoading(false); return }
+      }
+      if (signInErr && !signInErr.message.includes('Invalid login')) {
+        const msg = signInErr.message.includes('rate limit') ? 'Muitas tentativas. Aguarde alguns minutos.' : signInErr.message
+        setAuthError(msg)
+        setAuthLoading(false)
+        return
+      }
+      // Create new account
       const { error } = await signUpWithEmail(email, password)
       if (error && !error.includes('already registered')) {
         setAuthError(error)
         setAuthLoading(false)
         return
+      }
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        await supabase.auth.signInWithPassword({ email, password })
       }
       setStep(2)
     } catch {
@@ -68,6 +142,23 @@ export default function PatrocinadorCadastro() {
     }
     setAuthLoading(false)
   }
+
+  // Re-check auth when user changes (for session propagation)
+  useEffect(() => {
+    if (user && step === 1) setStep(2)
+  }, [user, step])
+
+  // Browser back support + sessionStorage
+  useEffect(() => {
+    window.history.pushState({ step }, '')
+    sessionStorage.setItem('patrocinador_backup', JSON.stringify({ step, personType, businessName, document, contactName, phone, state, city }))
+  }, [step, personType, businessName, document, contactName, phone, state, city])
+
+  useEffect(() => {
+    const handlePop = () => setStep(prev => prev > 1 ? prev - 1 : prev)
+    window.addEventListener('popstate', handlePop)
+    return () => window.removeEventListener('popstate', handlePop)
+  }, [])
 
   // Step 4: Phone verification
   const handleSendCode = async () => {
@@ -86,7 +177,6 @@ export default function PatrocinadorCadastro() {
     }
 
     console.log(`[Piramide do Bem] Codigo de verificacao: ${code}`)
-    alert(`Codigo de verificacao enviado! (DEV: ${code})`)
     setCodeSent(true)
     setCodeError('')
   }
@@ -100,17 +190,25 @@ export default function PatrocinadorCadastro() {
     }
   }
 
-  // Submit
+  // Submit — with retry auth
   const handleSubmit = async () => {
     setSubmitting(true)
     setGlobalError('')
 
     try {
-      const userId = user?.id
+      let userId = user?.id
+
+      // If user is null, try to re-authenticate
       if (!userId) {
-        setGlobalError('Voce precisa estar autenticado.')
-        setSubmitting(false)
-        return
+        if (email && password) {
+          const { data } = await supabase.auth.signInWithPassword({ email, password })
+          userId = data.user?.id
+        }
+        if (!userId) {
+          setGlobalError('Voce precisa estar autenticado. Clique novamente para tentar.')
+          setSubmitting(false)
+          return
+        }
       }
 
       const { error: sponsorError } = await supabase
@@ -122,7 +220,9 @@ export default function PatrocinadorCadastro() {
           phone,
           city,
           state,
-          email: user.email || email,
+          email: user?.email || email,
+          person_type: personType,
+          document: document.replace(/\D/g, '') || null,
         })
 
       if (sponsorError) throw sponsorError
@@ -206,9 +306,7 @@ export default function PatrocinadorCadastro() {
                   placeholder="Seu email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:outline-none text-lg transition-colors"
-                  onFocus={(e) => (e.target.style.borderColor = '#028090')}
-                  onBlur={(e) => (e.target.style.borderColor = '#e5e7eb')}
+                  className={inputClass}
                   onKeyDown={(e) => e.key === 'Enter' && canAdvance() && handleNext()}
                   autoFocus
                 />
@@ -230,28 +328,50 @@ export default function PatrocinadorCadastro() {
           <div className="space-y-4">
             <div className="text-center">
               <Building2 className="w-12 h-12 mx-auto" style={{ color: '#028090' }} />
-              <h2 className="text-2xl font-extrabold mt-2" style={{ color: '#1F4E79' }}>Dados da empresa</h2>
-              <p className="text-gray-400 text-sm mt-1">Informacoes sobre seu negocio</p>
+              <h2 className="text-2xl font-extrabold mt-2" style={{ color: '#1F4E79' }}>Dados do patrocinador</h2>
+              <p className="text-gray-400 text-sm mt-1">Informacoes sobre voce ou seu negocio</p>
             </div>
+
+            {/* PF/PJ toggle */}
+            <div className="flex gap-2">
+              {(['PJ', 'PF'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => { setPersonType(t); setDocument('') }}
+                  className={`flex-1 py-2.5 rounded-xl font-semibold text-sm transition-all border-2 ${
+                    personType === t
+                      ? 'border-[#028090] bg-[#028090]/5 text-[#028090]'
+                      : 'border-gray-200 text-gray-400 hover:border-gray-300'
+                  }`}
+                >
+                  {t === 'PJ' ? 'Pessoa Juridica (PJ)' : 'Pessoa Fisica (PF)'}
+                </button>
+              ))}
+            </div>
+
             <input
               type="text"
-              placeholder="Nome da empresa"
+              placeholder={personType === 'PJ' ? 'Nome da empresa' : 'Nome completo'}
               value={businessName}
               onChange={(e) => setBusinessName(e.target.value)}
-              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:outline-none text-lg transition-colors"
-              onFocus={(e) => (e.target.style.borderColor = '#028090')}
-              onBlur={(e) => (e.target.style.borderColor = '#e5e7eb')}
+              className={inputClass}
               onKeyDown={(e) => e.key === 'Enter' && canAdvance() && handleNext()}
               autoFocus
+            />
+            <input
+              type="text"
+              placeholder={personType === 'PJ' ? 'CNPJ' : 'CPF'}
+              value={document}
+              onChange={(e) => setDocument(personType === 'PJ' ? formatCNPJ(e.target.value) : formatCPF(e.target.value))}
+              className={inputClass}
+              onKeyDown={(e) => e.key === 'Enter' && canAdvance() && handleNext()}
             />
             <input
               type="text"
               placeholder="Nome do contato"
               value={contactName}
               onChange={(e) => setContactName(e.target.value)}
-              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:outline-none text-lg transition-colors"
-              onFocus={(e) => (e.target.style.borderColor = '#028090')}
-              onBlur={(e) => (e.target.style.borderColor = '#e5e7eb')}
+              className={inputClass}
               onKeyDown={(e) => e.key === 'Enter' && canAdvance() && handleNext()}
             />
             <input
@@ -259,44 +379,68 @@ export default function PatrocinadorCadastro() {
               placeholder="Telefone (ex: 51999999999)"
               value={phone}
               onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:outline-none text-lg transition-colors"
-              onFocus={(e) => (e.target.style.borderColor = '#028090')}
-              onBlur={(e) => (e.target.style.borderColor = '#e5e7eb')}
+              className={inputClass}
               onKeyDown={(e) => e.key === 'Enter' && canAdvance() && handleNext()}
             />
           </div>
         )}
 
-        {/* Step 3: Location */}
+        {/* Step 3: Location — State first, then City autocomplete */}
         {step === 3 && (
           <div className="space-y-4">
             <div className="text-center">
               <MapPin className="w-12 h-12 mx-auto" style={{ color: '#028090' }} />
               <h2 className="text-2xl font-extrabold mt-2" style={{ color: '#1F4E79' }}>Localizacao</h2>
-              <p className="text-gray-400 text-sm mt-1">Cidade e estado da empresa</p>
+              <p className="text-gray-400 text-sm mt-1">Estado e cidade da empresa</p>
             </div>
-            <input
-              type="text"
-              placeholder="Cidade"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:outline-none text-lg transition-colors"
-              onFocus={(e) => (e.target.style.borderColor = '#028090')}
-              onBlur={(e) => (e.target.style.borderColor = '#e5e7eb')}
-              onKeyDown={(e) => e.key === 'Enter' && canAdvance() && handleNext()}
-              autoFocus
-            />
             <select
               value={state}
-              onChange={(e) => setState(e.target.value)}
-              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:outline-none text-lg transition-colors bg-white"
-              style={{ borderColor: state ? '#028090' : undefined }}
+              onChange={(e) => { setState(e.target.value); setCity(''); setCitySearch(''); setCitySuggestions([]) }}
+              className={`${inputClass} bg-white`}
             >
               <option value="">Selecione o estado</option>
               {BR_STATES.map((s) => (
-                <option key={s} value={s}>{s}</option>
+                <option key={s} value={s}>{s} - {STATE_NAMES[s]}</option>
               ))}
             </select>
+
+            {state && (
+              <div className="relative">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Digite 3+ letras ou Enter para ver todas"
+                    value={city || citySearch}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setCitySearch(val)
+                      if (city) setCity('')
+                      searchCities(state, val)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); fetchCities(state) }
+                    }}
+                    onFocus={() => citySuggestions.length > 0 && setShowCityDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowCityDropdown(false), 200)}
+                    className="w-full pl-10 pr-10 py-3.5 rounded-xl border-2 border-gray-200 focus:border-[#028090] focus:outline-none text-lg transition-colors"
+                    autoFocus
+                  />
+                  {cityLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#028090] animate-spin" />}
+                </div>
+                {showCityDropdown && citySuggestions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border-2 border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                    {citySuggestions.map((c) => (
+                      <button key={c} type="button"
+                        onMouseDown={() => { setCity(c); setCitySearch(''); setShowCityDropdown(false) }}
+                        className="w-full text-left px-4 py-2.5 hover:bg-[#028090]/10 text-sm transition-colors">
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -318,14 +462,16 @@ export default function PatrocinadorCadastro() {
               </button>
             ) : !codeVerified ? (
               <>
+                <p className="text-sm text-gray-500 text-center bg-gray-50 rounded-xl p-3">
+                  Codigo enviado para {phone}. Se nao receber em 1 minuto, use o codigo de teste exibido no console do navegador (F12).
+                </p>
                 <input
                   type="text"
                   placeholder="Digite o codigo de 6 digitos"
                   value={verificationCode}
                   onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:outline-none text-lg text-center tracking-widest transition-colors"
-                  onFocus={(e) => (e.target.style.borderColor = '#028090')}
-                  onBlur={(e) => (e.target.style.borderColor = '#e5e7eb')}
+                  onKeyDown={(e) => e.key === 'Enter' && verificationCode.length === 6 && handleVerifyCode()}
+                  className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-[#028090] focus:outline-none text-lg text-center tracking-widest transition-colors"
                   autoFocus
                   maxLength={6}
                 />

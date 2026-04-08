@@ -43,10 +43,11 @@ export default function RegistrarAcao() {
         setStudentId(me.id)
       }
 
-      // Load action types with scoring_rule_key
+      // Load action types with scoring_rule_key (only active)
       const { data: types } = await supabase
         .from('action_types')
         .select('*, scoring_rule_key')
+        .eq('active', true)
         .order('display_order')
       if (types) setActionTypes(types as ActionType[])
 
@@ -59,20 +60,23 @@ export default function RegistrarAcao() {
   const isOtherAction = selectedActionType?.name?.toLowerCase().includes('outr') ?? false
   const allowsMultiple = true // allow selecting multiple beneficiaries
 
+  const [showAll, setShowAll] = useState(false)
+
   // Debounced search for all participants (open, not restricted to school)
   useEffect(() => {
-    if (searchQuery.length < 2) { setClassmates([]); return }
+    if (!showAll && searchQuery.length < 2) { setClassmates([]); return }
     const timer = setTimeout(async () => {
-      const { data } = await supabase
-        .from('students')
-        .select('id, name')
-        .or(`name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%,whatsapp.ilike.%${searchQuery}%`)
-        .neq('id', studentId ?? '')
-        .limit(20)
+      let q = supabase.from('students').select('id, name').neq('id', studentId ?? '')
+      if (searchQuery.length >= 2) {
+        q = q.or(`name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%,whatsapp.ilike.%${searchQuery}%`).limit(20)
+      } else {
+        q = q.order('name').limit(50)
+      }
+      const { data } = await q
       if (data) setClassmates(data)
     }, 300)
     return () => clearTimeout(timer)
-  }, [searchQuery, studentId])
+  }, [searchQuery, studentId, showAll])
 
   const availablePeople = classmates
 
@@ -291,8 +295,9 @@ export default function RegistrarAcao() {
               <input
                 type="text"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar colega..."
+                onChange={(e) => { setSearchQuery(e.target.value); setShowAll(false) }}
+                onKeyDown={(e) => { if (e.key === 'Enter' && searchQuery.length < 2) { e.preventDefault(); setShowAll(true) } }}
+                placeholder="Buscar colega ou Enter para ver todos"
                 className="w-full bg-white border border-gray-200 rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all"
               />
             </div>
@@ -307,8 +312,8 @@ export default function RegistrarAcao() {
               {availablePeople.length === 0 ? (
                 <div className="bg-white rounded-xl shadow-sm p-6 text-center">
                   <p className="text-gray-400 text-sm">
-                    {classmates.length === 0
-                      ? 'Nenhum colega da sua escola cadastrado ainda.'
+                    {searchQuery.length < 2 && !showAll
+                      ? 'Pressione Enter para ver todos os alunos'
                       : 'Nenhum resultado encontrado'}
                   </p>
                 </div>
