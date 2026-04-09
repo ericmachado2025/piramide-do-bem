@@ -20,12 +20,12 @@ const BR_STATES = [
 ]
 
 const STATE_NAMES: Record<string, string> = {
-  AC: 'Acre', AL: 'Alagoas', AM: 'Amazonas', AP: 'Amapa', BA: 'Bahia',
-  CE: 'Ceara', DF: 'Distrito Federal', ES: 'Espirito Santo', GO: 'Goias',
-  MA: 'Maranhao', MG: 'Minas Gerais', MS: 'Mato Grosso do Sul', MT: 'Mato Grosso',
-  PA: 'Para', PB: 'Paraiba', PE: 'Pernambuco', PI: 'Piaui', PR: 'Parana',
-  RJ: 'Rio de Janeiro', RN: 'Rio Grande do Norte', RO: 'Rondonia', RR: 'Roraima',
-  RS: 'Rio Grande do Sul', SC: 'Santa Catarina', SE: 'Sergipe', SP: 'Sao Paulo', TO: 'Tocantins',
+  AC: 'Acre', AL: 'Alagoas', AM: 'Amazonas', AP: 'Amapá', BA: 'Bahia',
+  CE: 'Ceará', DF: 'Distrito Federal', ES: 'Espírito Santo', GO: 'Goiás',
+  MA: 'Maranhão', MG: 'Minas Gerais', MS: 'Mato Grosso do Sul', MT: 'Mato Grosso',
+  PA: 'Pará', PB: 'Paraíba', PE: 'Pernambuco', PI: 'Piauí', PR: 'Paraná',
+  RJ: 'Rio de Janeiro', RN: 'Rio Grande do Norte', RO: 'Rondônia', RR: 'Roraima',
+  RS: 'Rio Grande do Sul', SC: 'Santa Catarina', SE: 'Sergipe', SP: 'São Paulo', TO: 'Tocantins',
 }
 
 function formatCNPJ(value: string): string {
@@ -208,7 +208,7 @@ export default function PatrocinadorCadastro() {
       setCodeVerified(true)
       setCodeError('')
     } else {
-      setCodeError('Codigo incorreto. Tente novamente.')
+      setCodeError('Código incorreto. Tente novamente.')
     }
   }
 
@@ -227,7 +227,7 @@ export default function PatrocinadorCadastro() {
           userId = data.user?.id
         }
         if (!userId) {
-          setGlobalError('Voce precisa estar autenticado. Clique novamente para tentar.')
+          setGlobalError('Você precisa estar autenticado. Clique novamente para tentar.')
           setSubmitting(false)
           return
         }
@@ -333,7 +333,7 @@ export default function PatrocinadorCadastro() {
             {user ? (
               <div className="p-4 rounded-xl text-center" style={{ backgroundColor: '#f0fdfa', border: '1px solid #02C39A' }}>
                 <CheckCircle2 className="w-6 h-6 mx-auto mb-2" style={{ color: '#02C39A' }} />
-                <p className="text-sm" style={{ color: '#1F4E79' }}>Voce ja esta autenticado como <strong>{user.email}</strong></p>
+                <p className="text-sm" style={{ color: '#1F4E79' }}>Você já está autenticado como <strong>{user.email}</strong></p>
               </div>
             ) : (
               <>
@@ -365,7 +365,7 @@ export default function PatrocinadorCadastro() {
             <div className="text-center">
               <Building2 className="w-12 h-12 mx-auto" style={{ color: '#028090' }} />
               <h2 className="text-2xl font-extrabold mt-2" style={{ color: '#1F4E79' }}>Dados do patrocinador</h2>
-              <p className="text-gray-400 text-sm mt-1">Informacoes sobre voce ou seu negocio</p>
+              <p className="text-gray-400 text-sm mt-1">Informações sobre você ou seu negócio</p>
             </div>
 
             {/* PF/PJ toggle */}
@@ -495,7 +495,7 @@ export default function PatrocinadorCadastro() {
             <div className="text-center">
               <Phone className="w-12 h-12 mx-auto" style={{ color: '#028090' }} />
               <h2 className="text-2xl font-extrabold mt-2" style={{ color: '#1F4E79' }}>Verificar telefone</h2>
-              <p className="text-gray-400 text-sm mt-1">Enviaremos um codigo para {phone}</p>
+              <p className="text-gray-400 text-sm mt-1">Enviaremos um código para {phone}</p>
             </div>
             {!codeSent ? (
               <button
@@ -503,16 +503,16 @@ export default function PatrocinadorCadastro() {
                 className="w-full py-3.5 rounded-xl font-bold text-white text-lg transition-all hover:opacity-90"
                 style={{ backgroundColor: '#028090' }}
               >
-                Enviar codigo
+                Enviar código
               </button>
             ) : !codeVerified ? (
               <>
                 <p className="text-sm text-gray-500 text-center bg-gray-50 rounded-xl p-3">
-                  Codigo enviado para {phone}. Se nao receber em 1 minuto, use o codigo de teste exibido no console do navegador (F12).
+                  Código enviado para {phone}. Se não receber em 1 minuto, use o código de teste exibido no console do navegador (F12).
                 </p>
                 <input
                   type="text"
-                  placeholder="Digite o codigo de 6 digitos"
+                  placeholder="Digite o código de 6 dígitos"
                   value={verificationCode}
                   onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   onKeyDown={(e) => e.key === 'Enter' && verificationCode.length === 6 && handleVerifyCode()}
@@ -534,7 +534,7 @@ export default function PatrocinadorCadastro() {
                   className="w-full text-sm underline"
                   style={{ color: '#028090' }}
                 >
-                  Reenviar codigo
+                  Reenviar código
                 </button>
               </>
             ) : (
@@ -571,7 +571,7 @@ export default function PatrocinadorCadastro() {
             style={{ backgroundColor: canAdvance() ? '#028090' : '#e5e7eb', color: canAdvance() ? '#fff' : '#9ca3af' }}
           >
             {(authLoading || submitting) && <Loader2 className="w-5 h-5 animate-spin" />}
-            {step === totalSteps ? 'Concluir cadastro' : step === 1 && !user ? 'Criar conta' : 'Proximo'}
+            {step === totalSteps ? 'Concluir cadastro' : step === 1 && !user ? 'Criar conta' : 'Próximo'}
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>

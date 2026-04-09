@@ -13,7 +13,7 @@ type Archetype = 'HERO' | 'ANTI_HERO' | 'VILLAIN' | 'NEUTRAL' | ''
 const genderOptions = [
   { value: 'male' as Gender, label: 'Masculino', icon: '\u2642\uFE0F', dbValue: 'MALE' },
   { value: 'female' as Gender, label: 'Feminino', icon: '\u2640\uFE0F', dbValue: 'FEMALE' },
-  { value: 'nonbinary' as Gender, label: 'Nao-binario', icon: '\u26A7\uFE0F', dbValue: 'OTHER' },
+  { value: 'nonbinary' as Gender, label: 'Não-binário', icon: '\u26A7\uFE0F', dbValue: 'OTHER' },
 ]
 
 const iconClassToEmoji: Record<string, string> = {
@@ -34,7 +34,9 @@ const iconClassToEmoji: Record<string, string> = {
   'fa-biohazard': '\u2623\uFE0F',
   'fa-hat-wizard': '\uD83E\uDDD9',
   'fa-jedi': '\u2694\uFE0F',
-  'fa-x': '\u2716\uFE0F',
+  'fa-x': '\uD83E\uDDB8',
+  'fa-a': '\u2728',
+  'fa-4': '\uD83D\uDC65',
 }
 
 function getEmoji(iconClass: string | null): string {
@@ -108,9 +110,15 @@ export default function EscolhaTribo() {
 
   // Load available archetypes when community is selected
   useEffect(() => {
-    if (!selectedCommunity) { setAvailableArchetypes(new Set()); return }
+    if (!selectedCommunity?.id) { setAvailableArchetypes(new Set()); return }
+    console.log('[EscolhaTribo] Loading archetypes for community:', selectedCommunity.id, selectedCommunity.name)
     supabase.from('characters').select('archetype').eq('community_id', selectedCommunity.id).eq('status', 'ACTIVE')
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('[EscolhaTribo] Archetypes query error:', error)
+          return
+        }
+        console.log('[EscolhaTribo] Archetypes loaded:', data?.length, data)
         if (data) setAvailableArchetypes(new Set(data.map((c: { archetype: string }) => c.archetype)))
       })
   }, [selectedCommunity])
@@ -133,24 +141,39 @@ export default function EscolhaTribo() {
 
   // Load characters when community + archetype + gender selected
   useEffect(() => {
-    if (!selectedCommunity || !selectedArchetype || !genderDb) return
+    if (!selectedCommunity?.id || !selectedArchetype || !genderDb) return
     setLoading(true)
-    supabase.from('characters').select('*, level:community_levels(*)')
-      .eq('community_id', selectedCommunity.id)
-      .eq('archetype', selectedArchetype)
-      .eq('gender', genderDb)
-      .eq('status', 'ACTIVE')
-      .order('display_order')
-      .then(({ data }) => {
-        if (data) {
-          // Sort by level tier
-          const sorted = data.sort((a: Character, b: Character) =>
-            (a.level?.tier ?? 0) - (b.level?.tier ?? 0)
-          )
-          setCharacters(sorted)
-        }
-        setLoading(false)
-      })
+    console.log('[EscolhaTribo] Loading characters:', { community: selectedCommunity.id, archetype: selectedArchetype, gender: genderDb })
+    async function loadCharacters() {
+      // First try with gender filter
+      let { data } = await supabase.from('characters').select('*, level:community_levels(*)')
+        .eq('community_id', selectedCommunity!.id)
+        .eq('archetype', selectedArchetype)
+        .eq('gender', genderDb)
+        .eq('status', 'ACTIVE')
+        .order('display_order')
+
+      // Fallback: if no results with this gender, try without gender filter
+      if (!data || data.length === 0) {
+        console.log('[EscolhaTribo] No characters with gender filter, retrying without...')
+        const fallback = await supabase.from('characters').select('*, level:community_levels(*)')
+          .eq('community_id', selectedCommunity!.id)
+          .eq('archetype', selectedArchetype)
+          .eq('status', 'ACTIVE')
+          .order('display_order')
+        data = fallback.data
+      }
+
+      console.log('[EscolhaTribo] Characters loaded:', data?.length)
+      if (data) {
+        const sorted = data.sort((a: Character, b: Character) =>
+          (a.level?.tier ?? 0) - (b.level?.tier ?? 0)
+        )
+        setCharacters(sorted)
+      }
+      setLoading(false)
+    }
+    loadCharacters()
   }, [selectedCommunity, selectedArchetype, genderDb])
 
   const handleGenderSelect = (g: Gender) => {

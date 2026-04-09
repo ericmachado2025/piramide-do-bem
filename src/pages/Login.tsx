@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -235,14 +235,6 @@ export default function Login() {
             </div>
           )}
 
-          <div className="text-center pt-1">
-            <p className="text-gray-400 text-sm">
-              Não tem conta?{' '}
-              <Link to="/cadastro/perfil" className="text-teal font-semibold hover:underline">
-                Cadastre-se
-              </Link>
-            </p>
-          </div>
         </div>
       </div>
 

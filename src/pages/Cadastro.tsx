@@ -33,12 +33,12 @@ const BRAZILIAN_STATES = [
 ]
 
 const STATE_NAMES: Record<string, string> = {
-  AC: 'Acre', AL: 'Alagoas', AM: 'Amazonas', AP: 'Amapa', BA: 'Bahia',
-  CE: 'Ceara', DF: 'Distrito Federal', ES: 'Espirito Santo', GO: 'Goias',
-  MA: 'Maranhao', MG: 'Minas Gerais', MS: 'Mato Grosso do Sul', MT: 'Mato Grosso',
-  PA: 'Para', PB: 'Paraiba', PE: 'Pernambuco', PI: 'Piaui', PR: 'Parana',
-  RJ: 'Rio de Janeiro', RN: 'Rio Grande do Norte', RO: 'Rondonia', RR: 'Roraima',
-  RS: 'Rio Grande do Sul', SC: 'Santa Catarina', SE: 'Sergipe', SP: 'Sao Paulo', TO: 'Tocantins',
+  AC: 'Acre', AL: 'Alagoas', AM: 'Amazonas', AP: 'Amapá', BA: 'Bahia',
+  CE: 'Ceará', DF: 'Distrito Federal', ES: 'Espírito Santo', GO: 'Goiás',
+  MA: 'Maranhão', MG: 'Minas Gerais', MS: 'Mato Grosso do Sul', MT: 'Mato Grosso',
+  PA: 'Pará', PB: 'Paraíba', PE: 'Pernambuco', PI: 'Piauí', PR: 'Paraná',
+  RJ: 'Rio de Janeiro', RN: 'Rio Grande do Norte', RO: 'Rondônia', RR: 'Roraima',
+  RS: 'Rio Grande do Sul', SC: 'Santa Catarina', SE: 'Sergipe', SP: 'São Paulo', TO: 'Tocantins',
 }
 
 // Grades by school type
@@ -60,7 +60,7 @@ const ALL_GRADES = [
 const sections = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'N/A']
 
 const MONTHS = [
-  'Janeiro', 'Fevereiro', 'Marco', 'Abril', 'Maio', 'Junho',
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ]
 
@@ -601,7 +601,7 @@ export default function Cadastro() {
                 )}
               </div>
             )}
-            <p className="text-xs text-gray-400 text-center">Confira se o email esta correto. Voce precisara dele para recuperar sua senha.</p>
+            <p className="text-xs text-gray-400 text-center">Confira se o email está correto. Você precisará dele para recuperar sua senha.</p>
           </div>
         )}
 
@@ -946,7 +946,7 @@ export default function Cadastro() {
               ${canAdvance() && !submitting
                 ? 'bg-teal text-white hover:bg-teal/90 hover:shadow-lg active:scale-[0.98]'
                 : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
-            {submitting ? 'Salvando...' : effectiveIndex === effectiveSteps.length - 1 || (step === 6 && !needsConsent) ? 'Entrar na Pirâmide! 🏆' : 'Proximo'}
+            {submitting ? 'Salvando...' : effectiveIndex === effectiveSteps.length - 1 || (step === 6 && !needsConsent) ? 'Entrar na Pirâmide! 🏆' : 'Próximo'}
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>
