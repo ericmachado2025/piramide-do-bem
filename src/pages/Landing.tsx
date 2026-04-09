@@ -71,7 +71,7 @@ export default function Landing() {
 
         {/* Title */}
         <h1 className="text-4xl md:text-6xl font-extrabold text-white leading-tight mb-4 tracking-tight">
-          Piramide do Bem
+          Pirâmide do Bem
           <span className="block text-2xl md:text-3xl font-bold text-white/70 mt-1">
             Escolar
           </span>
@@ -79,7 +79,7 @@ export default function Landing() {
 
         {/* Subtitle */}
         <p className="text-white/80 text-lg md:text-xl mb-10 max-w-md leading-relaxed">
-          O aluno que se sente parte de algo nao abandona a escola.
+          A escola não é só o lugar onde você aprende — é onde você pertence. E pertencer muda tudo.
         </p>
 
         {/* Buttons */}
@@ -88,14 +88,14 @@ export default function Landing() {
             to="/login"
             className="flex items-center justify-center gap-2 bg-white text-teal font-bold text-lg py-4 px-8 rounded-2xl shadow-lg hover:shadow-2xl hover:scale-105 active:scale-95 transition-all duration-200"
           >
-            Entrar
+            Já sou da Pirâmide
           </Link>
 
           <Link
             to="/cadastro/perfil"
             className="flex items-center justify-center gap-2 border-2 border-white/60 text-white font-semibold text-base py-3 px-6 rounded-2xl hover:bg-white/10 hover:border-white hover:scale-105 active:scale-95 transition-all duration-200"
           >
-            Cadastrar-se
+            Ainda não sou, mas quero participar!
           </Link>
         </div>
 
@@ -104,14 +104,14 @@ export default function Landing() {
           to="/estatisticas"
           className="mt-8 text-white/60 hover:text-white/90 underline underline-offset-4 text-sm transition-colors"
         >
-          Ver impacto &rarr;
+          Ver o que a Pirâmide já construiu! &rarr;
         </Link>
       </div>
 
       {/* Footer */}
       <div className="absolute bottom-6 left-0 right-0 text-center">
         <p className="text-white/40 text-xs md:text-sm">
-          Desafio LED 2026 — Globo + Fundacao Roberto Marinho
+          Desafio LED 2026 — Globo + Fundação Roberto Marinho
         </p>
       </div>
     </div>

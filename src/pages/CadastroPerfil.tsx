@@ -5,7 +5,7 @@ const profiles = [
   {
     emoji: '🎮',
     title: 'Sou Aluno',
-    description: 'Participe de missoes, ganhe pontos e evolua com sua tribo.',
+    description: 'Participe de missões, ganhe pontos e evolua com sua tribo.',
     to: '/cadastro',
   },
   {
@@ -16,14 +16,14 @@ const profiles = [
   },
   {
     emoji: '👨‍👩‍👧',
-    title: 'Sou Responsavel',
+    title: 'Sou Responsável',
     description: 'Acompanhe o progresso e as conquistas do seu filho.',
     to: '/responsavel/cadastro',
   },
   {
     emoji: '🏪',
     title: 'Sou Patrocinador',
-    description: 'Apoie a educacao e acompanhe o impacto do seu investimento.',
+    description: 'Apoie a educação e acompanhe o impacto do seu investimento.',
     to: '/patrocinador/cadastro',
   },
 ]
@@ -43,8 +43,8 @@ export default function CadastroPerfil() {
 
       <div className="w-full max-w-lg">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-extrabold text-navy">Como voce quer participar?</h1>
-          <p className="text-gray-400 text-sm mt-2">Escolha seu perfil para comecar</p>
+          <h1 className="text-3xl font-extrabold text-navy">Como você quer participar?</h1>
+          <p className="text-gray-400 text-sm mt-2">Escolha seu perfil para começar</p>
         </div>
 
         <div className="grid gap-4">
@@ -62,6 +62,10 @@ export default function CadastroPerfil() {
             </Link>
           ))}
         </div>
+
+        <p className="text-sm text-gray-500 text-center mt-6 px-2 leading-relaxed">
+          Escolha como você quer participar agora. Se você for mais de uma coisa — aluno E professor, por exemplo — não se preocupe: depois de entrar, você pode adicionar outros papéis direto no seu perfil!
+        </p>
       </div>
     </div>
   )

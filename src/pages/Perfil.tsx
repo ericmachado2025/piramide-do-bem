@@ -391,12 +391,11 @@ export default function Perfil() {
             </div>
             {tierInfo.next && nextCharName ? (
               <p className="text-white/70 text-xs text-center mt-2">
-                Faltam <span className="font-bold text-white">{pointsToNext} pontos</span> para
-                se tornar {nextCharName}!
+                Mais <span className="font-bold text-white">{pointsToNext} pontozinhos</span> e você vira {nextCharName}! Vai encarar? 💪
               </p>
             ) : (
               <p className="text-white/70 text-xs text-center mt-2">
-                Tier m&aacute;ximo atingido! Voc&ecirc; &eacute; lend&aacute;rio!
+                LENDÁRIO! Você chegou ao topo da Pirâmide! 👑
               </p>
             )}
           </div>
@@ -585,7 +584,7 @@ export default function Perfil() {
             <div className="flex items-center gap-3 mb-2">
               <span className="text-4xl">{faixa.icon}</span>
               <div>
-                <h3 className="font-bold text-navy text-lg">QualiScore</h3>
+                <h3 className="font-bold text-navy text-lg">Seu lugar na Pirâmide</h3>
                 <p className="text-sm text-gray-600">Faixa: {faixa.label}</p>
               </div>
             </div>

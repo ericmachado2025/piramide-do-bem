@@ -58,19 +58,39 @@ export default function Login() {
 
     const { error: authError } = await signInWithEmail(email, password)
 
-    if (authError) {
+    if (!authError) {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        await redirectByRole(user.id)
+      } else {
+        navigate('/cadastro/perfil', { replace: true })
+      }
       setLoading(false)
-      setError(translateError(authError))
       return
     }
 
-    // Get the authenticated user
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      await redirectByRole(user.id)
-    } else {
-      navigate('/cadastro/perfil', { replace: true })
+    // Erro de credencial — verificar se email existe em algum perfil
+    if (authError.includes('Invalid login')) {
+      const checks = await Promise.all([
+        supabase.from('students').select('id').eq('email', email).maybeSingle(),
+        supabase.from('teachers').select('id').eq('email', email).maybeSingle(),
+        supabase.from('sponsors').select('id').eq('email', email).maybeSingle(),
+        supabase.from('parents').select('id').eq('email', email).maybeSingle(),
+      ])
+      const emailExists = checks.some(c => c.data !== null)
+
+      if (emailExists) {
+        setError('Senha incorreta. Tente novamente ou clique em "Esqueceu a senha?".')
+        setPassword('')
+      } else {
+        // Email novo — sugerir cadastro
+        setError('Email não cadastrado. Clique em "Cadastre-se" para criar sua conta.')
+      }
+      setLoading(false)
+      return
     }
+
+    setError(translateError(authError))
     setLoading(false)
   }
 
@@ -104,7 +124,7 @@ export default function Login() {
         <div className="text-center mb-6">
           <span className="text-5xl">🔑</span>
           <h2 className="text-2xl font-extrabold text-navy mt-2">Entrar</h2>
-          <p className="text-gray-400 text-sm mt-1">Acesse sua conta na Piramide do Bem</p>
+          <p className="text-gray-400 text-sm mt-1">Acesse sua conta na Pirâmide do Bem</p>
         </div>
 
         <div className="space-y-4">
@@ -217,7 +237,7 @@ export default function Login() {
 
           <div className="text-center pt-1">
             <p className="text-gray-400 text-sm">
-              Nao tem conta?{' '}
+              Não tem conta?{' '}
               <Link to="/cadastro/perfil" className="text-teal font-semibold hover:underline">
                 Cadastre-se
               </Link>
@@ -239,6 +259,6 @@ export default function Login() {
 function translateError(msg: string): string {
   if (msg.includes('Invalid login')) return 'Email ou senha incorretos.'
   if (msg.includes('Email not confirmed')) return 'Confirme seu email antes de entrar.'
-  if (msg.includes('User not found')) return 'Conta nao encontrada. Cadastre-se primeiro.'
+  if (msg.includes('User not found')) return 'Conta não encontrada. Cadastre-se primeiro.'
   return msg
 }

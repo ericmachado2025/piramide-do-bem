@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/AuthContext'
 import type { CommunityCategory, CommunityType, Community, Character } from '../types'
 
 type Gender = 'male' | 'female' | 'nonbinary' | ''
-type Archetype = 'HERO' | 'ANTI_HERO' | 'VILLAIN' | ''
+type Archetype = 'HERO' | 'ANTI_HERO' | 'VILLAIN' | 'NEUTRAL' | ''
 
 const genderOptions = [
   { value: 'male' as Gender, label: 'Masculino', icon: '\u2642\uFE0F', dbValue: 'MALE' },
@@ -45,6 +45,14 @@ function getEmoji(iconClass: string | null): string {
   return '\u2B50'
 }
 
+function getArchetypeEmoji(archetype: string | null | undefined): string {
+  if (archetype === 'HERO') return '\u{1F9B8}'
+  if (archetype === 'ANTI_HERO') return '\u{1F9B9}'
+  if (archetype === 'VILLAIN') return '\u{1F608}'
+  if (archetype === 'NEUTRAL') return '\u2694\uFE0F'
+  return '\u2B50'
+}
+
 // Steps: 1=Gender, 2=Category, 3=Type, 4=Community, 5=Archetype, 6=Character
 type Step = 1 | 2 | 3 | 4 | 5 | 6
 
@@ -73,16 +81,39 @@ export default function EscolhaTribo() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [studentAge, setStudentAge] = useState<number | null>(null)
+  const [availableArchetypes, setAvailableArchetypes] = useState<Set<string>>(new Set())
 
-  // Load categories + student age on mount
+  // Load categories (only those with characters) + student age on mount
   useEffect(() => {
-    supabase.from('community_categories').select('*').eq('status', 'ACTIVE').order('display_order')
-      .then(({ data }) => { if (data) setCategories(data) })
+    async function loadCategories() {
+      // Get communities that have characters
+      const { data: charComms } = await supabase.from('characters').select('community_id').eq('status', 'ACTIVE')
+      const commIds = new Set((charComms || []).map((c: { community_id: string }) => c.community_id))
+      // Get types for those communities
+      const { data: comms } = await supabase.from('communities').select('id, type_id').eq('status', 'ACTIVE')
+      const typeIds = new Set((comms || []).filter(c => commIds.has(c.id)).map((c: { type_id: string }) => c.type_id))
+      // Get categories for those types
+      const { data: types } = await supabase.from('community_types').select('id, category_id').eq('status', 'ACTIVE')
+      const catIds = new Set((types || []).filter(t => typeIds.has(t.id)).map((t: { category_id: string }) => t.category_id))
+      // Now load categories filtered
+      const { data: cats } = await supabase.from('community_categories').select('*').eq('status', 'ACTIVE').order('display_order')
+      if (cats) setCategories(cats.filter(c => catIds.has(c.id)))
+    }
+    loadCategories()
     if (authUser) {
       supabase.from('students').select('birth_date').eq('user_id', authUser.id).single()
         .then(({ data }) => { if (data?.birth_date) setStudentAge(calcAge(data.birth_date)) })
     }
   }, [authUser])
+
+  // Load available archetypes when community is selected
+  useEffect(() => {
+    if (!selectedCommunity) { setAvailableArchetypes(new Set()); return }
+    supabase.from('characters').select('archetype').eq('community_id', selectedCommunity.id).eq('status', 'ACTIVE')
+      .then(({ data }) => {
+        if (data) setAvailableArchetypes(new Set(data.map((c: { archetype: string }) => c.archetype)))
+      })
+  }, [selectedCommunity])
 
   // Load types when category selected
   useEffect(() => {
@@ -167,16 +198,28 @@ export default function EscolhaTribo() {
     else if (step === 6) { setStep(5); setSelectedArchetype('') }
   }
 
+  const [confirmError, setConfirmError] = useState('')
+
   const handleConfirm = async () => {
-    if (!selectedCommunity || !selectedCharacter || !authUser) return
+    console.log('handleConfirm called', { selectedCommunity, selectedCharacter, authUser })
+    if (!selectedCommunity || !selectedCharacter || !authUser) {
+      setConfirmError('Selecione um personagem antes de confirmar.')
+      return
+    }
     setSaving(true)
+    setConfirmError('')
     try {
-      const { data: student } = await supabase
+      const { data: student, error: studentErr } = await supabase
         .from('students')
         .select('id')
         .eq('user_id', authUser.id)
         .single()
-      if (!student) { setSaving(false); return }
+      if (studentErr || !student) {
+        console.error('Student fetch error:', studentErr)
+        setConfirmError('Erro ao carregar seu perfil. Tente novamente.')
+        setSaving(false)
+        return
+      }
 
       const { error: updateError } = await supabase
         .from('students')
@@ -189,48 +232,47 @@ export default function EscolhaTribo() {
 
       if (updateError) {
         console.error('handleConfirm updateError:', updateError)
-        alert(`Erro ao salvar personagem: ${updateError.message}`)
+        setConfirmError(`Erro ao salvar: ${updateError.message}`)
         setSaving(false)
         return
       }
       navigate('/personagem')
     } catch (err) {
       console.error('Error choosing community:', err)
+      setConfirmError('Erro inesperado. Tente novamente.')
     } finally {
       setSaving(false)
     }
   }
 
   const stepTitles: Record<Step, string> = {
-    1: 'Como seus personagens aparecem?',
-    2: 'Qual universo voce curte?',
-    3: `${selectedCategory?.name ?? 'Categoria'}`,
-    4: `${selectedType?.name ?? 'Tipo'}`,
-    5: 'Qual tipo de personagem combina com voce?',
-    6: 'Escolha seu personagem!',
+    1: 'Agora, vamos escolher um personagem que representa você?',
+    2: 'Qual é o seu universo? ⚡',
+    3: 'Qual universo você curte mais?',
+    4: 'Agora escolha a sua tribo!',
+    5: 'Qual tipo de personagem combina com você?',
+    6: 'Esse é você por agora — mas cada ação sua te leva mais longe! 🚀',
   }
 
   const stepSubtitles: Record<Step, string> = {
-    1: 'Isso nos ajuda a personalizar seus personagens',
-    2: 'Escolha a categoria que mais combina com voce',
-    3: 'Agora escolha o tipo especifico',
-    4: 'Qual comunidade voce quer participar?',
-    5: 'Heroi, vilao ou anti-heroi?',
-    6: 'Seu personagem inicial — evolua com pontos!',
+    1: 'Como seus personagens aparecem?',
+    2: 'Com qual dessas tribos você se identifica?',
+    3: 'Agora escolha o tipo específico',
+    4: '',
+    5: '',
+    6: 'Escolha seu personagem inicial',
   }
 
   return (
     <div className="min-h-screen bg-bg pb-8">
       {/* Header */}
       <div className="gradient-bg px-4 pt-10 pb-12 text-center relative">
-        {step > 1 && (
-          <button
-            onClick={handleBack}
-            className="absolute top-10 left-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5 text-white" />
-          </button>
-        )}
+        <button
+          onClick={() => step > 1 ? handleBack() : navigate('/home')}
+          className="absolute top-10 left-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+        >
+          <ArrowLeft className="w-5 h-5 text-white" />
+        </button>
         <h1 className="text-2xl md:text-3xl font-extrabold text-white mb-2">
           {stepTitles[step]}
         </h1>
@@ -339,42 +381,32 @@ export default function EscolhaTribo() {
         {/* Step 5: Archetype */}
         {step === 5 && (
           <div className="grid grid-cols-1 gap-3">
-            <button
-              onClick={() => handleArchetypeSelect('HERO')}
-              className="bg-white rounded-2xl shadow-md p-5 flex items-center gap-4 hover:shadow-lg hover:scale-[1.01] transition-all active:scale-[0.99] border-2 border-transparent"
-            >
-              <div className="w-14 h-14 rounded-full bg-teal/10 flex items-center justify-center">
-                <Shield className="w-7 h-7 text-teal" />
-              </div>
-              <div className="text-left">
-                <h3 className="font-bold text-navy text-lg">Heroi</h3>
-                <p className="text-gray-400 text-sm">Eu gosto de fazer o bem</p>
-              </div>
-            </button>
-            <button
-              onClick={() => handleArchetypeSelect('ANTI_HERO')}
-              className="bg-white rounded-2xl shadow-md p-5 flex items-center gap-4 hover:shadow-lg hover:scale-[1.01] transition-all active:scale-[0.99] border-2 border-transparent"
-            >
-              <div className="w-14 h-14 rounded-full bg-orange-500/10 flex items-center justify-center">
-                <Zap className="w-7 h-7 text-orange-500" />
-              </div>
-              <div className="text-left">
-                <h3 className="font-bold text-navy text-lg">Anti-Heroi</h3>
-                <p className="text-gray-400 text-sm">Eu faco o bem do meu jeito</p>
-              </div>
-            </button>
-            <button
-              onClick={() => handleArchetypeSelect('VILLAIN')}
-              className="bg-white rounded-2xl shadow-md p-5 flex items-center gap-4 hover:shadow-lg hover:scale-[1.01] transition-all active:scale-[0.99] border-2 border-transparent"
-            >
-              <div className="w-14 h-14 rounded-full bg-purple-600/10 flex items-center justify-center">
-                <Skull className="w-7 h-7 text-purple-600" />
-              </div>
-              <div className="text-left">
-                <h3 className="font-bold text-navy text-lg">Vilao</h3>
-                <p className="text-gray-400 text-sm">Eu gosto de desafiar</p>
-              </div>
-            </button>
+            {[
+              { value: 'HERO' as Archetype, icon: Shield, label: 'Herói', desc: 'Eu gosto de fazer o bem', color: 'teal' },
+              { value: 'ANTI_HERO' as Archetype, icon: Zap, label: 'Anti-Herói', desc: 'Eu faço o bem do meu jeito', color: 'orange-500' },
+              { value: 'VILLAIN' as Archetype, icon: Skull, label: 'Vilão', desc: 'Eu gosto de desafiar', color: 'purple-600' },
+              { value: 'NEUTRAL' as unknown as Archetype, icon: Shield, label: 'Neutro', desc: 'Eu sigo meu próprio caminho', color: 'gray-500' },
+            ].map(arch => {
+              const isAvailable = availableArchetypes.has(arch.value as string)
+              return (
+                <button key={arch.value as string}
+                  onClick={() => isAvailable && handleArchetypeSelect(arch.value)}
+                  disabled={!isAvailable}
+                  className={`bg-white rounded-2xl shadow-md p-5 flex items-center gap-4 transition-all border-2 border-transparent ${
+                    isAvailable ? 'hover:shadow-lg hover:scale-[1.01] active:scale-[0.99]' : 'opacity-40 cursor-not-allowed'
+                  }`}
+                >
+                  <div className={`w-14 h-14 rounded-full bg-${arch.color}/10 flex items-center justify-center`}>
+                    <arch.icon className={`w-7 h-7 text-${arch.color}`} />
+                  </div>
+                  <div className="text-left">
+                    <h3 className="font-bold text-navy text-lg">{arch.label}</h3>
+                    <p className="text-gray-500 text-sm">{arch.desc}</p>
+                    {!isAvailable && <p className="text-xs text-gray-400 mt-0.5">(não disponível nesta tribo)</p>}
+                  </div>
+                </button>
+              )
+            })}
           </div>
         )}
 
@@ -406,7 +438,7 @@ export default function EscolhaTribo() {
                       }`}
                     >
                       <div className="w-12 h-12 rounded-full bg-teal/10 flex items-center justify-center text-2xl">
-                        {getEmoji(selectedCommunity?.icon_class ?? null)}
+                        {selectedCommunity?.icon_class ? getEmoji(selectedCommunity.icon_class) : getArchetypeEmoji(char.archetype)}
                       </div>
                       <div className="text-left flex-1">
                         <h4 className="font-bold text-navy">{getCharacterDisplayName(char, char.level)}</h4>
@@ -443,6 +475,7 @@ export default function EscolhaTribo() {
                   </div>
                 </div>
 
+                {confirmError && <p className="text-sm text-red text-center mb-2">{confirmError}</p>}
                 {/* Confirm button */}
                 <button
                   onClick={handleConfirm}
@@ -453,7 +486,7 @@ export default function EscolhaTribo() {
                       : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}
                 >
-                  {saving ? 'Salvando...' : 'Confirmar personagem'}
+                  {saving ? 'Salvando...' : 'Esse sou eu! Bora começar! 🎮'}
                   {!saving && <ChevronRight className="w-5 h-5" />}
                 </button>
               </>

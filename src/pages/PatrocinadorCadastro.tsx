@@ -76,6 +76,8 @@ export default function PatrocinadorCadastro() {
   const [cityLoading, setCityLoading] = useState(false)
   const [showCityDropdown, setShowCityDropdown] = useState(false)
   const cityDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [neighborhood, setNeighborhood] = useState('')
+  const [gpsLoading, setGpsLoading] = useState(false)
 
   // Step 4
   const [verificationCode, setVerificationCode] = useState('')
@@ -107,6 +109,26 @@ export default function PatrocinadorCadastro() {
     if (!st || query.length < 3) { setCitySuggestions([]); return }
     cityDebounceRef.current = setTimeout(() => fetchCities(st, query), 300)
   }, [fetchCities])
+
+  // GPS — usar Nominatim para reverse geocoding
+  const useGpsLocation = () => {
+    if (!navigator.geolocation) return
+    setGpsLoading(true)
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json&accept-language=pt-BR`)
+        const data = await res.json()
+        const addr = data.address || {}
+        const uf = (addr.state_code || addr['ISO3166-2-lvl4'] || '').toString().slice(-2).toUpperCase()
+        const cityName = addr.city || addr.town || addr.village || addr.municipality || ''
+        const bairro = addr.suburb || addr.neighbourhood || addr.quarter || ''
+        if (uf) setState(uf)
+        if (cityName) { setCity(cityName); setCitySearch('') }
+        if (bairro) setNeighborhood(bairro)
+      } catch { /* ignore */ }
+      setGpsLoading(false)
+    }, () => setGpsLoading(false), { timeout: 10000 })
+  }
 
   // Step 1: Auth — try signIn first, then signUp
   const handleAuth = async () => {
@@ -211,10 +233,24 @@ export default function PatrocinadorCadastro() {
         }
       }
 
+      // Ensure users record exists
+      const { data: existingUser } = await supabase.from('users').select('id').eq('auth_id', userId).maybeSingle()
+      let usersRowId = existingUser?.id
+      if (!usersRowId) {
+        const { data: newUser } = await supabase.from('users').insert({
+          auth_id: userId,
+          name: contactName,
+          email: user?.email || email,
+          phone,
+        }).select('id').single()
+        usersRowId = newUser?.id
+      }
+
       const { error: sponsorError } = await supabase
         .from('sponsors')
         .insert({
           user_id: userId,
+          users_id: usersRowId || null,
           business_name: businessName,
           contact_name: contactName,
           phone,
@@ -390,9 +426,13 @@ export default function PatrocinadorCadastro() {
           <div className="space-y-4">
             <div className="text-center">
               <MapPin className="w-12 h-12 mx-auto" style={{ color: '#028090' }} />
-              <h2 className="text-2xl font-extrabold mt-2" style={{ color: '#1F4E79' }}>Localizacao</h2>
-              <p className="text-gray-400 text-sm mt-1">Estado e cidade da empresa</p>
+              <h2 className="text-2xl font-extrabold mt-2" style={{ color: '#1F4E79' }}>Localização</h2>
+              <p className="text-gray-400 text-sm mt-1">Estado, cidade e bairro</p>
             </div>
+            <button type="button" onClick={useGpsLocation} disabled={gpsLoading}
+              className="w-full py-2.5 rounded-xl border-2 border-[#028090] text-[#028090] font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
+              {gpsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : '📍'} Usar minha localização
+            </button>
             <select
               value={state}
               onChange={(e) => { setState(e.target.value); setCity(''); setCitySearch(''); setCitySuggestions([]) }}
@@ -440,6 +480,11 @@ export default function PatrocinadorCadastro() {
                   </div>
                 )}
               </div>
+            )}
+            {city && (
+              <input type="text" placeholder="Bairro (opcional)" value={neighborhood}
+                onChange={(e) => setNeighborhood(e.target.value)}
+                className={inputClass} />
             )}
           </div>
         )}

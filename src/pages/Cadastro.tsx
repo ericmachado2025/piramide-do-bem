@@ -89,6 +89,7 @@ interface FormData {
   birthDate: string
   password: string
   confirmPassword: string
+  nivel: string
   state: string
   city: string
   citySearch: string
@@ -104,6 +105,22 @@ interface FormData {
   parentPhone: string
   parentRelation: string
   lgpdConsent: boolean
+}
+
+const NIVEIS_ENSINO = [
+  { value: 'infantil', label: 'Educação Infantil', idades: [0, 5], schoolType: 'fundamental' },
+  { value: 'fundamental1', label: 'Ensino Fundamental I (1º ao 5º ano)', idades: [6, 10], schoolType: 'fundamental' },
+  { value: 'fundamental2', label: 'Ensino Fundamental II (6º ao 9º ano)', idades: [11, 14], schoolType: 'fundamental' },
+  { value: 'medio', label: 'Ensino Médio', idades: [15, 17], schoolType: 'fundamental' },
+  { value: 'profissional', label: 'Educação Profissional e Tecnológica', idades: [15, 99], schoolType: 'fundamental' },
+  { value: 'eja', label: 'EJA — Educação de Jovens e Adultos', idades: [15, 99], schoolType: 'fundamental' },
+  { value: 'superior', label: 'Ensino Superior', idades: [17, 99], schoolType: 'superior' },
+]
+
+function getNivelByAge(age: number | null): string {
+  if (age === null) return ''
+  const found = NIVEIS_ENSINO.find(n => age >= n.idades[0] && age <= n.idades[1])
+  return found?.value || ''
 }
 
 // Normal flow: 1=Email, 2=Nome, 3=Senha, 4=Nascimento, 5=Escola, 6=WhatsApp, 7=LGPD
@@ -150,6 +167,7 @@ export default function Cadastro() {
     email: fromGoogle && user ? (user.email || '') : '',
     birthDay: '', birthMonth: '', birthYear: '', birthDate: '',
     password: '', confirmPassword: '',
+    nivel: '',
     state: '', city: '', citySearch: '',
     schoolId: '', schoolSearch: '', schoolType: '',
     grade: '', section: '',
@@ -231,9 +249,14 @@ export default function Cadastro() {
   const [showSchoolDropdown, setShowSchoolDropdown] = useState(false)
   const schoolDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const fetchSchools = useCallback(async (state: string, city: string, query?: string) => {
+  const fetchSchools = useCallback(async (state: string, city: string, query?: string, nivel?: string) => {
     setSchoolLoading(true)
     let q = supabase.from('schools').select('id, name, school_type').eq('state', state).eq('city', city)
+    // Filter by school_type from nivel
+    if (nivel) {
+      const nivelDef = NIVEIS_ENSINO.find(n => n.value === nivel)
+      if (nivelDef) q = q.eq('school_type', nivelDef.schoolType)
+    }
     if (query && query.length >= 3) q = q.ilike('name', `%${query}%`)
     q = q.order('name').limit(100)
     const { data } = await q
@@ -242,10 +265,10 @@ export default function Cadastro() {
     setShowSchoolDropdown(true)
   }, [])
 
-  const searchSchools = useCallback((state: string, city: string, query: string) => {
+  const searchSchools = useCallback((state: string, city: string, query: string, nivel?: string) => {
     if (schoolDebounceRef.current) clearTimeout(schoolDebounceRef.current)
     if (!state || !city || query.length < 3) { setSchoolSuggestions([]); return }
-    schoolDebounceRef.current = setTimeout(() => fetchSchools(state, city, query), 300)
+    schoolDebounceRef.current = setTimeout(() => fetchSchools(state, city, query, nivel), 300)
   }, [fetchSchools])
 
   // Get available grades based on selected school type
@@ -287,6 +310,14 @@ export default function Cadastro() {
     if (!birthDateValid || !birthDate) return null
     return calcAge(birthDate)
   }, [birthDate, birthDateValid])
+
+  // Pre-select nivel based on age
+  useEffect(() => {
+    if (age !== null && !form.nivel) {
+      const suggested = getNivelByAge(age)
+      if (suggested) setForm(prev => ({ ...prev, nivel: suggested }))
+    }
+  }, [age, form.nivel])
 
   const needsConsent = age !== null && age < 12
 
@@ -381,7 +412,7 @@ export default function Cadastro() {
       }
 
       if (!authUserId) {
-        setEmailError('Erro: usuario nao autenticado. Tente novamente.')
+        setEmailError('Erro: usuário não autenticado. Tente novamente.')
         setSubmitting(false)
         return
       }
@@ -476,7 +507,7 @@ export default function Cadastro() {
     if (!email.includes('@')) return
     const { data } = await supabase.from('students').select('id').eq('email', email).maybeSingle()
     if (data) {
-      setEmailError('Este email ja esta cadastrado. Faca login.')
+      setEmailError('Este email já está cadastrado. Faça login.')
     }
   }, [])
 
@@ -522,8 +553,8 @@ export default function Cadastro() {
           <div className="space-y-4">
             <div className="text-center">
               <span className="text-5xl">{'\u{1F4E7}'}</span>
-              <h2 className="text-2xl font-extrabold text-navy mt-2">Vamos comecar!</h2>
-              <p className="text-gray-400 text-sm mt-1">Entre com Google ou cadastre com email</p>
+              <h2 className="text-2xl font-extrabold text-navy mt-2">Sua jornada começa aqui! 🚀</h2>
+              <p className="text-gray-400 text-sm mt-1">Escolha como quer entrar</p>
             </div>
             {/* Google first — more prominent */}
             <button
@@ -579,8 +610,8 @@ export default function Cadastro() {
           <div className="space-y-4">
             <div className="text-center">
               <span className="text-5xl">{'\u{1F44B}'}</span>
-              <h2 className="text-2xl font-extrabold text-navy mt-2">Como voce se chama?</h2>
-              <p className="text-gray-400 text-sm mt-1">Esse nome aparecera no seu perfil</p>
+              <h2 className="text-2xl font-extrabold text-navy mt-2">Como seus colegas vão te conhecer?</h2>
+              <p className="text-gray-400 text-sm mt-1">Escolha bem — esse será seu nome na Pirâmide!</p>
             </div>
             <input
               type="text"
@@ -598,8 +629,8 @@ export default function Cadastro() {
           <div className="space-y-4">
             <div className="text-center">
               <span className="text-5xl">{'\u{1F512}'}</span>
-              <h2 className="text-2xl font-extrabold text-navy mt-2">Crie uma senha forte</h2>
-              <p className="text-gray-400 text-sm mt-1">Minimo 8 caracteres com variedade</p>
+              <h2 className="text-2xl font-extrabold text-navy mt-2">Agora um segredo só seu 🔐</h2>
+              <p className="text-gray-400 text-sm mt-1">Essa senha te protege na Pirâmide</p>
             </div>
             <PasswordInput
               password={form.password}
@@ -616,8 +647,8 @@ export default function Cadastro() {
           <div className="space-y-4">
             <div className="text-center">
               <span className="text-5xl">{'\u{1F382}'}</span>
-              <h2 className="text-2xl font-extrabold text-navy mt-2">Quantos anos voce tem?</h2>
-              <p className="text-gray-400 text-sm mt-1">Selecione sua data de nascimento</p>
+              <h2 className="text-2xl font-extrabold text-navy mt-2">Quando você chegou ao mundo? 🎂</h2>
+              <p className="text-gray-400 text-sm mt-1">Sua data nos ajuda a personalizar sua experiência</p>
             </div>
             <div className="flex gap-3">
               <select value={form.birthDay} onChange={(e) => update('birthDay', e.target.value)}
@@ -653,8 +684,25 @@ export default function Cadastro() {
           <div className="space-y-4">
             <div className="text-center">
               <span className="text-5xl">{'\u{1F3EB}'}</span>
-              <h2 className="text-2xl font-extrabold text-navy mt-2">Sua escola</h2>
-              <p className="text-gray-400 text-sm mt-1">Selecione estado, cidade e escola</p>
+              <h2 className="text-2xl font-extrabold text-navy mt-2">Onde sua história acontece? 🏫</h2>
+              <p className="text-gray-400 text-sm mt-1">Vamos encontrar sua escola no mapa</p>
+            </div>
+
+            {/* Nível de ensino */}
+            <div>
+              <p className="text-xs font-semibold text-gray-500 mb-2">Nível de ensino:</p>
+              <select value={form.nivel} onChange={(e) => {
+                update('nivel', e.target.value)
+                update('schoolId', ''); update('schoolSearch', '')
+                update('grade', ''); update('schoolType', '')
+                setSchoolSuggestions([])
+              }}
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white">
+                <option value="">Selecione o nível</option>
+                {NIVEIS_ENSINO.map(n => (
+                  <option key={n.value} value={n.value}>{n.label}</option>
+                ))}
+              </select>
             </div>
 
             {/* State select */}
@@ -735,17 +783,22 @@ export default function Cadastro() {
                       if (form.schoolId) {
                         update('schoolId', ''); update('grade', ''); update('schoolType', '')
                       }
-                      searchSchools(form.state, form.city, val)
+                      searchSchools(form.state, form.city, val, form.nivel)
                     }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') { e.preventDefault(); fetchSchools(form.state, form.city) }
+                      if (e.key === 'Enter') { e.preventDefault(); fetchSchools(form.state, form.city, undefined, form.nivel) }
                     }}
                     onFocus={() => {
                       if (form.schoolId) {
                         update('schoolSearch', '')
                         update('schoolId', ''); update('grade', ''); update('schoolType', '')
                       }
-                      schoolSuggestions.length > 0 && setShowSchoolDropdown(true)
+                      // Open dropdown automatically if list small
+                      if (schoolSuggestions.length === 0 && form.city) {
+                        fetchSchools(form.state, form.city, undefined, form.nivel)
+                      } else if (schoolSuggestions.length > 0) {
+                        setShowSchoolDropdown(true)
+                      }
                     }}
                     onBlur={() => setTimeout(() => setShowSchoolDropdown(false), 200)}
                     className="w-full pl-10 pr-10 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors"
@@ -773,21 +826,28 @@ export default function Cadastro() {
               </div>
             )}
 
-            {/* Grade + Section */}
-            {form.schoolId && (
-              <div className="flex gap-3">
-                <select value={form.grade} onChange={(e) => update('grade', e.target.value)}
-                  className="flex-1 px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white">
-                  <option value="">Serie</option>
-                  {availableGrades.map((g) => (<option key={g} value={g}>{g}</option>))}
-                </select>
-                <select value={form.section} onChange={(e) => update('section', e.target.value)}
-                  className="w-24 px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white">
-                  <option value="">Turma</option>
-                  {sections.map((s) => (<option key={s} value={s}>{s === 'N/A' ? 'Nao se aplica' : s}</option>))}
-                </select>
-              </div>
-            )}
+            {/* Grade + Section — labels dinâmicos por nível */}
+            {form.schoolId && (() => {
+              const isSuperior = form.nivel === 'superior'
+              const isEjaProf = form.nivel === 'eja' || form.nivel === 'profissional'
+              const gradeLabel = isSuperior ? 'Semestre' : isEjaProf ? 'Turma' : 'Série'
+              return (
+                <div className="flex gap-3">
+                  <select value={form.grade} onChange={(e) => update('grade', e.target.value)}
+                    className="flex-1 px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white">
+                    <option value="">{gradeLabel}</option>
+                    {availableGrades.map((g) => (<option key={g} value={g}>{g}</option>))}
+                  </select>
+                  {!isSuperior && !isEjaProf && (
+                    <select value={form.section} onChange={(e) => update('section', e.target.value)}
+                      className="w-24 px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white">
+                      <option value="">Turma</option>
+                      {sections.map((s) => (<option key={s} value={s}>{s === 'N/A' ? 'Não se aplica' : s}</option>))}
+                    </select>
+                  )}
+                </div>
+              )
+            })()}
           </div>
         )}
 
@@ -796,8 +856,8 @@ export default function Cadastro() {
           <div className="space-y-4">
             <div className="text-center">
               <span className="text-5xl">{'\u{1F4F1}'}</span>
-              <h2 className="text-2xl font-extrabold text-navy mt-2">Seu WhatsApp</h2>
-              <p className="text-gray-400 text-sm mt-1">Opcional — para notificacoes e comunicacao</p>
+              <h2 className="text-2xl font-extrabold text-navy mt-2">Como te avisamos quando algo legal acontecer? 📲</h2>
+              <p className="text-gray-400 text-sm mt-1">Seu número fica seguro — só você decide quem vê</p>
             </div>
             <div className="flex gap-2">
               <select value={form.whatsappCountryCode} onChange={(e) => update('whatsappCountryCode', e.target.value)}
@@ -825,7 +885,6 @@ export default function Cadastro() {
                 </label>
               ))}
             </div>
-            <p className="text-xs text-gray-400 text-center">Informe seu telefone para receber notificacoes</p>
           </div>
         )}
 
@@ -834,9 +893,9 @@ export default function Cadastro() {
           <div className="space-y-4">
             <div className="text-center">
               <span className="text-5xl">{'\u{1F389}'}</span>
-              <h2 className="text-2xl font-extrabold text-navy mt-2">Voce esta quase la!</h2>
+              <h2 className="text-2xl font-extrabold text-navy mt-2">Ei, quase lá! 🎉</h2>
               <p className="text-gray-400 text-sm mt-1 leading-relaxed">
-                Como voce tem menos de 12 anos, precisamos que informe o contato de um responsavel para tudo ficar certinho com a LGPD.
+                Como você ainda não tem 12 anos, precisamos de um ok do seu responsável. É rapidinho — só o email e telefone dele, e a gente cuida do resto!
               </p>
             </div>
             <input type="email" placeholder="Email do responsavel" value={form.parentEmail}
@@ -887,14 +946,14 @@ export default function Cadastro() {
               ${canAdvance() && !submitting
                 ? 'bg-teal text-white hover:bg-teal/90 hover:shadow-lg active:scale-[0.98]'
                 : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
-            {submitting ? 'Salvando...' : effectiveIndex === effectiveSteps.length - 1 || (step === 6 && !needsConsent) ? 'Concluir' : 'Proximo'}
+            {submitting ? 'Salvando...' : effectiveIndex === effectiveSteps.length - 1 || (step === 6 && !needsConsent) ? 'Entrar na Pirâmide! 🏆' : 'Proximo'}
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>
       </div>
 
       <p className="mt-4 text-gray-400 text-sm">
-        Passo {effectiveIndex + 1} de {totalVisibleSteps}
+        {effectiveIndex + 1} de {totalVisibleSteps} — você está quase lá!
       </p>
 
       <style>{`

@@ -161,7 +161,7 @@ export default function RegistrarAcao() {
               </button>
             ) : null}
             <h1 className="font-bold text-navy text-lg">
-              {step < 4 ? 'Registrar Boa Acao' : 'Acao Registrada!'}
+              {step < 4 ? 'O que você fez? 🌟' : 'Acao Registrada!'}
             </h1>
           </div>
 
@@ -397,7 +397,7 @@ export default function RegistrarAcao() {
             <div className="text-5xl mb-3 float-anim">{'\u2705'}</div>
             <h2 className="text-2xl font-bold text-navy mb-2">Acao registrada!</h2>
             <p className="text-gray-500 text-sm mb-6">
-              Agora peca para um colega escanear o QR Code abaixo para validar sua acao.
+              Mostre esse QR Code para um colega que viu o que você fez — ele confirma em segundos!
             </p>
 
             <div className="bg-white rounded-2xl shadow-lg p-6 inline-block mb-4">
@@ -415,8 +415,8 @@ export default function RegistrarAcao() {
               <div className="bg-yellow/10 border border-yellow/30 rounded-xl p-3 flex items-center gap-2">
                 <span className="text-lg">{'\u23F3'}</span>
                 <div className="text-left">
-                  <p className="font-bold text-navy text-sm">PENDENTE</p>
-                  <p className="text-gray-500 text-xs">Este QR Code expira em 48 horas</p>
+                  <p className="font-bold text-navy text-sm">Aguardando confirmação</p>
+                  <p className="text-gray-500 text-xs">{`Esse QR expira em 48h — corre lá falar com um colega! 😄`}</p>
                 </div>
               </div>
 

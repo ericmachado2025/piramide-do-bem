@@ -5,6 +5,8 @@ import { supabase } from '../lib/supabase'
 import { getCharacterDisplayName, getTierLabel } from '../lib/database'
 import { useAuth } from '../contexts/AuthContext'
 import BottomNav from '../components/BottomNav'
+import FloatingFriendButton from '../components/FloatingFriendButton'
+import RecommendSponsorButton from '../components/RecommendSponsorButton'
 import type { Student, Action, ActionType } from '../types'
 
 const iconClassToEmoji: Record<string, string> = {
@@ -119,7 +121,7 @@ export default function Home() {
           <h1 className="text-2xl font-bold text-white">
             Ola, {student.name}! <span className="inline-block animate-bounce">🎮</span>
           </h1>
-          <p className="text-white/70 text-sm mt-1">Que boas acoes vamos fazer hoje?</p>
+          <p className="text-white/70 text-sm mt-1">O que você vai aprontar hoje?</p>
 
           {/* Mini avatar / stats */}
           <div className="mt-4 bg-white/15 backdrop-blur-sm rounded-2xl p-4 flex items-center gap-4">
@@ -164,7 +166,7 @@ export default function Home() {
             <div className="flex items-center gap-3">
               <span className="text-3xl">🤝</span>
               <div>
-                <h3 className="font-bold text-lg">Registrar Boa Acao</h3>
+                <h3 className="font-bold text-lg">Fiz uma boa ação! 🤝</h3>
                 <p className="text-white/70 text-sm">Compartilhe o que voce fez de bom</p>
               </div>
             </div>
@@ -180,8 +182,8 @@ export default function Home() {
             <div className="flex items-center gap-3">
               <span className="text-3xl">📷</span>
               <div>
-                <h3 className="font-bold text-lg text-navy">Validar Acao de Colega</h3>
-                <p className="text-gray-500 text-sm">Confirme boas acoes de colegas</p>
+                <h3 className="font-bold text-lg text-navy">Confirmar colega</h3>
+                <p className="text-gray-500 text-sm">Alguém precisa do seu ok!</p>
               </div>
             </div>
             <ChevronRight className="text-teal/50 group-hover:translate-x-1 transition-transform" />
@@ -231,9 +233,9 @@ export default function Home() {
             <Clock className="text-yellow" size={24} />
             <div>
               <p className="text-sm font-semibold text-navy">
-                {pendingCount} {pendingCount === 1 ? 'acao pendente' : 'acoes pendentes'}
+                {pendingCount} {pendingCount === 1 ? 'ação esperando um colega' : 'ações esperando um colega'}
               </p>
-              <p className="text-xs text-gray-500">Aguardando validacao de colegas</p>
+              <p className="text-xs text-gray-500">Toque aqui para acompanhar</p>
             </div>
           </div>
         )}
@@ -247,8 +249,7 @@ export default function Home() {
           <div className="space-y-2">
             {recentActions.length === 0 ? (
               <div className="bg-white rounded-2xl shadow-sm p-6 text-center">
-                <p className="text-gray-400 text-sm">Nenhuma acao ainda</p>
-                <p className="text-gray-300 text-xs mt-1">Registre sua primeira boa acao!</p>
+                <p className="text-gray-400 text-sm">Sua primeira boa ação está esperando por você! Que tal agora?</p>
               </div>
             ) : (
               recentActions.map((action) => (
@@ -278,6 +279,8 @@ export default function Home() {
         </div>
       </div>
 
+      <FloatingFriendButton />
+      <RecommendSponsorButton />
       <BottomNav />
     </div>
   )

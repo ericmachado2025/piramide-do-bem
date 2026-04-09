@@ -256,14 +256,14 @@ export default function PatrocinadorDashboard() {
         {/* My Rewards */}
         <div className="bg-white rounded-2xl shadow-lg p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-lg" style={{ color: '#1F4E79' }}>Minhas Recompensas</h3>
+            <h3 className="font-bold text-lg" style={{ color: '#1F4E79' }}>Recompensas que ofereci</h3>
             <button
               onClick={() => setShowForm(!showForm)}
               className="flex items-center gap-1 px-3 py-2 rounded-xl text-white text-sm font-bold transition-all hover:opacity-90"
               style={{ backgroundColor: '#02C39A' }}
             >
               {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-              {showForm ? 'Cancelar' : 'Nova Recompensa'}
+              {showForm ? 'Cancelar' : 'Oferecer Nova Recompensa'}
             </button>
           </div>
 
@@ -340,7 +340,7 @@ export default function PatrocinadorDashboard() {
 
           {/* Rewards list */}
           {rewards.length === 0 ? (
-            <p className="text-gray-400 text-sm text-center py-4">Nenhuma recompensa cadastrada.</p>
+            <p className="text-gray-400 text-sm text-center py-4">Você ainda não ofereceu nenhuma recompensa. Que tal começar agora?</p>
           ) : (
             <div className="space-y-3">
               {rewards.map((reward) => (
@@ -371,7 +371,7 @@ export default function PatrocinadorDashboard() {
         <div className="bg-white rounded-2xl shadow-lg p-6">
           <h3 className="font-bold text-lg mb-4" style={{ color: '#1F4E79' }}>Resgates</h3>
           {redemptions.length === 0 ? (
-            <p className="text-gray-400 text-sm text-center py-4">Nenhum resgate realizado ainda.</p>
+            <p className="text-gray-400 text-sm text-center py-4">Nenhum aluno resgatou ainda — assim que acontecer, você verá aqui!</p>
           ) : (
             <div className="space-y-3">
               {redemptions.map((r) => (
