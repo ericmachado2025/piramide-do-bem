@@ -732,7 +732,7 @@ export default function Perfil() {
                   className="text-xs text-red font-semibold">Desvincular</button>
               ) : !googleLinked ? (
                 <button onClick={async () => {
-                  await supabase.auth.linkIdentity({ provider: 'google', options: { redirectTo: `${window.location.origin}/perfil` } })
+                  await supabase.auth.linkIdentity({ provider: 'google', options: { redirectTo: `${window.location.origin}/auth/callback` } })
                 }} className="text-xs text-teal font-semibold">Vincular</button>
               ) : null}
             </div>
