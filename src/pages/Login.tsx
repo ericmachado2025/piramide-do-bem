@@ -13,6 +13,10 @@ export default function Login() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
+  const [forgotMode, setForgotMode] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotSent, setForgotSent] = useState(false)
+  const [forgotLoading, setForgotLoading] = useState(false)
 
   async function redirectByRole(userId: string) {
     // Check each role table in order
@@ -173,15 +177,43 @@ export default function Login() {
             {loading ? 'Entrando...' : 'Entrar'}
           </button>
 
-          <div className="text-center pt-1">
-            <button
-              type="button"
-              className="text-gray-400 text-sm hover:text-teal transition-colors"
-              onClick={() => {/* TODO: forgot password flow */}}
-            >
-              Esqueceu a senha?
-            </button>
-          </div>
+          {!forgotMode ? (
+            <div className="text-center pt-1">
+              <button type="button" className="text-gray-400 text-sm hover:text-teal transition-colors"
+                onClick={() => { setForgotMode(true); setForgotEmail(email) }}>
+                Esqueceu a senha?
+              </button>
+            </div>
+          ) : (
+            <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+              <p className="text-sm text-navy font-semibold">Recuperar senha</p>
+              {!forgotSent ? (
+                <>
+                  <input type="email" placeholder="Seu email" value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && forgotEmail.includes('@') && !forgotLoading && (async () => {
+                      setForgotLoading(true)
+                      await supabase.auth.resetPasswordForEmail(forgotEmail, { redirectTo: `${window.location.origin}/auth/callback` })
+                      setForgotSent(true); setForgotLoading(false)
+                    })()}
+                    className="w-full px-3 py-2.5 rounded-lg border border-gray-200 focus:border-teal focus:outline-none text-sm" />
+                  <button disabled={!forgotEmail.includes('@') || forgotLoading}
+                    onClick={async () => {
+                      setForgotLoading(true)
+                      await supabase.auth.resetPasswordForEmail(forgotEmail, { redirectTo: `${window.location.origin}/auth/callback` })
+                      setForgotSent(true); setForgotLoading(false)
+                    }}
+                    className="w-full py-2.5 rounded-lg bg-teal text-white text-sm font-semibold disabled:opacity-50">
+                    {forgotLoading ? 'Enviando...' : 'Enviar link de acesso'}
+                  </button>
+                </>
+              ) : (
+                <p className="text-sm text-green font-medium">Link enviado para {forgotEmail}. Verifique sua caixa de entrada.</p>
+              )}
+              <button onClick={() => { setForgotMode(false); setForgotSent(false) }}
+                className="text-xs text-gray-400 hover:text-gray-600">Voltar ao login</button>
+            </div>
+          )}
 
           <div className="text-center pt-1">
             <p className="text-gray-400 text-sm">
