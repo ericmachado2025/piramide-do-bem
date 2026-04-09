@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import { X, ChevronRight, Clock, CheckCircle, XCircle, AlertCircle, RefreshCw, LogOut, Edit3, Save } from 'lucide-react'
 import BottomNav from '../components/BottomNav'
+import ReauthGuard from '../components/ReauthGuard'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { getCharacterDisplayName, getTierLabel, getStudentStreak, generateReferralCode } from '../lib/database'
@@ -73,6 +74,31 @@ export default function Perfil() {
   const [editWhatsapp, setEditWhatsapp] = useState('')
   const [editVisibility, setEditVisibility] = useState('private')
   const [saving, setSaving] = useState(false)
+
+  // Referrals
+  const [refTab, setRefTab] = useState<'confirmed' | 'pending'>('confirmed')
+  const [confirmedRefs, setConfirmedRefs] = useState<{ id: string; referred_email: string; points_awarded: number; referral_position: number; confirmed_at: string }[]>([])
+  const [pendingRefs, setPendingRefs] = useState<{ id: string; referred_email: string; referral_code: string; created_at: string }[]>([])
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [showInviteModal, setShowInviteModal] = useState(false)
+  const [inviteSending, setInviteSending] = useState(false)
+  const [inviteMsg, setInviteMsg] = useState('')
+
+  // Security
+  const [showReauth, setShowReauth] = useState(false)
+  const [reauthAction, setReauthAction] = useState<string>('')
+  const [showChangePassword, setShowChangePassword] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmNewPassword, setConfirmNewPassword] = useState('')
+  const [passwordSaving, setPasswordSaving] = useState(false)
+  const [passwordMsg, setPasswordMsg] = useState('')
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [googleLinked, setGoogleLinked] = useState(false)
+  const [hasEmailIdentity, setHasEmailIdentity] = useState(false)
+
+  // Avatar
+  const [avatarUploading, setAvatarUploading] = useState(false)
 
   // Multi-profile support
   const [profileType, setProfileType] = useState<'student' | 'teacher' | 'sponsor' | 'parent' | null>(null)
@@ -152,6 +178,23 @@ export default function Perfil() {
         getStudentStreak(studentData.id).then(s => setStreak(s))
         generateReferralCode(studentData.id).then(c => setReferralCode(c))
       }
+
+      // Load referrals
+      if (studentData) {
+        const { data: cRefs } = await supabase.from('referrals').select('id, referred_email, points_awarded, referral_position, confirmed_at').eq('referrer_id', studentData.id).eq('status', 'confirmed').order('confirmed_at', { ascending: false })
+        if (cRefs) setConfirmedRefs(cRefs)
+        const { data: pRefs } = await supabase.from('referrals').select('id, referred_email, referral_code, created_at').eq('referrer_id', studentData.id).eq('status', 'pending').order('created_at', { ascending: false })
+        if (pRefs) setPendingRefs(pRefs)
+      }
+
+      // Check Google link status
+      try {
+        const { data: identities } = await supabase.auth.getUserIdentities()
+        if (identities?.identities) {
+          setGoogleLinked(identities.identities.some(i => i.provider === 'google'))
+          setHasEmailIdentity(identities.identities.some(i => i.provider === 'email'))
+        }
+      } catch {}
 
       setLoading(false)
     }
@@ -262,12 +305,74 @@ export default function Perfil() {
     green: 'border-emerald-400 bg-emerald-50',
   }
 
+  const handleInvite = async () => {
+    if (!inviteEmail.includes('@') || !student) return
+    if (pendingRefs.length >= 3) return
+    setInviteSending(true)
+    setInviteMsg('')
+    await supabase.from('referrals').insert({
+      referrer_id: student.id,
+      referred_email: inviteEmail,
+      referral_code: referralCode,
+      status: 'pending',
+    })
+    // Send email via Edge Function
+    await supabase.functions.invoke('send-verification', {
+      body: { type: 'referral_invite', to: inviteEmail, referrerName: student.name, referralCode, referralUrl: `https://piramidedobem.com.br/?ref=${referralCode}` },
+    })
+    setInviteMsg(`Convite enviado para ${inviteEmail}!`)
+    setInviteEmail('')
+    setInviteSending(false)
+    // Reload pending
+    const { data } = await supabase.from('referrals').select('id, referred_email, referral_code, created_at').eq('referrer_id', student.id).eq('status', 'pending').order('created_at', { ascending: false })
+    if (data) setPendingRefs(data)
+  }
+
   return (
     <div className="min-h-screen bg-bg pb-24">
       {/* ===== HEADER ===== */}
       <div className="gradient-bg px-6 pt-10 pb-8 rounded-b-3xl shadow-lg">
         <div className="flex flex-col items-center">
-          <span className="text-7xl mb-2 drop-shadow-lg">{tribeIcon}</span>
+          <div className="relative inline-block mb-2">
+            {(student as any).avatar_url ? (
+              <img src={(student as any).avatar_url} alt="" className="w-20 h-20 rounded-full object-cover border-4 border-white/30 shadow-lg" />
+            ) : (
+              <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center text-3xl font-bold text-white border-4 border-white/30">
+                {student.name?.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
+              </div>
+            )}
+            <span className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-white shadow flex items-center justify-center text-lg">{tribeIcon}</span>
+            <input type="file" accept="image/*" id="avatar-upload" className="hidden" onChange={async (e) => {
+              const file = e.target.files?.[0]
+              if (!file || !student) return
+              setAvatarUploading(true)
+              // Resize to 400x400
+              const canvas = document.createElement('canvas')
+              canvas.width = 400; canvas.height = 400
+              const ctx = canvas.getContext('2d')!
+              const img = new Image()
+              img.onload = async () => {
+                const size = Math.min(img.width, img.height)
+                const sx = (img.width - size) / 2, sy = (img.height - size) / 2
+                ctx.drawImage(img, sx, sy, size, size, 0, 0, 400, 400)
+                canvas.toBlob(async (blob) => {
+                  if (!blob) { setAvatarUploading(false); return }
+                  const { error: upErr } = await supabase.storage.from('avatars').upload(`${student.id}/avatar.jpg`, blob, { upsert: true, contentType: 'image/jpeg' })
+                  if (!upErr) {
+                    const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(`${student.id}/avatar.jpg`)
+                    const newUrl = `${urlData.publicUrl}?t=${Date.now()}`
+                    await supabase.from('students').update({ avatar_url: newUrl }).eq('id', student.id)
+                    setStudent({ ...student, avatar_url: newUrl } as typeof student)
+                  }
+                  setAvatarUploading(false)
+                }, 'image/jpeg', 0.85)
+              }
+              img.src = URL.createObjectURL(file)
+            }} />
+          </div>
+          <label htmlFor="avatar-upload" className="text-white/60 text-xs cursor-pointer hover:text-white/80 transition-colors">
+            {avatarUploading ? 'Enviando...' : 'clique para alterar foto'}
+          </label>
           <h1 className="text-2xl font-bold text-white">{student.name}</h1>
           <p className="text-white/80 text-sm mt-1 text-center">
             {tribeName} &mdash; {charName} ({getTierLabel(tierInfo.current.tier)})
@@ -354,6 +459,72 @@ export default function Perfil() {
                 </button>
               </div>
             </div>
+          )}
+        </section>
+
+        {/* ===== INDICACOES ===== */}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-bold text-navy">Minhas Indicacoes</h2>
+            <button onClick={() => setShowInviteModal(true)} disabled={pendingRefs.length >= 3}
+              className="text-sm font-semibold text-teal disabled:text-gray-400">
+              + Indicar amigo
+            </button>
+          </div>
+
+          {confirmedRefs.length === 0 && pendingRefs.length === 0 ? (
+            <div className="bg-white rounded-xl shadow-md p-6 text-center">
+              <p className="text-gray-500 text-sm mb-3">Indique amigos e ganhe ate 25 pts por cada cadastro confirmado!</p>
+              <button onClick={() => setShowInviteModal(true)} className="bg-teal text-white text-sm font-bold px-4 py-2 rounded-lg">Indicar meu primeiro amigo</button>
+              <p className="text-[10px] text-gray-400 mt-3">1a-5a: 25pts | 6a-10a: 15pts | 11a-20a: 8pts | 21a+: 4pts</p>
+            </div>
+          ) : (
+            <>
+              <div className="flex gap-2 mb-3">
+                {(['confirmed', 'pending'] as const).map(tab => (
+                  <button key={tab} onClick={() => setRefTab(tab)}
+                    className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${refTab === tab ? 'bg-teal text-white' : 'bg-gray-100 text-gray-500'}`}>
+                    {tab === 'confirmed' ? `Confirmadas (${confirmedRefs.length})` : `Pendentes (${pendingRefs.length})`}
+                  </button>
+                ))}
+              </div>
+
+              {refTab === 'confirmed' && (
+                <div className="space-y-2">
+                  {confirmedRefs.map(r => (
+                    <div key={r.id} className="bg-white rounded-xl shadow-sm p-3 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-navy font-medium">{r.referred_email}</p>
+                        <p className="text-xs text-gray-400">Cadastrou-se em {new Date(r.confirmed_at).toLocaleDateString('pt-BR')}</p>
+                      </div>
+                      <span className="text-sm font-bold text-green">+{r.points_awarded} pts</span>
+                    </div>
+                  ))}
+                  {confirmedRefs.length > 0 && (
+                    <p className="text-xs text-gray-500 text-right mt-1">
+                      Total: <strong className="text-navy">{confirmedRefs.reduce((s, r) => s + (r.points_awarded || 0), 0)} pts</strong>
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {refTab === 'pending' && (
+                <div className="space-y-2">
+                  {pendingRefs.map(r => (
+                    <div key={r.id} className="bg-white rounded-xl shadow-sm p-3 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-navy font-medium">{r.referred_email}</p>
+                        <p className="text-xs text-gray-400">Enviado em {new Date(r.created_at).toLocaleDateString('pt-BR')}</p>
+                      </div>
+                      <button onClick={() => { navigator.clipboard.writeText(`https://piramidedobem.com.br/?ref=${r.referral_code}`); }}
+                        className="text-xs text-teal font-semibold">Copiar link</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <p className="text-[10px] text-gray-400 mt-2">1a-5a: 25pts | 6a-10a: 15pts | 11a-20a: 8pts | 21a+: 4pts</p>
+            </>
           )}
         </section>
 
@@ -545,6 +716,76 @@ export default function Perfil() {
             </div>
           )}
         </section>
+
+        {/* ===== SEGURANCA ===== */}
+        <section>
+          <h2 className="text-lg font-bold text-navy mb-3">Seguranca</h2>
+          <div className="bg-white rounded-xl shadow-md p-4 space-y-3">
+            {/* Google link */}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-navy">Conta Google</p>
+                <p className="text-xs text-gray-400">{googleLinked ? 'Vinculada' : 'Nao vinculada'}</p>
+              </div>
+              {googleLinked && hasEmailIdentity ? (
+                <button onClick={() => { setReauthAction('unlink_google'); setShowReauth(true) }}
+                  className="text-xs text-red font-semibold">Desvincular</button>
+              ) : !googleLinked ? (
+                <button onClick={async () => {
+                  await supabase.auth.linkIdentity({ provider: 'google', options: { redirectTo: `${window.location.origin}/perfil` } })
+                }} className="text-xs text-teal font-semibold">Vincular</button>
+              ) : null}
+            </div>
+
+            <hr className="border-gray-100" />
+
+            {/* Change password */}
+            <div>
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-navy">Senha</p>
+                <button onClick={() => { setReauthAction('change_password'); setShowReauth(true) }}
+                  className="text-xs text-teal font-semibold">Alterar senha</button>
+              </div>
+              {showChangePassword && (
+                <div className="mt-3 space-y-2">
+                  <input type="password" placeholder="Nova senha (min 8 chars)" value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-teal focus:outline-none text-sm" />
+                  <input type="password" placeholder="Confirmar nova senha" value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && newPassword.length >= 8 && newPassword === confirmNewPassword && (async () => {
+                      setPasswordSaving(true)
+                      const { error } = await supabase.auth.updateUser({ password: newPassword })
+                      setPasswordMsg(error ? error.message : 'Senha alterada com sucesso!')
+                      setPasswordSaving(false)
+                      if (!error) { setShowChangePassword(false); setNewPassword(''); setConfirmNewPassword('') }
+                    })()}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-teal focus:outline-none text-sm" />
+                  <button onClick={async () => {
+                    if (newPassword.length < 8 || newPassword !== confirmNewPassword) return
+                    setPasswordSaving(true)
+                    const { error } = await supabase.auth.updateUser({ password: newPassword })
+                    setPasswordMsg(error ? error.message : 'Senha alterada com sucesso!')
+                    setPasswordSaving(false)
+                    if (!error) { setShowChangePassword(false); setNewPassword(''); setConfirmNewPassword('') }
+                  }} disabled={passwordSaving || newPassword.length < 8 || newPassword !== confirmNewPassword}
+                    className="w-full py-2 rounded-lg bg-teal text-white text-sm font-semibold disabled:opacity-50">
+                    {passwordSaving ? 'Salvando...' : 'Salvar nova senha'}
+                  </button>
+                  {passwordMsg && <p className={`text-xs ${passwordMsg.includes('sucesso') ? 'text-green' : 'text-red'}`}>{passwordMsg}</p>}
+                </div>
+              )}
+            </div>
+
+            <hr className="border-gray-100" />
+
+            {/* Delete account */}
+            <button onClick={() => { setReauthAction('delete_account'); setShowReauth(true) }}
+              className="w-full text-left text-sm text-red font-semibold">
+              Excluir minha conta
+            </button>
+          </div>
+        </section>
       </div>
 
       {/* ===== QR MODAL ===== */}
@@ -636,6 +877,74 @@ export default function Perfil() {
           Sair da conta
         </button>
       </div>
+
+      {/* Invite modal */}
+      {showInviteModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowInviteModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-bold text-navy text-lg mb-3">Indicar amigo</h3>
+            <input type="email" placeholder="Email do amigo" value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
+              className="w-full px-3 py-2.5 rounded-lg border border-gray-200 focus:border-teal focus:outline-none text-sm mb-3" autoFocus />
+            {inviteMsg && <p className="text-sm text-green mb-2">{inviteMsg}</p>}
+            {pendingRefs.length >= 3 && <p className="text-sm text-red mb-2">Aguarde seus amigos se cadastrarem antes de indicar mais.</p>}
+            <div className="flex gap-2">
+              <button onClick={() => setShowInviteModal(false)} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-500 text-sm font-semibold">Cancelar</button>
+              <button onClick={handleInvite} disabled={inviteSending || !inviteEmail.includes('@') || pendingRefs.length >= 3}
+                className="flex-1 py-2.5 rounded-lg bg-teal text-white text-sm font-semibold disabled:opacity-50">
+                {inviteSending ? 'Enviando...' : 'Enviar convite'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ReauthGuard */}
+      {showReauth && (
+        <ReauthGuard
+          reason={reauthAction === 'change_password' ? 'para alterar sua senha' : reauthAction === 'delete_account' ? 'para excluir sua conta' : 'para desvincular o Google'}
+          onCancel={() => setShowReauth(false)}
+          onConfirmed={async () => {
+            setShowReauth(false)
+            if (reauthAction === 'change_password') setShowChangePassword(true)
+            else if (reauthAction === 'delete_account') setShowDeleteModal(true)
+            else if (reauthAction === 'unlink_google') {
+              const { data: identities } = await supabase.auth.getUserIdentities()
+              const googleId = identities?.identities?.find(i => i.provider === 'google')
+              if (googleId) {
+                await supabase.auth.unlinkIdentity(googleId)
+                setGoogleLinked(false)
+              }
+            }
+          }}
+        />
+      )}
+
+      {/* Delete account modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+            <h3 className="font-bold text-red text-lg mb-2">Excluir conta</h3>
+            <p className="text-sm text-gray-600 mb-4">Esta acao e irreversivel. Todos os seus dados serao removidos.</p>
+            <label className="flex items-start gap-2 mb-4 cursor-pointer">
+              <input type="checkbox" checked={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.checked)} className="accent-red mt-0.5" />
+              <span className="text-sm text-gray-600">Entendo que perderei todos os meus pontos e historico</span>
+            </label>
+            <div className="flex gap-2">
+              <button onClick={() => { setShowDeleteModal(false); setDeleteConfirm(false) }}
+                className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-500 text-sm font-semibold">Cancelar</button>
+              <button disabled={!deleteConfirm} onClick={async () => {
+                if (student) await supabase.from('students').update({ deleted_at: new Date().toISOString() } as Record<string, string>).eq('id', student.id)
+                await supabase.auth.signOut()
+                navigate('/')
+              }} className="flex-1 py-2.5 rounded-lg bg-red text-white text-sm font-semibold disabled:opacity-50">
+                Confirmar exclusao
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <BottomNav />
     </div>
