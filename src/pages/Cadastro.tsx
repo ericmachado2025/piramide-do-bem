@@ -117,6 +117,12 @@ export default function Cadastro() {
   const { user, signInWithGoogle, signUpWithEmail } = useAuth()
   const fromGoogle = searchParams.get('from') === 'google'
 
+  // Capture referral code from URL
+  useEffect(() => {
+    const refCode = searchParams.get('ref') || new URLSearchParams(window.location.search).get('ref')
+    if (refCode) sessionStorage.setItem('referral_code', refCode)
+  }, [searchParams])
+
   // Redirect if already has a student record
   useEffect(() => {
     if (!user) return
@@ -423,6 +429,26 @@ export default function Cadastro() {
       // Send LGPD consent email if minor
       if (needsConsent && form.parentEmail && studentData?.id) {
         sendLgpdConsentEmail(form.parentEmail, form.name, studentData.id)
+      }
+
+      // Confirm referral if exists
+      const refCode = sessionStorage.getItem('referral_code')
+      if (refCode && studentData?.id) {
+        const { data: pendingRef } = await supabase
+          .from('referrals')
+          .select('id')
+          .eq('referral_code', refCode)
+          .eq('status', 'pending')
+          .limit(1)
+          .maybeSingle()
+        if (pendingRef) {
+          await supabase.from('referrals').update({
+            status: 'confirmed',
+            referred_id: studentData.id,
+            confirmed_at: new Date().toISOString(),
+          }).eq('id', pendingRef.id)
+        }
+        sessionStorage.removeItem('referral_code')
       }
 
       sessionStorage.removeItem('cadastro_backup')
