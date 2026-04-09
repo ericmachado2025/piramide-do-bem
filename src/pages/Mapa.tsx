@@ -120,16 +120,14 @@ export default function Mapa() {
       const totalStudents = scopeSchools.reduce((sum, s) => sum + s.student_count, 0)
 
       // Counts from DB - use head:true for efficient counting
-      const [actionsRes, mentorsRes, requestsRes, sponsorsRes] = await Promise.all([
-        schoolIds.length > 0
-          ? supabase.from('actions').select('*', { count: 'exact', head: true })
-          : Promise.resolve({ count: 0 }),
-        schoolIds.length > 0
-          ? supabase.from('students').select('*', { count: 'exact', head: true }).eq('is_mentor', true)
-          : Promise.resolve({ count: 0 }),
-        supabase.from('mentoring_requests').select('*', { count: 'exact', head: true }).eq('status', 'open').then(r => r).catch(() => ({ count: 0, data: null, error: null })) as Promise<{ count: number | null }>,
-        supabase.from('sponsors').select('*', { count: 'exact', head: true }).eq('active', true).then(r => r).catch(() => ({ count: 0, data: null, error: null })) as Promise<{ count: number | null }>,
-      ])
+      const actionsRes = schoolIds.length > 0
+        ? await supabase.from('actions').select('*', { count: 'exact', head: true })
+        : { count: 0 }
+      const mentorsRes = schoolIds.length > 0
+        ? await supabase.from('students').select('*', { count: 'exact', head: true }).eq('is_mentor', true)
+        : { count: 0 }
+      const requestsRes = await supabase.from('mentoring_requests').select('*', { count: 'exact', head: true }).eq('status', 'open')
+      const sponsorsRes = await supabase.from('sponsors').select('*', { count: 'exact', head: true }).eq('active', true)
 
       setLegendCounts({
         actions: (actionsRes as { count: number | null }).count ?? 0,
