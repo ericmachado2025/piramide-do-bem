@@ -11,14 +11,67 @@ serve(async (req) => {
   }
 
   try {
-    const { to, channel, code, type, childName } = await req.json()
+    const { to, channel, code, type, childName, referrerName, referralCode, referralUrl } = await req.json()
 
     const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID')
     const authToken = Deno.env.get('TWILIO_AUTH_TOKEN')
     const whatsappFrom = Deno.env.get('TWILIO_WHATSAPP_NUMBER') || 'whatsapp:+14155238886'
     const smsFrom = Deno.env.get('TWILIO_SMS_NUMBER') || '+14155238886'
     const appUrl = Deno.env.get('APP_URL') || 'https://piramidedobem.com.br'
+    const resendKey = Deno.env.get('RESEND_API_KEY')
 
+    // Email-based types use Resend
+    if (type === 'referral_invite' || type === 'phone_changed') {
+      if (!resendKey) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Resend not configured' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      let subject = ''
+      let html = ''
+
+      if (type === 'referral_invite') {
+        subject = `${referrerName} te convidou para a Piramide do Bem Escolar!`
+        html = `
+          <h2>${referrerName} te convidou para a Piramide do Bem Escolar!</h2>
+          <p>Faca boas acoes, ganhe pontos e evolua seu personagem.</p>
+          <p><a href="${referralUrl || `${appUrl}/?ref=${referralCode}`}">Criar minha conta agora</a></p>
+          <p>&mdash; Equipe Piramide do Bem Escolar<br>piramidedobem.com.br</p>
+        `
+      } else if (type === 'phone_changed') {
+        subject = 'Seu telefone foi alterado - Piramide do Bem Escolar'
+        html = `
+          <h2>Telefone atualizado</h2>
+          <p>Seu numero de telefone/WhatsApp foi atualizado na Piramide do Bem Escolar.</p>
+          <p>Se nao foi voce, acesse <a href="${appUrl}">piramidedobem.com.br</a> imediatamente e entre em contato conosco.</p>
+          <p>&mdash; Equipe Piramide do Bem Escolar</p>
+        `
+      }
+
+      const emailRes = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: 'Piramide do Bem Escolar <noreply@piramidedobem.com.br>',
+          to: [to],
+          subject,
+          html,
+        }),
+      })
+
+      const emailResult = await emailRes.json()
+      return new Response(
+        JSON.stringify({ success: emailRes.ok, id: emailResult.id, error: emailResult.message }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // WhatsApp/SMS types use Twilio
     if (!accountSid || !authToken) {
       return new Response(
         JSON.stringify({ success: false, error: 'Twilio not configured' }),
@@ -26,9 +79,14 @@ serve(async (req) => {
       )
     }
 
-    const body = type === 'parent_auth'
-      ? `Piramide do Bem Escolar: ${childName} quer entrar na plataforma. Acesse para autorizar: ${appUrl}/autorizar?token=${code}`
-      : `Piramide do Bem Escolar: seu codigo de verificacao e *${code}*. Valido por 10 minutos.`
+    let body = ''
+    if (type === 'parent_auth') {
+      body = `Piramide do Bem Escolar: ${childName} quer entrar na plataforma. Acesse para autorizar: ${appUrl}/autorizar?token=${code}`
+    } else if (type === 'delete_account') {
+      body = `Piramide do Bem Escolar: Seu codigo para EXCLUIR sua conta e ${code}. Se nao foi voce, ignore esta mensagem.`
+    } else {
+      body = `Piramide do Bem Escolar: seu codigo de verificacao e *${code}*. Valido por 10 minutos.`
+    }
 
     const from = channel === 'whatsapp' ? whatsappFrom : smsFrom
     const toFormatted = channel === 'whatsapp' ? `whatsapp:${to}` : to
