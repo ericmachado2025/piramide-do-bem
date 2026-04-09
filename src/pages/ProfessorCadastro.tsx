@@ -535,7 +535,7 @@ export default function ProfessorCadastro() {
           <div className="space-y-4">
             <div className="text-center">
               <h2 className="text-2xl font-extrabold mt-2" style={{ color: '#1F4E79' }}>Dados pessoais</h2>
-              <p className="text-gray-400 text-sm mt-1">Suas informacoes de contato</p>
+              <p className="text-gray-400 text-sm mt-1">Suas informações de contato</p>
             </div>
 
             <div>
@@ -593,8 +593,8 @@ export default function ProfessorCadastro() {
         {step === 3 && (
           <div className="space-y-5">
             <div className="text-center">
-              <h2 className="text-2xl font-extrabold mt-2" style={{ color: '#1F4E79' }}>Escola e Materias</h2>
-              <p className="text-gray-400 text-sm mt-1">Selecione onde e o que voce leciona</p>
+              <h2 className="text-2xl font-extrabold mt-2" style={{ color: '#1F4E79' }}>Escola e Matérias</h2>
+              <p className="text-gray-400 text-sm mt-1">Selecione onde e o que você leciona</p>
             </div>
 
             {form.schoolEntries.map((entry, idx) => (
@@ -625,7 +625,7 @@ export default function ProfessorCadastro() {
                   if (availableLevels.length === 0) return null
                   return (
                     <div>
-                      <label className={labelClass}>Nivel de ensino</label>
+                      <label className={labelClass}>Nível de ensino</label>
                       <div className="space-y-2">
                         {availableLevels.map((lvl) => (
                           <label
@@ -662,11 +662,11 @@ export default function ProfessorCadastro() {
                   const subjects = subjectsByLevel[entry.level] || []
                   return (
                     <div>
-                      <label className={labelClass}>Materias</label>
+                      <label className={labelClass}>Matérias</label>
                       {subjects.length === 0 ? (
                         <div className="flex items-center gap-2 text-sm text-gray-400 italic py-2">
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          Carregando materias...
+                          Carregando matérias...
                         </div>
                       ) : (
                         <div className="space-y-2">
@@ -764,7 +764,7 @@ export default function ProfessorCadastro() {
                         value={cs.newGrade}
                         onChange={(e) => updateClassroomState(cs.schoolId, { newGrade: e.target.value })}
                       >
-                        <option value="">Serie...</option>
+                        <option value="">Série...</option>
                         {availableGrades.map((g) => (
                           <option key={g} value={g}>{g}</option>
                         ))}

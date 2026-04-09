@@ -326,7 +326,7 @@ export default function ResponsavelDashboard() {
 
             {/* Recent actions */}
             <div className="bg-white rounded-2xl shadow-lg p-6">
-              <h3 className="font-bold mb-3" style={{ color: '#1F4E79' }}>Acoes recentes</h3>
+              <h3 className="font-bold mb-3" style={{ color: '#1F4E79' }}>Ações recentes</h3>
               {actionsLoading ? (
                 <div className="flex justify-center py-4">
                   <Loader2 className="w-6 h-6 animate-spin" style={{ color: '#028090' }} />

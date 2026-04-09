@@ -301,7 +301,7 @@ export default function SchoolSelector({
             onChange={(e) => onGradeChange?.(e.target.value)}
             className="flex-1 px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white"
           >
-            <option value="">Serie</option>
+            <option value="">Série</option>
             {availableGrades.map((g) => (
               <option key={g} value={g}>{g}</option>
             ))}

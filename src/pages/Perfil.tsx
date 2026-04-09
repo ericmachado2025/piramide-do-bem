@@ -571,7 +571,7 @@ export default function Perfil() {
               >
                 Copiar link
               </button>
-              <p className="text-[10px] text-gray-400 mt-1">Codigo: {referralCode}</p>
+              <p className="text-[10px] text-gray-400 mt-1">Código: {referralCode}</p>
             </div>
           )}
         </div>

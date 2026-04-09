@@ -373,13 +373,13 @@ export default function ValidarAcao() {
             {showResult === 'confirmed' && selectedAction && (
               <div className="text-center py-8">
                 <div className="text-6xl mb-4 float-anim">{'\u{1F389}'}</div>
-                <h2 className="text-2xl font-bold text-navy mb-3">Acao validada!</h2>
+                <h2 className="text-2xl font-bold text-navy mb-3">Ação validada!</h2>
                 <div className="bg-green/10 border border-green/30 rounded-2xl p-4 mb-4">
                   <p className="text-green font-semibold">{selectedAction.authorName} ganhou {selectedAction.points} pts!</p>
-                  <p className="text-green/80 text-sm mt-1">Voce ganhou <strong>+3 pts</strong> por validar!</p>
+                  <p className="text-green/80 text-sm mt-1">Você ganhou <strong>+3 pts</strong> por validar!</p>
                 </div>
                 <button onClick={handleReset} className="w-full bg-teal text-white font-bold py-3.5 rounded-xl">
-                  Validar outra acao
+                  Validar outra ação
                 </button>
               </div>
             )}
@@ -388,14 +388,14 @@ export default function ValidarAcao() {
               <div className="text-center py-8">
                 <div className="text-5xl mb-4">{'\u{1F60C}'}</div>
                 <h2 className="text-xl font-bold text-navy mb-2">Tudo bem.</h2>
-                <p className="text-gray-500 text-sm mb-6">A acao aguardara outro colega.</p>
+                <p className="text-gray-500 text-sm mb-6">A ação aguardará outro colega.</p>
                 <button onClick={handleReset} className="w-full bg-teal text-white font-bold py-3.5 rounded-xl">Voltar</button>
               </div>
             )}
 
             {!showResult && selectedAction && (
               <div>
-                <h2 className="text-lg font-bold text-navy mb-4">Confirmar esta acao?</h2>
+                <h2 className="text-lg font-bold text-navy mb-4">Confirmar esta ação?</h2>
                 <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100 mb-6">
                   <div className="flex items-center gap-3 mb-4">
                     <span className="text-3xl">{selectedAction.actionIcon}</span>
@@ -407,7 +407,7 @@ export default function ValidarAcao() {
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between"><span className="text-gray-500">Por:</span><span className="font-medium text-navy">{selectedAction.authorName}</span></div>
                     <div className="flex justify-between"><span className="text-gray-500">Beneficiado:</span><span className="font-medium text-navy">{selectedAction.beneficiaryName}</span></div>
-                    <div className="flex justify-between"><span className="text-gray-500">Quando:</span><span className="font-medium text-navy">{timeAgo(selectedAction.createdAt)} atras</span></div>
+                    <div className="flex justify-between"><span className="text-gray-500">Quando:</span><span className="font-medium text-navy">{timeAgo(selectedAction.createdAt)} atrás</span></div>
                   </div>
                 </div>
                 <div className="space-y-3">
@@ -415,7 +415,7 @@ export default function ValidarAcao() {
                     <CheckCircle2 size={22} /> Sim, confirmo!
                   </button>
                   <button onClick={handleDeny} className="w-full flex items-center justify-center gap-2 bg-gray-200 text-gray-600 font-medium py-3 rounded-xl active:scale-[0.98]">
-                    <XCircle size={18} /> Nao posso confirmar
+                    <XCircle size={18} /> Não posso confirmar
                   </button>
                 </div>
               </div>
@@ -435,7 +435,7 @@ export default function ValidarAcao() {
                       <div className="bg-black rounded-2xl overflow-hidden">
                         <div id="qr-reader" className="w-full" />
                       </div>
-                      <p className="text-white/70 text-center text-sm mt-4">Aponte a camera para o QR Code</p>
+                      <p className="text-white/70 text-center text-sm mt-4">Aponte a câmera para o QR Code</p>
                       <button
                         onClick={stopScanner}
                         className="mt-4 w-full py-3 rounded-xl bg-white/20 text-white font-bold text-sm hover:bg-white/30 transition-colors"
@@ -465,12 +465,12 @@ export default function ValidarAcao() {
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <Clock size={18} className="text-yellow" />
-                    <h2 className="font-bold text-navy text-sm">Acoes para validar</h2>
+                    <h2 className="font-bold text-navy text-sm">Ações para validar</h2>
                   </div>
                   {pendingActions.length === 0 ? (
                     <div className="bg-white rounded-2xl shadow-sm p-8 text-center">
                       <span className="text-4xl block mb-3">{'\u2728'}</span>
-                      <p className="text-gray-500 text-sm">Nenhuma acao pendente!</p>
+                      <p className="text-gray-500 text-sm">Nenhuma ação pendente!</p>
                     </div>
                   ) : (
                     <div className="space-y-2">
