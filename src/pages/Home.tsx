@@ -124,8 +124,8 @@ export default function Home() {
           {/* Mini avatar / stats */}
           <div className="mt-4 bg-white/15 backdrop-blur-sm rounded-2xl p-4 flex items-center gap-4">
             <div className="relative">
-              {(student as Record<string, unknown>).avatar_url ? (
-                <img src={(student as Record<string, unknown>).avatar_url as string} alt="" className="w-12 h-12 rounded-full object-cover border-2 border-white/30" />
+              {(student as unknown as Record<string, unknown>).avatar_url ? (
+                <img src={(student as unknown as Record<string, unknown>).avatar_url as string} alt="" className="w-12 h-12 rounded-full object-cover border-2 border-white/30" />
               ) : (
                 <div className="text-4xl">{tribeEmoji}</div>
               )}

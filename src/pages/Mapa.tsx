@@ -127,8 +127,8 @@ export default function Mapa() {
         schoolIds.length > 0
           ? supabase.from('students').select('*', { count: 'exact', head: true }).eq('is_mentor', true)
           : Promise.resolve({ count: 0 }),
-        supabase.from('mentoring_requests').select('*', { count: 'exact', head: true }).eq('status', 'open').catch(() => ({ count: 0 })),
-        supabase.from('sponsors').select('*', { count: 'exact', head: true }).eq('active', true).catch(() => ({ count: 0 })),
+        supabase.from('mentoring_requests').select('*', { count: 'exact', head: true }).eq('status', 'open').then(r => r).catch(() => ({ count: 0, data: null, error: null })) as Promise<{ count: number | null }>,
+        supabase.from('sponsors').select('*', { count: 'exact', head: true }).eq('active', true).then(r => r).catch(() => ({ count: 0, data: null, error: null })) as Promise<{ count: number | null }>,
       ])
 
       setLegendCounts({

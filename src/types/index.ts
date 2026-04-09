@@ -150,6 +150,13 @@ export interface Student {
   parent_name: string | null
   parent_email: string | null
   parent_phone: string | null
+  whatsapp_visibility: string | null
+  whatsapp_country_code: string | null
+  avatar_url: string | null
+  referral_code: string | null
+  referred_by: string | null
+  parent_authorized: boolean
+  parent_authorization_token: string | null
   created_at: string
   school?: School
   community?: Community

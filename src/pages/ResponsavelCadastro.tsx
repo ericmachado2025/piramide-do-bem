@@ -210,7 +210,7 @@ export default function ResponsavelCadastro() {
           student_id: s.id,
           relationship: 'responsavel',
           consent_given: false,
-        }).catch(() => {}) // ignore duplicate
+        }) // ignore duplicate if any
       }
 
       navigate('/responsavel/dashboard')
