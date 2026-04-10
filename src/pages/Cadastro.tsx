@@ -125,9 +125,9 @@ function getNivelByAge(age: number | null): string {
 }
 
 // Normal flow: 1=Email, 2=Nome, 3=Senha, 4=Nascimento, 5=Escola, 6=WhatsApp, 7=LGPD
-// Google flow: 4=Nascimento, 5=Escola, 6=WhatsApp, 7=LGPD
+// Google flow: 3=Senha(opcional), 4=Nascimento, 5=Escola, 6=WhatsApp, 7=LGPD
 const NORMAL_STEPS = [1, 2, 3, 4, 5, 6, 7]
-const GOOGLE_STEPS = [4, 5, 6, 7]
+const GOOGLE_STEPS = [3, 4, 5, 6, 7]
 
 export default function Cadastro() {
   const navigate = useNavigate()
@@ -321,6 +321,13 @@ export default function Cadastro() {
     }
   }, [age, form.nivel])
 
+  // Auto-set section N/A for superior/eja/profissional
+  useEffect(() => {
+    if ((form.nivel === 'superior' || form.nivel === 'eja' || form.nivel === 'profissional') && !form.section) {
+      setForm(prev => ({ ...prev, section: 'N/A' }))
+    }
+  }, [age, form.nivel])
+
   const needsConsent = age !== null && age < 12
 
   const passwordValidation = useMemo(() => validatePassword(form.password), [form.password])
@@ -341,9 +348,12 @@ export default function Cadastro() {
     switch (step) {
       case 1: return form.email.includes('@') && !emailError
       case 2: return form.name.trim().length >= 2
-      case 3: return passwordValidation.valid && form.password === form.confirmPassword
+      case 3: return fromGoogle ? true : (passwordValidation.valid && form.password === form.confirmPassword)
       case 4: return birthDateValid
-      case 5: return form.schoolId !== '' && form.grade !== '' && form.section !== ''
+      case 5: {
+        const needsSection = form.nivel !== 'superior' && form.nivel !== 'eja' && form.nivel !== 'profissional'
+        return form.schoolId !== '' && form.grade !== '' && (!needsSection || form.section !== '')
+      }
       case 6: return form.whatsapp.replace(/\D/g, '').length >= 10
       case 7: return form.parentEmail.includes('@') && form.parentPhone.replace(/\D/g, '').length >= 10 && form.parentRelation !== '' && form.lgpdConsent
       default: return false
@@ -390,8 +400,13 @@ export default function Cadastro() {
     try {
       let authUserId = user?.id
 
-      if (!fromGoogle && form.email && form.password) {
-        // Try signIn first (handles existing accounts / rate limit avoidance)
+      if (fromGoogle) {
+        // Google user — already authenticated, optionally set password
+        if (form.password && form.password.length >= 8) {
+          await supabase.auth.updateUser({ password: form.password })
+        }
+      } else if (form.email && form.password) {
+        // Email/password — try signIn first, then signUp
         const { error: signInErr, data: signInData } = await supabase.auth.signInWithPassword({
           email: form.email, password: form.password
         })
@@ -405,7 +420,6 @@ export default function Cadastro() {
             return
           }
           if (newUser) authUserId = newUser.id
-          // Ensure session
           if (!authUserId) {
             const { data } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password })
             authUserId = data.user?.id
@@ -632,8 +646,14 @@ export default function Cadastro() {
           <div className="space-y-4">
             <div className="text-center">
               <span className="text-5xl">{'\u{1F512}'}</span>
-              <h2 className="text-2xl font-extrabold text-navy mt-2">Agora um segredo só seu 🔐</h2>
-              <p className="text-gray-400 text-sm mt-1">Essa senha te protege na Pirâmide</p>
+              <h2 className="text-2xl font-extrabold text-navy mt-2">
+                {fromGoogle ? 'Criar senha (opcional)' : 'Agora um segredo só seu 🔐'}
+              </h2>
+              <p className="text-gray-400 text-sm mt-1">
+                {fromGoogle
+                  ? 'Você pode criar uma senha para acessar sem o Google. Ou clique em Próximo para pular.'
+                  : 'Essa senha te protege na Pirâmide'}
+              </p>
             </div>
             <PasswordInput
               password={form.password}
@@ -730,7 +750,7 @@ export default function Cadastro() {
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Digite o nome ou pressione Enter para ver todas"
+                    placeholder="Digite 3 letras da cidade ou pressione Enter"
                     value={form.city || form.citySearch}
                     onChange={(e) => {
                       const val = e.target.value
@@ -778,7 +798,7 @@ export default function Cadastro() {
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Digite o nome ou pressione Enter para ver todas"
+                    placeholder="Digite 3 letras da escola ou pressione Enter"
                     value={form.schoolId ? schoolSuggestions.find(s => s.id === form.schoolId)?.name || form.schoolSearch : form.schoolSearch}
                     onChange={(e) => {
                       const val = e.target.value

@@ -32,6 +32,15 @@ export default function CadastroPerfil() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const emailFromUrl = searchParams.get('email') || ''
+  const fromGoogle = searchParams.get('from') === 'google'
+
+  const buildQuery = () => {
+    const params = new URLSearchParams()
+    if (emailFromUrl) params.set('email', emailFromUrl)
+    if (fromGoogle) params.set('from', 'google')
+    const qs = params.toString()
+    return qs ? `?${qs}` : ''
+  }
 
   return (
     <div className="min-h-screen bg-bg flex flex-col items-center justify-start pt-8 px-4 pb-8">
@@ -55,10 +64,7 @@ export default function CadastroPerfil() {
           {profiles.map((profile) => (
             <button
               key={profile.title}
-              onClick={() => {
-                const qs = emailFromUrl ? `?email=${encodeURIComponent(emailFromUrl)}` : ''
-                navigate(`${profile.path}${qs}`)
-              }}
+              onClick={() => navigate(`${profile.path}${buildQuery()}`)}
               className="flex items-center gap-4 bg-white rounded-2xl shadow-md p-5 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 border-2 border-transparent hover:border-teal/30 text-left"
             >
               <span className="text-4xl">{profile.emoji}</span>

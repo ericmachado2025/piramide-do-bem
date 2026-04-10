@@ -46,11 +46,23 @@ export default function AuthCallback() {
 
       if (student?.community_id) {
         navigate('/home', { replace: true })
-      } else if (student && !student.community_id) {
-        navigate('/tribo', { replace: true })
-      } else {
-        navigate('/cadastro?from=google', { replace: true })
+        return
       }
+      if (student && !student.community_id) {
+        navigate('/tribo', { replace: true })
+        return
+      }
+
+      // Verificar outros perfis
+      const { data: teacher } = await supabase.from('teachers').select('id').eq('user_id', user!.id).maybeSingle()
+      if (teacher) { navigate('/professor/dashboard', { replace: true }); return }
+      const { data: parent } = await supabase.from('parents').select('id').eq('user_id', user!.id).maybeSingle()
+      if (parent) { navigate('/responsavel/dashboard', { replace: true }); return }
+      const { data: sponsor } = await supabase.from('sponsors').select('id').eq('user_id', user!.id).maybeSingle()
+      if (sponsor) { navigate('/patrocinador/dashboard', { replace: true }); return }
+
+      // Nenhum perfil — escolher tipo de cadastro
+      navigate('/cadastro/perfil?from=google', { replace: true })
     }
 
     checkProfile()
@@ -62,7 +74,7 @@ export default function AuthCallback() {
       return
     }
     if (newPassword !== confirmPassword) {
-      setError('As senhas nao coincidem.')
+      setError('As senhas não coincidem.')
       return
     }
     setSaving(true)
