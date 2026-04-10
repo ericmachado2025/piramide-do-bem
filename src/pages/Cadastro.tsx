@@ -134,6 +134,7 @@ export default function Cadastro() {
   const [searchParams] = useSearchParams()
   const { user, signInWithGoogle, signUpWithEmail } = useAuth()
   const fromGoogle = searchParams.get('from') === 'google'
+  const emailFromUrl = searchParams.get('email') || ''
 
   // Capture referral code from URL
   useEffect(() => {
@@ -165,7 +166,7 @@ export default function Cadastro() {
 
   const makeDefaultForm = (): FormData => ({
     name: fromGoogle && user ? (user.user_metadata?.full_name || user.user_metadata?.name || '') : '',
-    email: fromGoogle && user ? (user.email || '') : '',
+    email: fromGoogle && user ? (user.email || '') : emailFromUrl,
     birthDay: '', birthMonth: '', birthYear: '', birthDate: '',
     password: '', confirmPassword: '',
     nivel: '',

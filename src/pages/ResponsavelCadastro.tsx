@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ChevronRight,
   ChevronLeft,
@@ -49,13 +49,14 @@ const inputClass = "w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus
 
 export default function ResponsavelCadastro() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { user, signUpWithEmail } = useAuth()
 
   const [step, setStep] = useState(user ? 2 : 1)
   const totalSteps = 3
 
   // Step 1
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(searchParams.get('email') || '')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [authError, setAuthError] = useState('')
