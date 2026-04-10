@@ -48,14 +48,6 @@ function getEmoji(iconClass: string | null): string {
   return '\u2B50'
 }
 
-function getArchetypeEmoji(archetype: string | null | undefined): string {
-  if (archetype === 'HERO') return '\u{1F9B8}'
-  if (archetype === 'ANTI_HERO') return '\u{1F9B9}'
-  if (archetype === 'VILLAIN') return '\u{1F608}'
-  if (archetype === 'NEUTRAL') return '\u2694\uFE0F'
-  return '\u2B50'
-}
-
 // Steps: 1=Gender, 2=Category, 3=Type, 4=Community, 5=Archetype, 6=Character
 type Step = 1 | 2 | 3 | 4 | 5 | 6
 
