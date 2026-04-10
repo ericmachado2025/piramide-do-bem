@@ -88,14 +88,7 @@ export default function Landing() {
             to="/login"
             className="flex items-center justify-center gap-2 bg-white text-teal font-bold text-lg py-4 px-8 rounded-2xl shadow-lg hover:shadow-2xl hover:scale-105 active:scale-95 transition-all duration-200"
           >
-            Já sou da Pirâmide
-          </Link>
-
-          <Link
-            to="/cadastro/perfil"
-            className="flex items-center justify-center gap-2 border-2 border-white/60 text-white font-semibold text-base py-3 px-6 rounded-2xl hover:bg-white/10 hover:border-white hover:scale-105 active:scale-95 transition-all duration-200"
-          >
-            Ainda não sou, mas quero participar!
+            Entrar
           </Link>
         </div>
 
