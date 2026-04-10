@@ -70,7 +70,7 @@ export default function PatrocinadorDashboard() {
       // Get sponsor record
       const { data: sponsorData, error: sponsorError } = await supabase
         .from('sponsors')
-        .select('id, business_name')
+        .select('id, business_name, user:users!sponsors_users_id_fkey(name, email, phone)')
         .eq('user_id', user.id)
         .single()
 

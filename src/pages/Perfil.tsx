@@ -118,7 +118,7 @@ export default function Perfil() {
       // Load student with tribe and character
       const { data: studentData } = await supabase
         .from('students')
-        .select('*, community:communities(*), character:characters(*)')
+        .select('*, user:users!students_users_id_fkey(name, email, phone, whatsapp), community:communities(*), character:characters(*)')
         .eq('user_id', user!.id)
         .single()
 
@@ -319,7 +319,7 @@ export default function Perfil() {
     })
     // Send email via Edge Function
     await supabase.functions.invoke('send-verification', {
-      body: { type: 'referral_invite', to: inviteEmail, referrerName: student.name, referralCode, referralUrl: `https://piramidedobem.com.br/?ref=${referralCode}` },
+      body: { type: 'referral_invite', to: inviteEmail, referrerName: (student as any).user?.name || student.name, referralCode, referralUrl: `https://piramidedobem.com.br/?ref=${referralCode}` },
     })
     setInviteMsg(`Convite enviado para ${inviteEmail}!`)
     setInviteEmail('')
@@ -339,7 +339,7 @@ export default function Perfil() {
               <img src={(student as any).avatar_url} alt="" className="w-20 h-20 rounded-full object-cover border-4 border-white/30 shadow-lg" />
             ) : (
               <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center text-3xl font-bold text-white border-4 border-white/30">
-                {student.name?.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
+                {((student as any).user?.name || student.name)?.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
               </div>
             )}
             {student.character ? (
@@ -385,7 +385,7 @@ export default function Perfil() {
           <label htmlFor="avatar-upload" className="text-white/60 text-xs cursor-pointer hover:text-white/80 transition-colors">
             {avatarUploading ? 'Enviando...' : 'clique para alterar foto'}
           </label>
-          <h1 className="text-2xl font-bold text-white">{student.name}</h1>
+          <h1 className="text-2xl font-bold text-white">{(student as any).user?.name || student.name}</h1>
           <p className="text-white/80 text-sm mt-1 text-center">
             {tribeName} &mdash; {charName} ({getTierLabel(tierInfo.current.tier)})
           </p>
@@ -420,8 +420,8 @@ export default function Perfil() {
           {!editing ? (
             <button
               onClick={() => {
-                setEditName(student.name)
-                setEditWhatsapp(student.whatsapp || '')
+                setEditName((student as any).user?.name || student.name)
+                setEditWhatsapp((student as any).user?.whatsapp || student.whatsapp || '')
                 setEditVisibility(student.whatsapp_visibility || 'private')
                 setEditing(true)
               }}
@@ -626,7 +626,7 @@ export default function Perfil() {
               fgColor="#1F4E79"
               level="M"
             />
-            <p className="text-[10px] text-gray-400 mt-2">ID: {student.email || student.id}</p>
+            <p className="text-[10px] text-gray-400 mt-2">ID: {(student as any).user?.email || student.email || student.id}</p>
           </div>
           <button
             onClick={() => setShowQrModal(true)}
@@ -823,8 +823,8 @@ export default function Perfil() {
               fgColor="#1F4E79"
               level="H"
             />
-            <p className="text-xs text-gray-400 mt-4">{student.name}</p>
-            <p className="text-[10px] text-gray-300">{student.email}</p>
+            <p className="text-xs text-gray-400 mt-4">{(student as any).user?.name || student.name}</p>
+            <p className="text-[10px] text-gray-300">{(student as any).user?.email || student.email}</p>
           </div>
         </div>
       )}

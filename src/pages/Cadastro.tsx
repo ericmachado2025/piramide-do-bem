@@ -4,6 +4,7 @@ import { ChevronRight, ChevronLeft, CheckCircle2, Search, Loader2 } from 'lucide
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { findOrCreateClassroom, createStudentEnrollment, sendLgpdConsentEmail } from '../lib/database'
+import { ensureUserRecord } from '../lib/userProfile'
 import { calcAge } from '../lib/utils'
 import PasswordInput, { validatePassword } from '../components/PasswordInput'
 
@@ -417,10 +418,11 @@ export default function Cadastro() {
         return
       }
 
+      const userRec = await ensureUserRecord(authUserId, form.email, form.name)
+
       const { data: studentData, error: studentError } = await supabase.from('students').insert({
         user_id: authUserId,
-        name: form.name,
-        email: form.email,
+        users_id: userRec?.id || null,
         birth_date: birthDate || null,
         school_id: form.schoolId || null,
         parent_name: null,

@@ -62,12 +62,12 @@ export default function ResponsavelDashboard() {
       // Get parent record
       const { data: parentData, error: parentError } = await supabase
         .from('parents')
-        .select('id, full_name')
+        .select('id, full_name, user:users!parents_users_id_fkey(name, email, phone)')
         .eq('user_id', user.id)
         .single()
 
       if (parentError) throw parentError
-      setParentName(parentData.full_name)
+      setParentName((parentData as any).user?.name || parentData.full_name)
 
       // Get linked students
       const { data: links, error: linksError } = await supabase

@@ -245,6 +245,10 @@ export default function PatrocinadorCadastro() {
         }).select('id').single()
         usersRowId = newUser?.id
       }
+      // Update users record with latest data
+      if (usersRowId) {
+        await supabase.from('users').update({ name: contactName, phone }).eq('id', usersRowId)
+      }
 
       const { error: sponsorError } = await supabase
         .from('sponsors')
@@ -253,10 +257,8 @@ export default function PatrocinadorCadastro() {
           users_id: usersRowId || null,
           business_name: businessName,
           contact_name: contactName,
-          phone,
           city,
           state,
-          email: user?.email || email,
           person_type: personType,
           document: document.replace(/\D/g, '') || null,
         })

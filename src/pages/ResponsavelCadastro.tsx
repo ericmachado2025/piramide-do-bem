@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { ensureUserRecord } from '../lib/userProfile'
 import PasswordInput, { validatePassword } from '../components/PasswordInput'
 
 const COUNTRY_CODES = [
@@ -174,29 +175,26 @@ export default function ResponsavelCadastro() {
           const { data } = await supabase.auth.signInWithPassword({ email, password })
           userId = data.user?.id
         }
-        if (!userId) { setGlobalError('Voce precisa estar autenticado.'); setSubmitting(false); return }
+        if (!userId) { setGlobalError('Você precisa estar autenticado.'); setSubmitting(false); return }
       }
 
-      // Insert users record
-      const { data: usersRow } = await supabase.from('users').insert({
-        auth_id: userId,
-        name: fullName,
-        email: user?.email || email,
-        phone: countryCode + phone,
-        cpf: cpf.replace(/\D/g, '') || null,
-        phone_country_code: countryCode,
-      }).select('id').single()
+      // Ensure users record
+      const userRec = await ensureUserRecord(userId, user?.email || email, fullName)
+      if (userRec) {
+        await supabase.from('users').update({
+          name: fullName,
+          phone: countryCode + phone,
+          cpf: cpf.replace(/\D/g, '') || null,
+          phone_country_code: countryCode,
+        }).eq('id', userRec.id)
+      }
 
       // Insert parent
       const { data: parentData, error: parentError } = await supabase
         .from('parents')
         .insert({
           user_id: userId,
-          users_id: usersRow?.id || null,
-          name: fullName,
-          email: user?.email || email,
-          phone: countryCode + phone,
-          cpf: cpf.replace(/\D/g, '') || null,
+          users_id: userRec?.id || null,
         })
         .select('id')
         .single()
@@ -278,7 +276,7 @@ export default function ResponsavelCadastro() {
           <div className="space-y-4">
             <div className="text-center">
               <UserPlus className="w-12 h-12 mx-auto" style={{ color: '#028090' }} />
-              <h2 className="text-2xl font-extrabold mt-2" style={{ color: '#1F4E79' }}>Cadastro de Responsavel</h2>
+              <h2 className="text-2xl font-extrabold mt-2" style={{ color: '#1F4E79' }}>Cadastro de Responsável</h2>
               <p className="text-gray-400 text-sm mt-1">Crie sua conta para acompanhar seu filho(a)</p>
             </div>
             {user ? (
@@ -412,7 +410,7 @@ export default function ResponsavelCadastro() {
             className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-lg text-white transition-all disabled:opacity-50"
             style={{ backgroundColor: canAdvance() ? '#028090' : '#e5e7eb', color: canAdvance() ? '#fff' : '#9ca3af' }}>
             {(authLoading || submitting) && <Loader2 className="w-5 h-5 animate-spin" />}
-            {step === totalSteps ? 'Concluir cadastro' : step === 1 && !user ? 'Criar conta' : 'Proximo'}
+            {step === totalSteps ? 'Concluir cadastro' : step === 1 && !user ? 'Criar conta' : 'Próximo'}
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>

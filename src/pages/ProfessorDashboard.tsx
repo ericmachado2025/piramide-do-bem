@@ -73,13 +73,13 @@ export default function ProfessorDashboard() {
       // Get teacher record
       const { data: teacher } = await supabase
         .from('teachers')
-        .select('id, name, school_id')
+        .select('id, name, school_id, user:users!teachers_users_id_fkey(name, email, phone)')
         .eq('user_id', user!.id)
         .single()
 
       if (!teacher) { setLoading(false); return }
 
-      setTeacherName(teacher.name)
+      setTeacherName((teacher as any).user?.name || teacher.name)
 
       // Get school name
       const { data: school } = await supabase

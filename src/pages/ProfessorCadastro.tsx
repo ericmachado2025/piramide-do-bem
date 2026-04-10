@@ -386,10 +386,6 @@ export default function ProfessorCadastro() {
         .insert({
           user_id: authUserId,
           users_id: userData.id,
-          name: form.nome,
-          email: authEmail,
-          phone: `${form.phoneCountryCode}${form.phone.replace(/\D/g, '')}`,
-          cpf: form.cpf.replace(/\D/g, '') || null,
         })
         .select()
         .single()

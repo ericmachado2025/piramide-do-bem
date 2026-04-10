@@ -63,7 +63,7 @@ export default function Home() {
       // Load student with tribe and character
       const { data: studentData } = await supabase
         .from('students')
-        .select('*, community:communities(*), character:characters(*)')
+        .select('*, user:users!students_users_id_fkey(name, email, phone, whatsapp), community:communities(*), character:characters(*)')
         .eq('user_id', authUser!.id)
         .single()
 
@@ -120,7 +120,7 @@ export default function Home() {
       <div className="gradient-bg px-5 pt-8 pb-6 rounded-b-3xl">
         <div className="max-w-md mx-auto">
           <h1 className="text-2xl font-bold text-white">
-            Ola, {student.name}! <span className="inline-block animate-bounce">🎮</span>
+            Ola, {(student as any).user?.name || student.name}! <span className="inline-block animate-bounce">🎮</span>
           </h1>
           <p className="text-white/70 text-sm mt-1">O que você vai aprontar hoje?</p>
 
