@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ChevronRight, Clock, CheckCircle2, Sparkles } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { getCharacterDisplayName, getTierLabel } from '../lib/database'
+import { generateCharacterAvatar } from '../lib/avatarGenerator'
 import { useAuth } from '../contexts/AuthContext'
 import BottomNav from '../components/BottomNav'
 import FloatingFriendButton from '../components/FloatingFriendButton'
@@ -128,6 +129,15 @@ export default function Home() {
             <div className="relative">
               {(student as unknown as Record<string, unknown>).avatar_url ? (
                 <img src={(student as unknown as Record<string, unknown>).avatar_url as string} alt="" className="w-12 h-12 rounded-full object-cover border-2 border-white/30" />
+              ) : student.character ? (
+                <div className="w-12 h-12 flex-shrink-0"
+                  dangerouslySetInnerHTML={{ __html: generateCharacterAvatar({
+                    name: student.character.name ?? '',
+                    archetype: student.character.archetype ?? null,
+                    tier: student.character.level?.tier ?? 1,
+                    communityColor: student.community?.color_hex ?? null
+                  }, 48) }}
+                />
               ) : (
                 <div className="text-4xl">{tribeEmoji}</div>
               )}

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ChevronRight, ArrowLeft, Shield, Skull, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { getCharacterDisplayName, getTierLabel } from '../lib/database'
+import { generateCharacterAvatar } from '../lib/avatarGenerator'
 import { calcAge } from '../lib/utils'
 import { useAuth } from '../contexts/AuthContext'
 import type { CommunityCategory, CommunityType, Community, Character } from '../types'
@@ -460,9 +461,14 @@ export default function EscolhaTribo() {
                           : 'border-2 border-transparent hover:shadow-lg'
                       }`}
                     >
-                      <div className="w-12 h-12 rounded-full bg-teal/10 flex items-center justify-center text-2xl">
-                        {selectedCommunity?.icon_class ? getEmoji(selectedCommunity.icon_class) : getArchetypeEmoji(char.archetype)}
-                      </div>
+                      <div className="w-12 h-12 flex items-center justify-center flex-shrink-0"
+                        dangerouslySetInnerHTML={{ __html: generateCharacterAvatar({
+                          name: char.name,
+                          archetype: char.archetype,
+                          tier: char.level?.tier ?? 1,
+                          communityColor: selectedCommunity?.color_hex ?? null
+                        }, 48) }}
+                      />
                       <div className="text-left flex-1">
                         <h4 className="font-bold text-navy">{getCharacterDisplayName(char, char.level)}</h4>
                         {char.real_name && (
@@ -487,6 +493,14 @@ export default function EscolhaTribo() {
                         <div key={tier} className={`flex-shrink-0 w-24 text-center rounded-xl p-2 ${
                           tier === 1 ? 'bg-teal/10 border border-teal/30' : 'bg-white border border-gray-100 opacity-50'
                         }`}>
+                          <div className="flex justify-center mb-1"
+                            dangerouslySetInnerHTML={{ __html: generateCharacterAvatar({
+                              name: tierChars[0]?.name ?? '?',
+                              archetype: tierChars[0]?.archetype ?? null,
+                              tier,
+                              communityColor: selectedCommunity?.color_hex ?? null
+                            }, 36) }}
+                          />
                           <div className="text-xs font-bold text-gray-600">{levelName}</div>
                           <div className="text-[10px] text-gray-400">({label})</div>
                           <div className="text-[10px] text-teal font-semibold">

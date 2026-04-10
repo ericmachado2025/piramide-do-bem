@@ -7,6 +7,7 @@ import ReauthGuard from '../components/ReauthGuard'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { getCharacterDisplayName, getTierLabel, getStudentStreak, generateReferralCode } from '../lib/database'
+import { generateCharacterAvatar } from '../lib/avatarGenerator'
 import type { Student, Badge, Action, ActionType } from '../types'
 
 const ICON_MAP: Record<string, string> = {
@@ -341,7 +342,18 @@ export default function Perfil() {
                 {student.name?.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
               </div>
             )}
-            <span className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-white shadow flex items-center justify-center text-lg">{tribeIcon}</span>
+            {student.character ? (
+              <div className="absolute -bottom-1 -right-1 w-10 h-10 rounded-full bg-white shadow flex items-center justify-center"
+                dangerouslySetInnerHTML={{ __html: generateCharacterAvatar({
+                  name: student.character.name ?? '',
+                  archetype: student.character.archetype ?? null,
+                  tier: tierInfo.current.tier,
+                  communityColor: student.community?.color_hex ?? null
+                }, 36) }}
+              />
+            ) : (
+              <span className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-white shadow flex items-center justify-center text-lg">{tribeIcon}</span>
+            )}
             <input type="file" accept="image/*" id="avatar-upload" className="hidden" onChange={async (e) => {
               const file = e.target.files?.[0]
               if (!file || !student) return
