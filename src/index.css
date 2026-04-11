@@ -73,3 +73,14 @@
     color: #6b7280 !important;
   }
 }
+
+/* Leaflet label tooltip - transparent background */
+.map-label {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+.map-label::before {
+  display: none !important;
+}

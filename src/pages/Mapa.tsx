@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip, useMap } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import BottomNav from '../components/BottomNav'
 import { ArrowLeft, MapPin } from 'lucide-react'
@@ -315,6 +315,13 @@ export default function Mapa() {
                     }
                   }}
                 >
+                  <Tooltip permanent direction="center" className="map-label"
+                    offset={[0, 0]}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#1F4E79', textShadow: '0 0 3px white, 0 0 3px white' }}>
+                      {drillLevel === 'states' ? item.state : drillLevel === 'cities' ? (item.city?.split(' ')[0] || '') : ''}
+                      {drillLevel === 'states' && <><br/><span style={{ fontSize: '9px', fontWeight: 400 }}>{item.schools.toLocaleString()} esc.</span></>}
+                    </span>
+                  </Tooltip>
                   <Popup>
                     <div className="font-[Outfit] text-sm min-w-[180px]">
                       <p className="font-bold text-[#1F4E79] text-base mb-1">
