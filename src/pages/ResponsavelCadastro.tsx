@@ -53,7 +53,7 @@ export default function ResponsavelCadastro() {
   const { user, signUpWithEmail } = useAuth()
 
   const [step, setStep] = useState(user ? 2 : 1)
-  const totalSteps = 3
+  const totalSteps = 4
 
   // Step 1
   const [email, setEmail] = useState(searchParams.get('email') || '')
@@ -68,7 +68,15 @@ export default function ResponsavelCadastro() {
   const [phone, setPhone] = useState('')
   const [countryCode, setCountryCode] = useState('+55')
 
-  // Step 3 — Link students
+  // Step 2.5 — Phone OTP
+  const [phoneOtpCode, setPhoneOtpCode] = useState('')
+  const [phoneOtpGenerated, setPhoneOtpGenerated] = useState('')
+  const [phoneOtpSent, setPhoneOtpSent] = useState(false)
+  const [phoneVerified, setPhoneVerified] = useState(false)
+  const [phoneSending, setPhoneSending] = useState(false)
+  const [phoneError, setPhoneError] = useState('')
+
+  // Step 3 — Link students (was step 3, now step 4)
   const [autoLinkedStudents, setAutoLinkedStudents] = useState<StudentResult[]>([])
   const [studentQuery, setStudentQuery] = useState('')
   const [studentResults, setStudentResults] = useState<StudentResult[]>([])
@@ -230,11 +238,34 @@ export default function ResponsavelCadastro() {
     setSubmitting(false)
   }
 
+  const handleSendPhoneOtp = async () => {
+    setPhoneSending(true)
+    setPhoneError('')
+    const code = String(Math.floor(100000 + Math.random() * 900000))
+    setPhoneOtpGenerated(code)
+    setPhoneOtpCode(code) // DEV: auto-preenche enquanto WhatsApp pendente
+    const fullPhone = `${countryCode}${phone.replace(/\D/g, '')}`
+    await supabase.from('phone_verifications').insert({ phone: fullPhone, code, verified: false, created_at: new Date().toISOString() })
+    await supabase.functions.invoke('send-verification', { body: { to: fullPhone, channel: 'whatsapp', code, type: 'verification' } })
+    setPhoneOtpSent(true)
+    setPhoneSending(false)
+  }
+
+  const handleVerifyPhoneOtp = () => {
+    if (phoneOtpCode === phoneOtpGenerated) {
+      setPhoneVerified(true)
+      setPhoneError('')
+    } else {
+      setPhoneError('Codigo incorreto. Tente novamente.')
+    }
+  }
+
   const canAdvance = () => {
     switch (step) {
       case 1: return email.includes('@') && validatePassword(password).valid && password === confirmPassword
-      case 2: return fullName.trim().length >= 2 && phone.trim().length >= 10
-      case 3: return selectedStudents.length > 0
+      case 2: return fullName.trim().length >= 2 && phone.replace(/\D/g, '').length >= 10
+      case 3: return phoneVerified
+      case 4: return selectedStudents.length > 0
       default: return false
     }
   }
@@ -338,8 +369,50 @@ export default function ResponsavelCadastro() {
           </div>
         )}
 
-        {/* Step 3: Link students */}
+        {/* Step 3: Phone OTP */}
         {step === 3 && (
+          <div className="space-y-4">
+            <div className="text-center">
+              <span className="text-5xl block mb-2">{'\u{1F4F1}'}</span>
+              <h2 className="text-xl font-bold text-navy">Confirme seu telefone</h2>
+              <p className="text-gray-400 text-sm mt-1">Vamos enviar um codigo para verificar</p>
+            </div>
+
+            <div className="bg-gray-50 rounded-xl p-3 text-center">
+              <p className="text-sm text-navy font-medium">{countryCode} {phone}</p>
+            </div>
+
+            {!phoneOtpSent ? (
+              <button onClick={handleSendPhoneOtp} disabled={phoneSending}
+                className="w-full py-3.5 rounded-xl font-bold text-white text-sm disabled:opacity-50" style={{ backgroundColor: '#028090' }}>
+                {phoneSending ? 'Enviando...' : 'Enviar codigo por WhatsApp'}
+              </button>
+            ) : !phoneVerified ? (
+              <div className="space-y-3">
+                <input type="text" inputMode="numeric" placeholder="000000" value={phoneOtpCode}
+                  onChange={(e) => setPhoneOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  onKeyDown={(e) => e.key === 'Enter' && phoneOtpCode.length === 6 && handleVerifyPhoneOtp()}
+                  className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg text-center tracking-widest" autoFocus />
+                <button onClick={handleVerifyPhoneOtp} disabled={phoneOtpCode.length !== 6}
+                  className="w-full py-3 rounded-xl font-bold text-white text-sm disabled:opacity-50" style={{ backgroundColor: '#028090' }}>
+                  Verificar codigo
+                </button>
+                {phoneError && <p className="text-sm text-red-500 text-center">{phoneError}</p>}
+                <button onClick={handleSendPhoneOtp} className="w-full text-xs text-gray-400 hover:text-teal text-center">
+                  Reenviar codigo
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+                <span className="text-green-500 text-xl">{'\u2713'}</span>
+                <p className="text-sm font-semibold text-green-700">Telefone verificado!</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Step 4: Link students */}
+        {step === 4 && (
           <div className="space-y-4">
             <div className="text-center">
               <Search className="w-12 h-12 mx-auto" style={{ color: '#028090' }} />
