@@ -519,17 +519,17 @@ export default function Perfil() {
         {/* ===== INDICACOES ===== */}
         <section>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-bold text-navy">Minhas Indicacoes</h2>
+            <h2 className="text-lg font-bold text-navy">Convidar amigos para a Piramide</h2>
             <button onClick={() => { setShowInviteModal(true); setInviteMsg('') }}
               className="text-sm font-semibold text-teal">
-              + Indicar amigo
+              + Convidar
             </button>
           </div>
 
           {confirmedRefs.length === 0 && pendingRefs.length === 0 ? (
             <div className="bg-white rounded-xl shadow-md p-6 text-center">
               <p className="text-gray-500 text-sm mb-3">Indique amigos e ganhe ate 25 pts por cada cadastro confirmado!</p>
-              <button onClick={() => { setShowInviteModal(true); setInviteMsg('') }} className="bg-teal text-white text-sm font-bold px-4 py-2 rounded-lg">Indicar meu primeiro amigo</button>
+              <button onClick={() => { setShowInviteModal(true); setInviteMsg('') }} className="bg-teal text-white text-sm font-bold px-4 py-2 rounded-lg">Convide seu primeiro amigo</button>
               <p className="text-[10px] text-gray-400 mt-3">1a-5a: 25pts | 6a-10a: 15pts | 11a-20a: 8pts | 21a+: 4pts</p>
             </div>
           ) : (
@@ -936,7 +936,7 @@ export default function Perfil() {
       {showInviteModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowInviteModal(false)}>
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-bold text-navy text-lg mb-1">Indicar amigos</h3>
+            <h3 className="font-bold text-navy text-lg mb-1">Convidar amigos para a Piramide</h3>
             <p className="text-xs text-gray-400 mb-4">Escolha amigos que realmente vao participar. Limite: 5 convites por dia.</p>
 
             <div className="flex gap-2 mb-2">
