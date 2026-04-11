@@ -41,7 +41,9 @@ export default function Login() {
   const [emailOtpCode, setEmailOtpCode] = useState('')
   const [otpEmail, setOtpEmail] = useState('')
   const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [emailVerifError, setEmailVerifError] = useState('')
   const [emailVerifLoading, setEmailVerifLoading] = useState(false)
 
@@ -141,6 +143,7 @@ export default function Login() {
 
   async function handleCreatePassword() {
     if (newPassword.length < 8) return
+    if (newPassword !== confirmPassword) { setError('As senhas não coincidem.'); return }
     setLoading(true); setError('')
     const { error: err } = await supabase.auth.updateUser({ password: newPassword })
     if (err) { setError('Erro ao salvar senha. Tente novamente.'); setLoading(false); return }
@@ -279,9 +282,9 @@ export default function Login() {
           <div className="space-y-4">
             <div className="text-center mb-2">
               <span className="text-5xl">📧</span>
-              <h2 className="text-2xl font-extrabold text-navy mt-2">Verifique seu email</h2>
+              <h2 className="text-2xl font-extrabold text-navy mt-2">Confirme seu email</h2>
               <p className="text-gray-400 text-sm mt-1">
-                Enviamos um código de 6 dígitos para <strong>{email}</strong>
+                Enviamos um link de verificação para <strong>{email}</strong>
               </p>
             </div>
             <input
@@ -320,16 +323,49 @@ export default function Login() {
             </div>
             <div className="relative">
               <input type={showNewPassword ? 'text' : 'password'} placeholder="Crie uma senha segura" value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && newPassword.length >= 8 && handleCreatePassword()}
+                onChange={(e) => { setNewPassword(e.target.value); setError('') }}
+                onKeyDown={(e) => e.key === 'Enter' && newPassword.length >= 8 && document.getElementById('confirm-pw')?.focus()}
                 className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors pr-12" autoFocus />
               <button type="button" onClick={() => setShowNewPassword(!showNewPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                 {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
             </div>
-            {newPassword.length > 0 && newPassword.length < 8 && <p className="text-xs text-red">Mínimo 8 caracteres</p>}
+            {newPassword.length > 0 && (() => {
+              const hasUpper = /[A-Z]/.test(newPassword)
+              const hasNumber = /\d/.test(newPassword)
+              const hasSpecial = /[!@#$%^&*]/.test(newPassword)
+              const len = newPassword.length
+              const score = (len >= 8 ? 1 : 0) + (len >= 12 ? 1 : 0) + (hasUpper ? 1 : 0) + (hasNumber ? 1 : 0) + (hasSpecial ? 1 : 0)
+              const labels = ['', 'Fraca', 'Razoável', 'Boa', 'Forte', 'Muito forte']
+              const colors = ['', 'bg-red-400', 'bg-orange-400', 'bg-yellow-400', 'bg-teal', 'bg-green-500']
+              return (
+                <div className="space-y-1">
+                  <div className="flex gap-1">
+                    {[1,2,3,4,5].map(i => (
+                      <div key={i} className={`h-1.5 flex-1 rounded-full transition-all ${i <= score ? colors[score] : 'bg-gray-200'}`} />
+                    ))}
+                  </div>
+                  <p className={`text-xs font-medium ${score <= 1 ? 'text-red-400' : score <= 2 ? 'text-orange-400' : 'text-teal'}`}>{labels[score] || ''}</p>
+                </div>
+              )
+            })()}
+            <div className="relative">
+              <input id="confirm-pw" type={showConfirmPassword ? 'text' : 'password'} placeholder="Confirme a senha" value={confirmPassword}
+                onChange={(e) => { setConfirmPassword(e.target.value); setError('') }}
+                onKeyDown={(e) => e.key === 'Enter' && newPassword.length >= 8 && confirmPassword.length >= 8 && handleCreatePassword()}
+                className={`w-full px-4 py-3.5 rounded-xl border-2 focus:outline-none text-lg transition-colors pr-12 ${
+                  confirmPassword.length > 0 && confirmPassword !== newPassword ? 'border-red-400 focus:border-red-400' : 'border-gray-200 focus:border-teal'
+                }`} />
+              <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+            {confirmPassword.length > 0 && confirmPassword !== newPassword && <p className="text-xs text-red-400">As senhas não coincidem</p>}
             {error && <div className="bg-red/10 border border-red/30 rounded-xl p-3 text-sm text-red">{error}</div>}
-            <button onClick={handleCreatePassword} disabled={newPassword.length < 8 || loading}
-              className={`w-full py-3.5 rounded-xl font-bold text-lg transition-all ${newPassword.length >= 8 && !loading ? 'bg-teal text-white hover:bg-teal/90' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
+            <button onClick={handleCreatePassword} disabled={newPassword.length < 8 || newPassword !== confirmPassword || loading}
+              className={`w-full py-3.5 rounded-xl font-bold text-lg transition-all ${
+                newPassword.length >= 8 && newPassword === confirmPassword && !loading ? 'bg-teal text-white hover:bg-teal/90' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              }`}>
               {loading ? 'Salvando...' : 'Continuar →'}
             </button>
           </div>

@@ -10,6 +10,7 @@ import type { ActionType } from '../types'
 interface Classmate {
   id: string
   name: string
+  school?: { name: string; city: string; state: string } | null
 }
 
 export default function RegistrarAcao() {
@@ -25,6 +26,9 @@ export default function RegistrarAcao() {
 
   const [actionTypes, setActionTypes] = useState<ActionType[]>([])
   const [classmates, setClassmates] = useState<Classmate[]>([])
+  const [classmatePage, setClassmatePage] = useState(0)
+  const [classmatesTotal, setClassmatesTotal] = useState(0)
+  const PAGE_SIZE = 20
   const [studentId, setStudentId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -64,19 +68,39 @@ export default function RegistrarAcao() {
 
   // Debounced search for all participants (open, not restricted to school)
   useEffect(() => {
-    if (!showAll && searchQuery.length < 2) { setClassmates([]); return }
+    if (!showAll && searchQuery.length < 2) { setClassmates([]); setClassmatesTotal(0); return }
     const timer = setTimeout(async () => {
-      let q = supabase.from('students').select('id, name').neq('id', studentId ?? '')
+      let q = supabase.from('students')
+        .select('id, user:users!students_users_id_fkey(name), school:schools(name, city, state)', { count: 'exact' })
+        .neq('id', studentId ?? '')
       if (searchQuery.length >= 2) {
-        q = q.or(`name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%,whatsapp.ilike.%${searchQuery}%`).limit(20)
+        // Search in users table for name match
+        const { data: matchingUsers } = await supabase.from('users').select('auth_id').ilike('name', `%${searchQuery}%`).limit(50)
+        if (matchingUsers && matchingUsers.length > 0) {
+          q = q.in('user_id', matchingUsers.map(u => u.auth_id))
+        } else {
+          if (classmatePage === 0) setClassmates([])
+          setClassmatesTotal(0)
+          return
+        }
       } else {
-        q = q.order('name').limit(50)
+        q = q.order('created_at', { ascending: false })
       }
-      const { data } = await q
-      if (data) setClassmates(data)
+      q = q.range(classmatePage * PAGE_SIZE, (classmatePage + 1) * PAGE_SIZE - 1)
+      const { data, count } = await q
+      if (data) {
+        const mapped = data.map((d: Record<string, unknown>) => ({
+          id: d.id as string,
+          name: ((d.user as Record<string, unknown>)?.name as string) || 'Aluno',
+          school: d.school as { name: string; city: string; state: string } | null,
+        }))
+        if (classmatePage === 0) setClassmates(mapped)
+        else setClassmates(prev => [...prev, ...mapped])
+        setClassmatesTotal(count ?? 0)
+      }
     }, 300)
     return () => clearTimeout(timer)
-  }, [searchQuery, studentId, showAll])
+  }, [searchQuery, studentId, showAll, classmatePage])
 
   const availablePeople = classmates
 
@@ -295,7 +319,7 @@ export default function RegistrarAcao() {
               <input
                 type="text"
                 value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); setShowAll(false) }}
+                onChange={(e) => { setSearchQuery(e.target.value); setShowAll(false); setClassmatePage(0) }}
                 onKeyDown={(e) => { if (e.key === 'Enter' && searchQuery.length < 2) { e.preventDefault(); setShowAll(true) } }}
                 placeholder="Buscar colega ou Enter para ver todos"
                 className="w-full bg-white border border-gray-200 rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all"
@@ -331,13 +355,22 @@ export default function RegistrarAcao() {
                       }`}
                     >
                       <span className="text-2xl">{'\u{1F464}'}</span>
-                      <span className="font-medium text-navy text-sm">{c.name}</span>
+                      <div>
+                        <span className="font-medium text-navy text-sm">{c.name}</span>
+                        {c.school && <span className="text-xs text-gray-400 block">{c.school.city} - {c.school.state}</span>}
+                      </div>
                       {isSelected && (
                         <Check size={18} className="ml-auto text-teal" />
                       )}
                     </button>
                   )
                 })
+              )}
+              {classmates.length < classmatesTotal && (
+                <button onClick={() => setClassmatePage(p => p + 1)}
+                  className="w-full text-sm text-teal hover:text-teal/80 py-2 text-center font-medium">
+                  Carregar mais ({classmates.length} de {classmatesTotal})
+                </button>
               )}
             </div>
           </div>
