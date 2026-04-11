@@ -300,6 +300,20 @@ export default function Home() {
           </div>
         </Link>
 
+        <Link to="/mapa"
+          className="block bg-gradient-to-r from-[#1F4E79] to-teal rounded-2xl shadow-md p-5 text-white group hover:shadow-lg transition-all duration-200 active:scale-[0.98]">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">{'\u{1F30E}'}</span>
+              <div>
+                <h3 className="font-bold text-lg">Nosso impacto no Brasil</h3>
+                <p className="text-white/70 text-sm">Veja o que a Piramide ja construiu</p>
+              </div>
+            </div>
+            <ChevronRight className="text-white/50 group-hover:translate-x-1 transition-transform" />
+          </div>
+        </Link>
+
         {/* Quick links row */}
         <div className="flex gap-3">
           <Link to="/monitoria" className="flex-1 bg-white rounded-2xl shadow-md p-4 text-center hover:shadow-lg transition-all active:scale-[0.98]">
