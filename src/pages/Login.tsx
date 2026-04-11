@@ -78,19 +78,28 @@ export default function Login() {
       options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     })
     const signUpMsg = signUpErr?.message?.toLowerCase() || ''
-    const emailExists = signUpMsg.includes('already registered') || signUpMsg.includes('user already registered')
+    const emailExists = signUpMsg.includes('already registered') ||
+      signUpMsg.includes('user already registered')
+    const isRateLimit = signUpMsg.includes('rate limit') ||
+      signUpMsg.includes('email rate limit') ||
+      signUpMsg.includes('too many') ||
+      signUpMsg.includes('429')
 
     if (emailExists) {
+      // Email já cadastrado → pedir senha
       const { data: userRec } = await supabase.from('users').select('name').eq('email', email).maybeSingle()
       setUserName(userRec?.name || '')
       setIsNewUser(false)
       setStep('senha')
     } else if (!signUpErr) {
+      // Email novo → conta criada, email de confirmação enviado
       setIsNewUser(true)
       setTempPassword(tempPwd)
       setStep('confirmar-email')
+    } else if (isRateLimit) {
+      setError('Muitas tentativas. Aguarde 1 minuto e tente novamente.')
     } else {
-      setError('Erro ao processar. Tente novamente.')
+      setError(`Erro ao processar: ${signUpErr?.message || 'tente novamente'}`)
     }
     setLoading(false)
   }
