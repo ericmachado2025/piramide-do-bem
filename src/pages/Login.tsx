@@ -71,35 +71,57 @@ export default function Login() {
     setLoading(true)
     setError('')
 
-    // signUp detecta se email existe: "already registered" = existe
-    const tempPwd = Math.random().toString(36).slice(-10) + 'Aa1!'
-    const { error: signUpErr } = await supabase.auth.signUp({
-      email, password: tempPwd,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+    // Estratégia: tentar signIn com senha inválida para distinguir os casos:
+    // → "email_not_confirmed": email existe mas não confirmado → tratar como NOVO (reenviar link)
+    // → "invalid_credentials": pode ser email existente com senha errada OU email inexistente
+    //    Para distinguir os dois, verificar se existe registro em public.users
+    const { error: signInErr } = await supabase.auth.signInWithPassword({
+      email, password: '___probe___',
     })
-    const signUpMsg = signUpErr?.message?.toLowerCase() || ''
-    const emailExists = signUpMsg.includes('already registered') ||
-      signUpMsg.includes('user already registered')
-    const isRateLimit = signUpMsg.includes('rate limit') ||
-      signUpMsg.includes('email rate limit') ||
-      signUpMsg.includes('too many') ||
-      signUpMsg.includes('429')
+    const signInMsg = signInErr?.message?.toLowerCase() || ''
+    const isNotConfirmed = signInMsg.includes('email not confirmed') || signInMsg.includes('not confirmed')
+    const isInvalidCreds = signInMsg.includes('invalid') || signInMsg.includes('credentials')
 
-    if (emailExists) {
-      // Email já cadastrado → pedir senha
+    if (isNotConfirmed) {
+      // Email existe mas não confirmado — reenviar link de confirmação
+      setIsNewUser(true)
+      const { error: resendErr } = await supabase.auth.resend({ type: 'signup', email })
+      if (!resendErr) {
+        setStep('confirmar-email')
+      } else {
+        setError('Erro ao reenviar email. Tente novamente.')
+      }
+    } else if (isInvalidCreds) {
+      // Pode ser existente (senha errada) ou inexistente
+      // Verificar em public.users
       const { data: userRec } = await supabase.from('users').select('name').eq('email', email).maybeSingle()
-      setUserName(userRec?.name || '')
+      if (userRec) {
+        // Email existe no sistema → pedir senha
+        setUserName(userRec.name || '')
+        setIsNewUser(false)
+        setStep('senha')
+      } else {
+        // Email não existe → criar conta e enviar confirmação
+        const tempPwd = Math.random().toString(36).slice(-10) + 'Aa1!'
+        setTempPassword(tempPwd)
+        const { error: signUpErr } = await supabase.auth.signUp({
+          email, password: tempPwd,
+          options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+        })
+        const signUpMsg = signUpErr?.message?.toLowerCase() || ''
+        if (!signUpErr || signUpMsg.includes('already registered')) {
+          setIsNewUser(true)
+          setStep('confirmar-email')
+        } else {
+          setError('Erro ao criar conta. Tente novamente.')
+        }
+      }
+    } else if (!signInErr) {
+      // Login bem sucedido com probe (improvável mas tratado)
       setIsNewUser(false)
       setStep('senha')
-    } else if (!signUpErr) {
-      // Email novo → conta criada, email de confirmação enviado
-      setIsNewUser(true)
-      setTempPassword(tempPwd)
-      setStep('confirmar-email')
-    } else if (isRateLimit) {
-      setError('Muitas tentativas. Aguarde 1 minuto e tente novamente.')
     } else {
-      setError(`Erro ao processar: ${signUpErr?.message || 'tente novamente'}`)
+      setError('Erro ao verificar email. Tente novamente.')
     }
     setLoading(false)
   }
