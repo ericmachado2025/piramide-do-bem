@@ -5,6 +5,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { getScoringRule } from '../lib/database'
+import StudentSearch from '../components/StudentSearch'
 import type { ActionType } from '../types'
 
 interface Classmate {
@@ -30,6 +31,7 @@ export default function RegistrarAcao() {
   const [classmatesTotal, setClassmatesTotal] = useState(0)
   const PAGE_SIZE = 20
   const [studentId, setStudentId] = useState<string | null>(null)
+  const [mySchoolId, setMySchoolId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -45,6 +47,7 @@ export default function RegistrarAcao() {
 
       if (me) {
         setStudentId(me.id)
+        setMySchoolId(me.school_id)
       }
 
       // Load action types with scoring_rule_key (only active)
@@ -308,72 +311,15 @@ export default function RegistrarAcao() {
 
         {/* STEP 2 */}
         {step === 2 && (
-          <div>
-            <h2 className="text-xl font-bold text-navy mb-1">Quem voce ajudou?</h2>
-            <p className="text-gray-500 text-sm mb-4">
-              Selecione o(s) colega(s) que receberam a boa acao
-            </p>
-
-            <div className="relative mb-4">
-              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); setShowAll(false); setClassmatePage(0) }}
-                onKeyDown={(e) => { if (e.key === 'Enter' && searchQuery.length < 2) { e.preventDefault(); setShowAll(true) } }}
-                placeholder="Buscar colega ou Enter para ver todos"
-                className="w-full bg-white border border-gray-200 rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-teal/30 focus:border-teal transition-all"
-              />
-            </div>
-
-            {selectedBeneficiaries.length > 0 && (
-              <p className="text-teal text-xs font-semibold mb-2">
-                {selectedBeneficiaries.length} selecionado(s)
-              </p>
-            )}
-
-            <div className="space-y-2">
-              {availablePeople.length === 0 ? (
-                <div className="bg-white rounded-xl shadow-sm p-6 text-center">
-                  <p className="text-gray-400 text-sm">
-                    {searchQuery.length < 2 && !showAll
-                      ? 'Pressione Enter para ver todos os alunos'
-                      : 'Nenhum resultado encontrado'}
-                  </p>
-                </div>
-              ) : (
-                availablePeople.map((c) => {
-                  const isSelected = selectedBeneficiaries.includes(c.id)
-                  return (
-                    <button
-                      key={c.id}
-                      onClick={() => toggleBeneficiary(c.id)}
-                      className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 active:scale-[0.98] ${
-                        isSelected
-                          ? 'bg-teal/10 border-2 border-teal'
-                          : 'bg-white border-2 border-transparent shadow-sm hover:shadow-md'
-                      }`}
-                    >
-                      <span className="text-2xl">{'\u{1F464}'}</span>
-                      <div>
-                        <span className="font-medium text-navy text-sm">{c.name}</span>
-                        {c.school && <span className="text-xs text-gray-400 block">{c.school.city} - {c.school.state}</span>}
-                      </div>
-                      {isSelected && (
-                        <Check size={18} className="ml-auto text-teal" />
-                      )}
-                    </button>
-                  )
-                })
-              )}
-              {classmates.length < classmatesTotal && (
-                <button onClick={() => setClassmatePage(p => p + 1)}
-                  className="w-full text-sm text-teal hover:text-teal/80 py-2 text-center font-medium">
-                  Carregar mais ({classmates.length} de {classmatesTotal})
-                </button>
-              )}
-            </div>
-          </div>
+          <StudentSearch
+            mySchoolId={mySchoolId}
+            myStudentId={studentId}
+            selected={selectedBeneficiaries}
+            onToggle={toggleBeneficiary}
+            multiple={true}
+            label="Quem você ajudou?"
+            sublabel="Selecione o(s) colega(s) que receberam a boa ação"
+          />
         )}
 
         {/* STEP 3 */}
