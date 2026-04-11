@@ -54,6 +54,7 @@ export default function Home() {
   const [pendingCount, setPendingCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [showHelpModal, setShowHelpModal] = useState(false)
+  const [friendRequests, setFriendRequests] = useState<{ id: string; name: string; created_at: string }[]>([])
 
   useEffect(() => {
     if (authLoading) return
@@ -95,6 +96,19 @@ export default function Home() {
         .eq('author_id', studentData.id)
 
       setPendingCount(count || 0)
+
+      // Load pending friend requests (where I am the addressee)
+      const { data: friendReqs } = await supabase.from('friendships')
+        .select('id, created_at, requester:students!friendships_requester_id_fkey(user:users!students_users_id_fkey(name))')
+        .eq('addressee_id', studentData.id).eq('status', 'pending').order('created_at', { ascending: false })
+      if (friendReqs) {
+        setFriendRequests(friendReqs.map((r: Record<string, unknown>) => ({
+          id: r.id as string,
+          name: ((r.requester as Record<string, unknown>)?.user as Record<string, unknown>)?.name as string || 'Colega',
+          created_at: r.created_at as string,
+        })))
+      }
+
       setLoading(false)
     }
 
@@ -173,6 +187,33 @@ export default function Home() {
       <div className="max-w-md mx-auto px-5 mt-6 space-y-4">
         {/* PWA Install */}
         <InstallButton />
+
+        {/* Friend Requests */}
+        {friendRequests.length > 0 && (
+          <div className="bg-white border-2 border-purple-300 rounded-2xl shadow-md p-4">
+            <h3 className="font-bold text-navy text-sm mb-2">{'\u{1F465}'} Pedidos de amizade ({friendRequests.length})</h3>
+            <div className="space-y-2">
+              {friendRequests.map(fr => (
+                <div key={fr.id} className="flex items-center justify-between bg-gray-50 rounded-xl p-3">
+                  <div>
+                    <p className="text-sm font-semibold text-navy">{fr.name}</p>
+                    <p className="text-[10px] text-gray-400">{new Date(fr.created_at).toLocaleDateString('pt-BR')}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={async () => {
+                      await supabase.from('friendships').update({ status: 'accepted' }).eq('id', fr.id)
+                      setFriendRequests(prev => prev.filter(r => r.id !== fr.id))
+                    }} className="bg-teal text-white text-xs font-bold px-3 py-1.5 rounded-lg">Aceitar</button>
+                    <button onClick={async () => {
+                      await supabase.from('friendships').update({ status: 'rejected' }).eq('id', fr.id)
+                      setFriendRequests(prev => prev.filter(r => r.id !== fr.id))
+                    }} className="bg-gray-200 text-gray-500 text-xs font-bold px-3 py-1.5 rounded-lg">Recusar</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Action Cards */}
         <Link
@@ -261,7 +302,7 @@ export default function Home() {
 
         {/* Pendentes */}
         {pendingCount > 0 && (
-          <Link to="/acoes" className="bg-yellow/10 border border-yellow/30 rounded-2xl p-4 flex items-center gap-3 hover:bg-yellow/20 transition-colors">
+          <Link to="/validar" className="bg-yellow/10 border border-yellow/30 rounded-2xl p-4 flex items-center gap-3 hover:bg-yellow/20 transition-colors">
             <Clock className="text-yellow" size={24} />
             <div>
               <p className="text-sm font-semibold text-navy">

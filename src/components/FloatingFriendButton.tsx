@@ -39,6 +39,7 @@ export default function FloatingFriendButton() {
     setMsg(`${sent} pedido(s) de amizade enviado(s)!`)
     setSelected([])
     setSending(false)
+    setTimeout(() => setOpen(false), 1500)
   }
 
   if (!user || !studentId) return null
