@@ -84,11 +84,12 @@ export default function Home() {
 
       setRecentActions((actions as RecentAction[]) || [])
 
-      // Load pending actions count
+      // Load pending actions count — apenas as do próprio aluno
       const { count } = await supabase
         .from('actions')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'pending')
+        .eq('author_id', studentData.id)
 
       setPendingCount(count || 0)
       setLoading(false)
@@ -239,15 +240,15 @@ export default function Home() {
 
         {/* Pendentes */}
         {pendingCount > 0 && (
-          <div className="bg-yellow/10 border border-yellow/30 rounded-2xl p-4 flex items-center gap-3">
+          <Link to="/acoes" className="bg-yellow/10 border border-yellow/30 rounded-2xl p-4 flex items-center gap-3 hover:bg-yellow/20 transition-colors">
             <Clock className="text-yellow" size={24} />
             <div>
               <p className="text-sm font-semibold text-navy">
                 {pendingCount} {pendingCount === 1 ? 'ação esperando um colega' : 'ações esperando um colega'}
               </p>
-              <p className="text-xs text-gray-500">Toque aqui para acompanhar</p>
+              <p className="text-xs text-gray-500">Toque aqui para acompanhar →</p>
             </div>
-          </div>
+          </Link>
         )}
 
         {/* Ultimas Acoes */}
