@@ -103,7 +103,7 @@ export default function Login() {
   }
 
   async function handleEmailVerified() {
-    if (emailOtpCode.length !== 6) return
+    if (emailOtpCode.length < 6) return
     setEmailVerifLoading(true)
     setEmailVerifError('')
     const { data, error } = await supabase.auth.verifyOtp({
@@ -282,19 +282,19 @@ export default function Login() {
               </p>
             </div>
             <input
-              type="number"
+              type="text"
               inputMode="numeric"
-              placeholder="000000"
+              placeholder="Código recebido"
               value={emailOtpCode}
-              onChange={(e) => { setEmailOtpCode(e.target.value.slice(0, 6)); setEmailVerifError('') }}
-              onKeyDown={(e) => e.key === 'Enter' && emailOtpCode.length === 6 && handleEmailVerified()}
+              onChange={(e) => { setEmailOtpCode(e.target.value.replace(/\s/g,'').slice(0, 8)); setEmailVerifError('') }}
+              onKeyDown={(e) => e.key === 'Enter' && emailOtpCode.length >= 6 && handleEmailVerified()}
               className="w-full px-4 py-4 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-3xl text-center tracking-widest font-bold transition-colors"
               autoFocus
             />
             <button
               onClick={handleEmailVerified}
-              disabled={emailOtpCode.length !== 6 || emailVerifLoading}
-              className={`w-full py-3.5 rounded-xl font-bold text-lg text-white transition-all ${emailOtpCode.length === 6 && !emailVerifLoading ? 'opacity-100' : 'opacity-50 cursor-not-allowed'}`}
+              disabled={emailOtpCode.length < 6 || emailVerifLoading}
+              className={`w-full py-3.5 rounded-xl font-bold text-lg text-white transition-all ${emailOtpCode.length >= 6 && !emailVerifLoading ? 'opacity-100' : 'opacity-50 cursor-not-allowed'}`}
               style={{ backgroundColor: '#028090' }}
             >
               {emailVerifLoading ? 'Verificando...' : 'Confirmar código →'}
