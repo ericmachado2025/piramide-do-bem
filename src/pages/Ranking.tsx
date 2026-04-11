@@ -97,7 +97,7 @@ export default function Ranking() {
         // Load students with tribe info
         const { data, error: queryError } = await supabase
           .from('students')
-          .select('id, name, total_points, community:communities!left(name, icon_class, color_hex)')
+          .select('id, total_points, user:users!students_users_id_fkey(name), community:communities!left(name, icon_class, color_hex)')
           .order('total_points', { ascending: false })
           .limit(100)
 
@@ -120,7 +120,7 @@ export default function Ranking() {
             }
             return {
               id: s.id,
-              name: s.name,
+              name: ((s.user as unknown as { name: string }) ?? { name: 'Aluno' }).name,
               communityIcon: community?.icon_class ? (ICON_MAP[community.icon_class] ?? '\u{1F5A4}') : '\u{1F5A4}',
               communityName: community?.name ?? 'Desconhecida',
               communityColor: community?.color_hex ?? null,
