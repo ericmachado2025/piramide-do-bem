@@ -7,6 +7,8 @@ type Scope = 'escola' | 'bairro' | 'cidade' | 'estado' | 'brasil'
 interface StudentResult {
   id: string
   name: string
+  community_name: string | null
+  character_name: string | null
   school_name: string | null
   school_city: string | null
   school_state: string | null
@@ -94,7 +96,7 @@ export default function StudentSearch({
 
     // Step 2: Search students with name filter via users table
     let q = supabase.from('students')
-      .select('id, user:users!students_users_id_fkey(name), school:schools(name, city, state, neighborhood)', { count: 'exact' })
+      .select('id, user:users!students_users_id_fkey(name), school:schools(name, city, state, neighborhood), community:communities(name), character:characters(name)', { count: 'exact' })
       .neq('id', myStudentId ?? '')
 
     if (schoolIds) {
@@ -120,9 +122,13 @@ export default function StudentSearch({
       const mapped: StudentResult[] = data.map((s: Record<string, unknown>) => {
         const user = s.user as Record<string, unknown> | null
         const school = s.school as Record<string, unknown> | null
+        const community = s.community as Record<string, unknown> | null
+        const character = s.character as Record<string, unknown> | null
         return {
           id: s.id as string,
           name: (user?.name as string) || 'Aluno',
+          community_name: (community?.name as string) || null,
+          character_name: (character?.name as string) || null,
           school_name: (school?.name as string) || null,
           school_city: (school?.city as string) || null,
           school_state: (school?.state as string) || null,
@@ -188,8 +194,10 @@ export default function StudentSearch({
           <>
             {results.map((s) => {
               const isSelected = selected.includes(s.id)
-              const locParts = [s.school_state, s.school_city, s.school_neighborhood, s.school_name].filter(Boolean)
-              const locText = locParts.join(' · ')
+              const geoParts = [s.school_state, s.school_city, s.school_neighborhood].filter(Boolean)
+              const geoText = geoParts.join(' · ')
+              const identityParts = [s.name, s.community_name, s.character_name].filter(Boolean)
+              const identityText = identityParts.join(' · ')
               return (
                 <button key={s.id} onClick={() => onToggle(s.id, s.name)}
                   className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-150 active:scale-[0.98] text-left ${
@@ -197,8 +205,9 @@ export default function StudentSearch({
                   }`}>
                   <span className="text-xl flex-shrink-0">{'\u{1F464}'}</span>
                   <div className="flex-1 min-w-0">
-                    {locText && <p className="text-[11px] text-gray-400 truncate leading-tight mb-0.5">{locText}</p>}
-                    <p className="text-sm font-semibold text-navy truncate">{s.name}</p>
+                    {geoText && <p className="text-[11px] text-gray-400 truncate leading-tight mb-0.5">{geoText}</p>}
+                    <p className="text-sm font-semibold text-navy truncate">{identityText}</p>
+                    {s.school_name && <p className="text-[11px] text-gray-400 truncate leading-tight mt-0.5">{s.school_name}</p>}
                   </div>
                   {isSelected && <Check size={16} className="flex-shrink-0 text-teal" />}
                 </button>
