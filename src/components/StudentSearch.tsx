@@ -49,7 +49,7 @@ export default function StudentSearch({
   mySchoolId, myStudentId, selected, onToggle,
   label = 'Quem você ajudou?', sublabel,
 }: StudentSearchProps) {
-  const [scope, setScope] = useState<Scope>('escola')
+  const [scope, setScope] = useState<Scope>(mySchoolId ? 'escola' : 'brasil')
   const [searchQuery, setSearchQuery] = useState('')
   const [results, setResults] = useState<StudentResult[]>([])
   const [total, setTotal] = useState(0)
@@ -97,7 +97,8 @@ export default function StudentSearch({
     // Step 2: Search students with name filter via users table
     let q = supabase.from('students')
       .select('id, user:users!students_users_id_fkey(name), school:schools(name, city, state, neighborhood), community:communities(name), character:characters(name)', { count: 'exact' })
-      .neq('id', myStudentId ?? '')
+
+    if (myStudentId) q = q.neq('id', myStudentId)
 
     if (schoolIds) {
       if (schoolIds.length === 0) { setResults([]); setTotal(0); setLoading(false); return }
