@@ -71,27 +71,26 @@ export default function Login() {
     setLoading(true)
     setError('')
 
-    const { error: probeError } = await supabase.auth.signInWithPassword({ email, password: '___probe___' })
-    const msg = probeError?.message?.toLowerCase() || ''
-    const emailExists = !probeError || msg.includes('invalid login') || msg.includes('invalid credentials') || msg.includes('not confirmed')
+    // signUp detecta se email existe: "already registered" = existe
+    const tempPwd = Math.random().toString(36).slice(-10) + 'Aa1!'
+    const { error: signUpErr } = await supabase.auth.signUp({
+      email, password: tempPwd,
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+    })
+    const signUpMsg = signUpErr?.message?.toLowerCase() || ''
+    const emailExists = signUpMsg.includes('already registered') || signUpMsg.includes('user already registered')
 
     if (emailExists) {
       const { data: userRec } = await supabase.from('users').select('name').eq('email', email).maybeSingle()
       setUserName(userRec?.name || '')
+      setIsNewUser(false)
       setStep('senha')
-    } else {
-      const tempPwd = Math.random().toString(36).slice(-10) + 'Aa1!'
+    } else if (!signUpErr) {
+      setIsNewUser(true)
       setTempPassword(tempPwd)
-      const { error: signUpErr } = await supabase.auth.signUp({
-        email, password: tempPwd,
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-      })
-      if (signUpErr && !signUpErr.message.includes('already registered')) {
-        setError('Erro ao enviar email de confirmação. Tente novamente.')
-        setLoading(false)
-        return
-      }
       setStep('confirmar-email')
+    } else {
+      setError('Erro ao processar. Tente novamente.')
     }
     setLoading(false)
   }
