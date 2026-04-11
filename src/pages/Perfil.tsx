@@ -451,9 +451,10 @@ export default function Perfil() {
                 ctx.drawImage(img, sx, sy, size, size, 0, 0, 400, 400)
                 canvas.toBlob(async (blob) => {
                   if (!blob) { setAvatarUploading(false); return }
-                  const { error: upErr } = await supabase.storage.from('avatars').upload(`${student.id}/avatar.jpg`, blob, { upsert: true, contentType: 'image/jpeg' })
+                  const avatarPath = `${user!.id}/avatar.jpg`
+                  const { error: upErr } = await supabase.storage.from('avatars').upload(avatarPath, blob, { upsert: true, contentType: 'image/jpeg' })
                   if (!upErr) {
-                    const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(`${student.id}/avatar.jpg`)
+                    const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(avatarPath)
                     const newUrl = `${urlData.publicUrl}?t=${Date.now()}`
                     await supabase.from('students').update({ avatar_url: newUrl }).eq('id', student.id)
                     setStudent({ ...student, avatar_url: newUrl } as typeof student)

@@ -123,16 +123,23 @@ export default function Mapa() {
       const actionsRes = schoolIds.length > 0
         ? await supabase.from('actions').select('*', { count: 'exact', head: true })
         : { count: 0 }
-      const mentorsRes = schoolIds.length > 0
-        ? await supabase.from('students').select('*', { count: 'exact', head: true }).eq('is_mentor', true)
-        : { count: 0 }
+      // Count distinct monitors in scope
+      let monitorCount = 0
+      if (schoolIds.length > 0) {
+        const { data: studentsInScope } = await supabase.from('students').select('id').in('school_id', schoolIds)
+        if (studentsInScope && studentsInScope.length > 0) {
+          const { count } = await supabase.from('monitors').select('student_id', { count: 'exact', head: true })
+            .in('student_id', studentsInScope.map(s => s.id))
+          monitorCount = count ?? 0
+        }
+      }
       const requestsRes = await supabase.from('mentoring_requests').select('*', { count: 'exact', head: true }).eq('status', 'open')
       const sponsorsRes = await supabase.from('sponsors').select('*', { count: 'exact', head: true }).eq('active', true)
 
       setLegendCounts({
         actions: (actionsRes as { count: number | null }).count ?? 0,
         students: totalStudents,
-        mentors: (mentorsRes as { count: number | null }).count ?? 0,
+        mentors: monitorCount,
         requests: (requestsRes as { count: number | null }).count ?? 0,
         teachers: 0,
         sponsors: (sponsorsRes as { count: number | null }).count ?? 0,
