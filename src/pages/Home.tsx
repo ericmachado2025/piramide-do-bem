@@ -121,7 +121,7 @@ export default function Home() {
       <div className="gradient-bg px-5 pt-8 pb-6 rounded-b-3xl">
         <div className="max-w-md mx-auto">
           <h1 className="text-2xl font-bold text-white">
-            Ola, {(student as any).user?.name || student.name}! <span className="inline-block animate-bounce">🎮</span>
+            Ola, {(student as any).user?.name || authUser?.user_metadata?.full_name || authUser?.user_metadata?.name || 'Heroi'}! <span className="inline-block animate-bounce">🎮</span>
           </h1>
           <p className="text-white/70 text-sm mt-1">O que você vai aprontar hoje?</p>
 

@@ -331,7 +331,6 @@ export default function Perfil() {
 
   const isEmail = (v: string) => v.includes('@') && v.includes('.')
   const isPhone = (v: string) => /^\+?\d[\d\s()-]{7,}$/.test(v.replace(/\s/g, ''))
-  const normalizePhone = (v: string) => v.replace(/[\s()\-]/g, '').replace(/^0+/, '')
   const parseContacts = (raw: string) => raw.split(/[,;\n]+/).map(s => s.trim()).filter(s => isEmail(s) || isPhone(s))
 
   const addContact = (value?: string) => {

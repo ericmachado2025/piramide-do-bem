@@ -38,6 +38,17 @@ export default function AuthCallback() {
 
     // Normal OAuth callback — check profile
     async function checkProfile() {
+      // Ensure public.users record exists (Google OAuth may skip trigger)
+      const meta = user!.user_metadata
+      const { data: existingUser } = await supabase.from('users').select('id').eq('auth_id', user!.id).maybeSingle()
+      if (!existingUser) {
+        await supabase.from('users').insert({
+          auth_id: user!.id,
+          name: meta?.full_name || meta?.name || user!.email?.split('@')[0] || 'Usuário',
+          email: user!.email,
+        })
+      }
+
       const { data: student } = await supabase
         .from('students')
         .select('id, community_id')
