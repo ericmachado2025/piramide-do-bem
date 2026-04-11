@@ -36,13 +36,27 @@ export default function Login() {
     if (!email.includes('@')) return
     setLoading(true)
     setError('')
-    const { data: user } = await supabase
-      .from('users')
-      .select('id, name')
-      .eq('email', email)
-      .maybeSingle()
-    if (user) {
-      setUserName(user.name || '')
+    // Detectar se email existe tentando login com senha inválida
+    // "Invalid login credentials" = email existe → step 2 (senha)
+    // Outro erro = email não cadastrado → cadastro
+    const { error: probeError } = await supabase.auth.signInWithPassword({
+      email,
+      password: '___probe___',
+    })
+    const msg = probeError?.message?.toLowerCase() || ''
+    const emailExists = !probeError ||
+      msg.includes('invalid login credentials') ||
+      msg.includes('invalid credentials') ||
+      msg.includes('email not confirmed') ||
+      msg.includes('not confirmed')
+
+    if (emailExists) {
+      const { data: userRec } = await supabase
+        .from('users')
+        .select('name')
+        .eq('email', email)
+        .maybeSingle()
+      setUserName(userRec?.name || '')
       setStep(2)
     } else {
       navigate(`/cadastro/perfil?email=${encodeURIComponent(email)}`)
