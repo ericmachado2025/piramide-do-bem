@@ -415,11 +415,11 @@ export default function Perfil() {
       {/* ===== HEADER ===== */}
       <div className="gradient-bg px-6 pt-10 pb-8 rounded-b-3xl shadow-lg">
         <div className="flex flex-col items-center">
-          <div className="relative inline-block mb-2">
+          <label htmlFor="avatar-upload" className="relative inline-block mb-2 cursor-pointer group">
             {(student as any).avatar_url ? (
-              <img src={(student as any).avatar_url} alt="" className="w-20 h-20 rounded-full object-cover border-4 border-white/30 shadow-lg" />
+              <img src={(student as any).avatar_url} alt="" className="w-20 h-20 rounded-full object-cover border-4 border-white/30 shadow-lg group-hover:opacity-80 transition-opacity" />
             ) : (
-              <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center text-3xl font-bold text-white border-4 border-white/30">
+              <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center text-3xl font-bold text-white border-4 border-white/30 group-hover:bg-white/30 transition-colors">
                 {((student as any).user?.name || student.name)?.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
               </div>
             )}
@@ -435,6 +435,10 @@ export default function Perfil() {
             ) : (
               <span className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-white shadow flex items-center justify-center text-lg">{tribeIcon}</span>
             )}
+            <div className="absolute inset-0 rounded-full flex items-center justify-center bg-black/0 group-hover:bg-black/20 transition-colors">
+              <span className="text-white text-lg opacity-0 group-hover:opacity-100 transition-opacity">{'\u{1F4F7}'}</span>
+            </div>
+          </label>
             <input type="file" accept="image/*" id="avatar-upload" className="hidden" onChange={async (e) => {
               const file = e.target.files?.[0]
               if (!file || !student) return
@@ -463,10 +467,7 @@ export default function Perfil() {
               }
               img.src = URL.createObjectURL(file)
             }} />
-          </div>
-          <label htmlFor="avatar-upload" className="text-white/60 text-xs cursor-pointer hover:text-white/80 transition-colors">
-            {avatarUploading ? 'Enviando...' : 'clique para alterar foto'}
-          </label>
+          {avatarUploading && <p className="text-white/60 text-xs">Enviando...</p>}
           <h1 className="text-2xl font-bold text-white">{(student as any).user?.name || student.name}</h1>
           <p className="text-white/80 text-sm mt-1 text-center">
             {tribeName} &mdash; {charName} ({getTierLabel(tierInfo.current.tier)})

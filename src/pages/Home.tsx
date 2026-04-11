@@ -8,6 +8,8 @@ import { useAuth } from '../contexts/AuthContext'
 import BottomNav from '../components/BottomNav'
 import FloatingFriendButton from '../components/FloatingFriendButton'
 import RecommendSponsorButton from '../components/RecommendSponsorButton'
+import InstallButton from '../components/InstallButton'
+import HelpRequestModal from '../components/HelpRequestModal'
 import type { Student, Action, ActionType } from '../types'
 
 const iconClassToEmoji: Record<string, string> = {
@@ -51,6 +53,7 @@ export default function Home() {
   const [recentActions, setRecentActions] = useState<RecentAction[]>([])
   const [pendingCount, setPendingCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [showHelpModal, setShowHelpModal] = useState(false)
 
   useEffect(() => {
     if (authLoading) return
@@ -168,6 +171,9 @@ export default function Home() {
       </div>
 
       <div className="max-w-md mx-auto px-5 mt-6 space-y-4">
+        {/* PWA Install */}
+        <InstallButton />
+
         {/* Action Cards */}
         <Link
           to="/registrar"
@@ -184,6 +190,21 @@ export default function Home() {
             <ChevronRight className="text-white/50 group-hover:translate-x-1 transition-transform" />
           </div>
         </Link>
+
+        {/* Help Request Card */}
+        <button onClick={() => setShowHelpModal(true)}
+          className="w-full block bg-white border-2 border-orange-300 rounded-2xl shadow-md p-5 group hover:shadow-lg transition-all duration-200 active:scale-[0.98] text-left">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">{'\u{1F64B}'}</span>
+              <div>
+                <h3 className="font-bold text-lg text-navy">Preciso de ajuda!</h3>
+                <p className="text-gray-500 text-sm">Peca ajuda a colegas ou monitores</p>
+              </div>
+            </div>
+            <ChevronRight className="text-orange-400 group-hover:translate-x-1 transition-transform" />
+          </div>
+        </button>
 
         <Link
           to="/validar"
@@ -290,6 +311,14 @@ export default function Home() {
         </div>
       </div>
 
+      {showHelpModal && student && (
+        <HelpRequestModal
+          studentId={student.id}
+          schoolId={student.school_id}
+          onClose={() => setShowHelpModal(false)}
+          onSent={() => setShowHelpModal(false)}
+        />
+      )}
       <FloatingFriendButton />
       <RecommendSponsorButton />
       <BottomNav />
