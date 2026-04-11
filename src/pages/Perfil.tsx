@@ -80,7 +80,9 @@ export default function Perfil() {
   const [refTab, setRefTab] = useState<'confirmed' | 'pending'>('confirmed')
   const [confirmedRefs, setConfirmedRefs] = useState<{ id: string; referred_email: string; points_awarded: number; referral_position: number; confirmed_at: string }[]>([])
   const [pendingRefs, setPendingRefs] = useState<{ id: string; referred_email: string; referral_code: string; created_at: string }[]>([])
-  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteContacts, setInviteContacts] = useState<string[]>([])
+  const [inviteInput, setInviteInput] = useState('')
+  const [inviteBulk, setInviteBulk] = useState('')
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [inviteSending, setInviteSending] = useState(false)
   const [inviteMsg, setInviteMsg] = useState('')
@@ -306,25 +308,66 @@ export default function Perfil() {
     green: 'border-emerald-400 bg-emerald-50',
   }
 
+  const isEmail = (v: string) => v.includes('@') && v.includes('.')
+  const isPhone = (v: string) => /^\+?\d[\d\s()-]{7,}$/.test(v.replace(/\s/g, ''))
+  const normalizePhone = (v: string) => v.replace(/[\s()\-]/g, '').replace(/^0+/, '')
+  const parseContacts = (raw: string) => raw.split(/[,;\n]+/).map(s => s.trim()).filter(s => isEmail(s) || isPhone(s))
+
+  const addContact = (value?: string) => {
+    const v = (value || inviteInput).trim()
+    if (!v) return
+    if (!isEmail(v) && !isPhone(v)) { setInviteMsg('Informe um email ou WhatsApp valido (com DDD).'); return }
+    if (inviteContacts.includes(v)) { setInviteMsg('Contato ja adicionado.'); return }
+    if (inviteContacts.length >= 5) { setInviteMsg('Maximo de 5 convites por vez.'); return }
+    setInviteContacts(prev => [...prev, v])
+    if (!value) setInviteInput('')
+    setInviteMsg('')
+  }
+
+  const addBulkContacts = () => {
+    const parsed = parseContacts(inviteBulk)
+    if (parsed.length === 0) { setInviteMsg('Nenhum contato valido encontrado.'); return }
+    const available = 5 - inviteContacts.length
+    const toAdd = parsed.filter(c => !inviteContacts.includes(c)).slice(0, available)
+    if (toAdd.length === 0) { setInviteMsg('Contatos ja adicionados ou limite atingido.'); return }
+    setInviteContacts(prev => [...prev, ...toAdd])
+    setInviteBulk('')
+    setInviteMsg(`${toAdd.length} contato(s) adicionado(s).`)
+  }
+
   const handleInvite = async () => {
-    if (!inviteEmail.includes('@') || !student) return
-    if (pendingRefs.length >= 3) return
+    if (inviteContacts.length === 0 || !student) return
+    // Check daily limit
+    const today = new Date().toISOString().slice(0, 10)
+    const { count: todayCount } = await supabase.from('referrals').select('id', { count: 'exact', head: true })
+      .eq('referrer_id', student.id).gte('created_at', `${today}T00:00:00`)
+    if ((todayCount || 0) + inviteContacts.length > 5) {
+      setInviteMsg(`Voce ja enviou ${todayCount} convite(s) hoje. Limite diario: 5.`)
+      return
+    }
     setInviteSending(true)
     setInviteMsg('')
-    await supabase.from('referrals').insert({
-      referrer_id: student.id,
-      referred_email: inviteEmail,
-      referral_code: referralCode,
-      status: 'pending',
-    })
-    // Send email via Edge Function
-    await supabase.functions.invoke('send-verification', {
-      body: { type: 'referral_invite', to: inviteEmail, referrerName: (student as any).user?.name || student.name, referralCode, referralUrl: `https://piramidedobem.com.br/?ref=${referralCode}` },
-    })
-    setInviteMsg(`Convite enviado para ${inviteEmail}!`)
-    setInviteEmail('')
+    let sent = 0
+    for (const contact of inviteContacts) {
+      await supabase.from('referrals').insert({
+        referrer_id: student.id,
+        referred_email: contact,
+        referral_code: referralCode,
+        status: 'pending',
+      })
+      const referrerName = (student as any).user?.name || (student as any).name || 'Um amigo'
+      const referralUrl = `https://piramidedobem.com.br/?ref=${referralCode}`
+      if (isEmail(contact)) {
+        await supabase.functions.invoke('send-verification', {
+          body: { type: 'referral_invite', to: contact, referrerName, referralCode, referralUrl },
+        })
+      }
+      // WhatsApp: for now just register — real SMS/WhatsApp sending can be added later
+      sent++
+    }
+    setInviteMsg(`${sent} convite(s) enviado(s) com sucesso!`)
+    setInviteContacts([])
     setInviteSending(false)
-    // Reload pending
     const { data } = await supabase.from('referrals').select('id, referred_email, referral_code, created_at').eq('referrer_id', student.id).eq('status', 'pending').order('created_at', { ascending: false })
     if (data) setPendingRefs(data)
   }
@@ -477,8 +520,8 @@ export default function Perfil() {
         <section>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-bold text-navy">Minhas Indicacoes</h2>
-            <button onClick={() => setShowInviteModal(true)} disabled={pendingRefs.length >= 3}
-              className="text-sm font-semibold text-teal disabled:text-gray-400">
+            <button onClick={() => { setShowInviteModal(true); setInviteMsg('') }}
+              className="text-sm font-semibold text-teal">
               + Indicar amigo
             </button>
           </div>
@@ -486,7 +529,7 @@ export default function Perfil() {
           {confirmedRefs.length === 0 && pendingRefs.length === 0 ? (
             <div className="bg-white rounded-xl shadow-md p-6 text-center">
               <p className="text-gray-500 text-sm mb-3">Indique amigos e ganhe ate 25 pts por cada cadastro confirmado!</p>
-              <button onClick={() => setShowInviteModal(true)} className="bg-teal text-white text-sm font-bold px-4 py-2 rounded-lg">Indicar meu primeiro amigo</button>
+              <button onClick={() => { setShowInviteModal(true); setInviteMsg('') }} className="bg-teal text-white text-sm font-bold px-4 py-2 rounded-lg">Indicar meu primeiro amigo</button>
               <p className="text-[10px] text-gray-400 mt-3">1a-5a: 25pts | 6a-10a: 15pts | 11a-20a: 8pts | 21a+: 4pts</p>
             </div>
           ) : (
@@ -892,19 +935,58 @@ export default function Perfil() {
       {/* Invite modal */}
       {showInviteModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowInviteModal(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-bold text-navy text-lg mb-3">Indicar amigo</h3>
-            <input type="email" placeholder="Email do amigo" value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
-              className="w-full px-3 py-2.5 rounded-lg border border-gray-200 focus:border-teal focus:outline-none text-sm mb-3" autoFocus />
-            {inviteMsg && <p className="text-sm text-green mb-2">{inviteMsg}</p>}
-            {pendingRefs.length >= 3 && <p className="text-sm text-red mb-2">Aguarde seus amigos se cadastrarem antes de indicar mais.</p>}
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-bold text-navy text-lg mb-1">Indicar amigos</h3>
+            <p className="text-xs text-gray-400 mb-4">Escolha amigos que realmente vao participar. Limite: 5 convites por dia.</p>
+
+            <div className="flex gap-2 mb-2">
+              <input type="text" placeholder="Email ou WhatsApp com DDD" value={inviteInput}
+                onChange={(e) => setInviteInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && addContact()}
+                className="flex-1 px-3 py-2.5 rounded-lg border border-gray-200 focus:border-teal focus:outline-none text-sm" autoFocus />
+              <button onClick={() => addContact()} disabled={inviteContacts.length >= 5}
+                className="px-3 py-2.5 rounded-lg bg-teal text-white text-sm font-semibold disabled:opacity-50 whitespace-nowrap">
+                Adicionar
+              </button>
+            </div>
+
+            <details className="mb-3">
+              <summary className="text-xs text-teal cursor-pointer font-semibold">Colar lista de contatos</summary>
+              <div className="mt-2">
+                <textarea placeholder="Cole emails ou telefones separados por virgula ou Enter" value={inviteBulk}
+                  onChange={(e) => setInviteBulk(e.target.value)} rows={3}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-teal focus:outline-none text-sm resize-none" />
+                <button onClick={addBulkContacts} disabled={inviteContacts.length >= 5}
+                  className="mt-1 w-full py-2 rounded-lg bg-gray-100 text-teal text-sm font-semibold hover:bg-gray-200 disabled:opacity-50">
+                  Adicionar da lista
+                </button>
+              </div>
+            </details>
+
+            {inviteContacts.length > 0 && (
+              <div className="mb-3 space-y-1.5">
+                <p className="text-xs font-semibold text-navy">{inviteContacts.length}/5 contato(s):</p>
+                {inviteContacts.map((c, i) => (
+                  <div key={i} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">{c.includes('@') ? '\u2709\uFE0F' : '\u{1F4F1}'}</span>
+                      <span className="text-sm text-navy">{c}</span>
+                    </div>
+                    <button onClick={() => setInviteContacts(prev => prev.filter((_, j) => j !== i))}
+                      className="text-red text-lg leading-none font-bold hover:text-red/70">&times;</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {inviteMsg && <p className={`text-sm mb-2 ${inviteMsg.includes('sucesso') || inviteMsg.includes('adicionado') ? 'text-green-600' : 'text-red'}`}>{inviteMsg}</p>}
+
             <div className="flex gap-2">
-              <button onClick={() => setShowInviteModal(false)} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-500 text-sm font-semibold">Cancelar</button>
-              <button onClick={handleInvite} disabled={inviteSending || !inviteEmail.includes('@') || pendingRefs.length >= 3}
+              <button onClick={() => { setShowInviteModal(false); setInviteContacts([]); setInviteMsg('') }}
+                className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-500 text-sm font-semibold">Cancelar</button>
+              <button onClick={handleInvite} disabled={inviteSending || inviteContacts.length === 0}
                 className="flex-1 py-2.5 rounded-lg bg-teal text-white text-sm font-semibold disabled:opacity-50">
-                {inviteSending ? 'Enviando...' : 'Enviar convite'}
+                {inviteSending ? 'Enviando...' : `Enviar ${inviteContacts.length} convite(s)`}
               </button>
             </div>
           </div>
