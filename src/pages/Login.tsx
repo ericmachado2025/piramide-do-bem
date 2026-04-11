@@ -154,6 +154,7 @@ export default function Login() {
     setPhoneSending(true); setPhoneError('')
     const code = String(Math.floor(100000 + Math.random() * 900000))
     setGeneratedCode(code)
+    setPhoneOtpCode(code)  // DEV: preenche automaticamente
     await supabase.from('phone_verifications').insert({ phone: phoneCountryCode + digits, code, verified: false, created_at: new Date().toISOString() })
     const { data: r } = await supabase.functions.invoke('send-verification', { body: { to: phoneCountryCode + digits, channel: 'whatsapp', code, type: 'verification' } })
     if (!r?.success) {
