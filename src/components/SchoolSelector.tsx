@@ -60,6 +60,11 @@ export default function SchoolSelector({
   const [cities, setCities] = useState<{ id: string; name: string }[]>([])
   const [citiesLoading, setCitiesLoading] = useState(false)
 
+  // City autocomplete
+  const [citySearch, setCitySearch] = useState('')
+  const [showCityDropdown, setShowCityDropdown] = useState(false)
+  const cityDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // School autocomplete
   const [schoolSearch, setSchoolSearch] = useState('')
   const [schoolSuggestions, setSchoolSuggestions] = useState<{ id: string; name: string; school_type: string }[]>([])
@@ -203,7 +208,7 @@ export default function SchoolSelector({
         ))}
       </select>
 
-      {/* City select */}
+      {/* City autocomplete */}
       {value.stateAbbr && (
         <div className="relative">
           {citiesLoading ? (
@@ -212,16 +217,82 @@ export default function SchoolSelector({
               <span className="ml-2 text-sm text-gray-400">Carregando cidades...</span>
             </div>
           ) : (
-            <select
-              value={value.cityId}
-              onChange={(e) => handleCityChange(e.target.value)}
-              className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors bg-white"
-            >
-              <option value="">Selecione a cidade</option>
-              {cities.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Digite 3 letras da cidade ou pressione Enter"
+                value={value.cityId ? value.cityName : citySearch}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setCitySearch(val)
+                  if (value.cityId) {
+                    onChange({
+                      ...value,
+                      cityId: '',
+                      cityName: '',
+                      schoolId: '',
+                      schoolName: '',
+                      schoolType: '',
+                    })
+                  }
+                  if (val.length >= 3) {
+                    setShowCityDropdown(true)
+                  } else {
+                    setShowCityDropdown(false)
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    setShowCityDropdown(true)
+                  }
+                }}
+                onFocus={() => {
+                  if (value.cityId) {
+                    setCitySearch('')
+                    onChange({
+                      ...value,
+                      cityId: '',
+                      cityName: '',
+                      schoolId: '',
+                      schoolName: '',
+                      schoolType: '',
+                    })
+                  }
+                  if (cities.length > 0 && citySearch.length >= 3) setShowCityDropdown(true)
+                }}
+                onBlur={() => setTimeout(() => setShowCityDropdown(false), 200)}
+                className="w-full pl-10 pr-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-lg transition-colors"
+              />
+              {showCityDropdown && (() => {
+                const filtered = cities.filter(c =>
+                  c.name.toLowerCase().includes(citySearch.toLowerCase())
+                ).slice(0, 30)
+                return (
+                  <div className="absolute z-10 w-full mt-1 bg-white border-2 border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                    {filtered.length === 0 ? (
+                      <div className="px-4 py-2.5 text-sm text-gray-400 italic">Nenhuma cidade encontrada</div>
+                    ) : (
+                      filtered.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onMouseDown={() => {
+                            handleCityChange(c.id)
+                            setCitySearch(c.name)
+                            setShowCityDropdown(false)
+                          }}
+                          className="w-full text-left px-4 py-2.5 hover:bg-teal/10 text-sm transition-colors"
+                        >
+                          {c.name}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )
+              })()}
+            </div>
           )}
         </div>
       )}
@@ -233,7 +304,7 @@ export default function SchoolSelector({
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Digite o nome da escola ou pressione Enter para ver todas"
+              placeholder="Digite 3 letras da escola ou pressione Enter"
               value={value.schoolId ? value.schoolName : schoolSearch}
               onChange={(e) => {
                 const val = e.target.value

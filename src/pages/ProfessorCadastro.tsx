@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ChevronRight,
@@ -164,10 +164,6 @@ export default function ProfessorCadastro() {
   // Step 3 subjects per school entry
   const [subjectsByLevel, setSubjectsByLevel] = useState<Record<string, Subject[]>>({})
 
-  // Step 5 email verification
-  const [emailConfirmed, setEmailConfirmed] = useState(false)
-  const emailPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
   // Submission
   const [submitting, setSubmitting] = useState(false)
   const [globalError, setGlobalError] = useState('')
@@ -194,27 +190,6 @@ export default function ProfessorCadastro() {
     window.addEventListener('popstate', handlePop)
     return () => window.removeEventListener('popstate', handlePop)
   }, [step])
-
-  /* ---------- Email verification polling (step 5) ---------- */
-
-  useEffect(() => {
-    if (step !== 5) return
-    // Check if already confirmed
-    if (user?.email_confirmed_at) {
-      setEmailConfirmed(true)
-      return
-    }
-    emailPollRef.current = setInterval(async () => {
-      const { data } = await supabase.auth.getSession()
-      if (data?.session?.user?.email_confirmed_at) {
-        setEmailConfirmed(true)
-        if (emailPollRef.current) clearInterval(emailPollRef.current)
-      }
-    }, 3000)
-    return () => {
-      if (emailPollRef.current) clearInterval(emailPollRef.current)
-    }
-  }, [step, user?.email_confirmed_at])
 
   /* ---------- Load subjects when level changes ---------- */
 
@@ -450,7 +425,7 @@ export default function ProfessorCadastro() {
       case 4:
         return form.classroomStates.some((cs) => cs.selectedClassroomIds.length > 0)
       case 5:
-        return emailConfirmed && phoneVerification.status === 'verified'
+        return phoneVerification.status === 'verified'
       default:
         return false
     }
@@ -551,7 +526,7 @@ export default function ProfessorCadastro() {
               <label className={labelClass}>Telefone</label>
               <div className="flex gap-2">
                 <select
-                  className={`${inputClass} w-40 flex-shrink-0`}
+                  className="w-40 flex-shrink-0 px-3 py-3.5 rounded-xl border-2 border-gray-200 focus:border-[#028090] focus:outline-none text-base transition-colors bg-white"
                   value={form.phoneCountryCode}
                   onChange={(e) => updateForm('phoneCountryCode', e.target.value)}
                 >
@@ -561,7 +536,7 @@ export default function ProfessorCadastro() {
                 </select>
                 <input
                   type="tel"
-                  className={inputClass}
+                  className="flex-1 min-w-0 px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-[#028090] focus:outline-none text-lg transition-colors"
                   placeholder="(11) 99999-9999"
                   value={form.phone}
                   onChange={(e) => updateForm('phone', formatPhone(e.target.value))}
@@ -697,13 +672,15 @@ export default function ProfessorCadastro() {
               </div>
             ))}
 
-            <button
-              onClick={addSchoolEntry}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-[#028090]/40 text-[#028090] text-sm font-semibold hover:bg-[#028090]/5 transition"
-            >
-              <Plus className="w-4 h-4" />
-              Adicionar outra escola
-            </button>
+            {form.schoolEntries.every(s => s.school.schoolId && s.level) && (
+              <button
+                onClick={addSchoolEntry}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-[#028090]/40 text-[#028090] text-sm font-semibold hover:bg-[#028090]/5 transition"
+              >
+                <Plus className="w-4 h-4" />
+                Adicionar outra escola
+              </button>
+            )}
           </div>
         )}
 
@@ -756,7 +733,7 @@ export default function ProfessorCadastro() {
                     </p>
                     <div className="flex gap-2">
                       <select
-                        className={`${inputClass} flex-1 text-sm`}
+                        className="flex-1 min-w-[120px] px-3 py-2.5 rounded-xl border-2 border-gray-200 focus:border-[#028090] focus:outline-none text-sm transition-colors bg-white"
                         value={cs.newGrade}
                         onChange={(e) => updateClassroomState(cs.schoolId, { newGrade: e.target.value })}
                       >
@@ -800,22 +777,16 @@ export default function ProfessorCadastro() {
           <div className="space-y-5">
             <div className="text-center">
               <h2 className="text-2xl font-extrabold mt-2" style={{ color: '#1F4E79' }}>Verificacao</h2>
-              <p className="text-gray-400 text-sm mt-1">Confirme seu email e telefone</p>
+              <p className="text-gray-400 text-sm mt-1">Confirme seu telefone</p>
             </div>
 
             {/* Email verification */}
-            <div className={`rounded-xl border-2 p-4 ${emailConfirmed ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
-              <div className="flex items-center gap-2 mb-1">
-                <CheckCircle2 className={`w-5 h-5 ${emailConfirmed ? 'text-green-500' : 'text-blue-500'}`} />
-                <span className={`text-sm font-semibold ${emailConfirmed ? 'text-green-700' : 'text-blue-700'}`}>Email</span>
+            <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 flex items-center gap-3">
+              <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-green-700">Email</p>
+                <p className="text-xs text-green-600">Conta criada com sucesso</p>
               </div>
-              {emailConfirmed ? (
-                <p className="text-sm text-green-600 font-medium">Email verificado com sucesso!</p>
-              ) : (
-                <p className="text-sm text-blue-600">
-                  Verificacao enviada para {authEmail}. Confira sua caixa de entrada.
-                </p>
-              )}
             </div>
 
             {/* Phone verification */}
@@ -900,7 +871,7 @@ export default function ProfessorCadastro() {
             >
               {submitting && <Loader2 className="w-5 h-5 animate-spin" />}
               {step === TOTAL_STEPS
-                ? (emailConfirmed && phoneVerification.status === 'verified' ? 'Concluir' : 'Aguardando verificacao...')
+                ? (phoneVerification.status === 'verified' ? 'Concluir' : 'Aguardando verificacao...')
                 : 'Proximo'}
               {step < TOTAL_STEPS && <ChevronRight className="w-5 h-5" />}
             </button>

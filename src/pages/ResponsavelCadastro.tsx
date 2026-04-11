@@ -41,8 +41,8 @@ function formatCPF(value: string): string {
 
 interface StudentResult {
   id: string
-  name: string
-  school: { name: string } | null
+  user?: { name: string } | null
+  school?: { name: string } | null
 }
 
 const inputClass = "w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-[#028090] focus:outline-none text-lg transition-colors"
@@ -128,7 +128,7 @@ export default function ResponsavelCadastro() {
 
     supabase
       .from('students')
-      .select('id, name, school:schools(name)')
+      .select('id, user:users!students_users_id_fkey(name), school:schools(name)')
       .eq('parent_email', userEmail)
       .then(({ data }) => {
         if (data && data.length > 0) {
@@ -144,14 +144,24 @@ export default function ResponsavelCadastro() {
     if (!showAllStudents && studentQuery.length < 2) { setStudentResults([]); return }
     const timer = setTimeout(async () => {
       setSearchLoading(true)
-      let q = supabase.from('students').select('id, name, school:schools(name)')
       if (studentQuery.length >= 2) {
-        q = q.ilike('name', `%${studentQuery}%`).limit(10)
+        // Search via users.name
+        const { data: matchingUsers } = await supabase.from('users').select('auth_id').ilike('name', `%${studentQuery}%`).limit(20)
+        if (matchingUsers && matchingUsers.length > 0) {
+          const authIds = matchingUsers.map(u => u.auth_id)
+          const { data } = await supabase.from('students')
+            .select('id, user:users!students_users_id_fkey(name), school:schools(name)')
+            .in('user_id', authIds).limit(10)
+          if (data) setStudentResults(data as unknown as StudentResult[])
+        } else {
+          setStudentResults([])
+        }
       } else {
-        q = q.order('name').limit(30)
+        const { data } = await supabase.from('students')
+          .select('id, user:users!students_users_id_fkey(name), school:schools(name)')
+          .limit(30)
+        if (data) setStudentResults(data as unknown as StudentResult[])
       }
-      const { data } = await q
-      if (data) setStudentResults(data as unknown as StudentResult[])
       setSearchLoading(false)
     }, 300)
     return () => clearTimeout(timer)
@@ -344,7 +354,7 @@ export default function ResponsavelCadastro() {
                   <div key={s.id} className="p-3 rounded-xl flex items-center gap-3" style={{ backgroundColor: '#f0fdfa', border: '1px solid #02C39A' }}>
                     <CheckCircle2 className="w-5 h-5 flex-shrink-0" style={{ color: '#02C39A' }} />
                     <div>
-                      <p className="font-semibold text-sm" style={{ color: '#1F4E79' }}>{s.name}</p>
+                      <p className="font-semibold text-sm" style={{ color: '#1F4E79' }}>{s.user?.name || 'Aluno'}</p>
                       <p className="text-xs text-gray-400">{s.school?.name || ''}</p>
                     </div>
                   </div>
@@ -373,7 +383,7 @@ export default function ResponsavelCadastro() {
                       <div className="flex items-center gap-2">
                         {isSelected && <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: '#02C39A' }} />}
                         <div>
-                          <p className="font-semibold text-sm" style={{ color: '#1F4E79' }}>{s.name}</p>
+                          <p className="font-semibold text-sm" style={{ color: '#1F4E79' }}>{s.user?.name || 'Aluno'}</p>
                           <p className="text-xs text-gray-400">{s.school?.name || ''}</p>
                         </div>
                       </div>

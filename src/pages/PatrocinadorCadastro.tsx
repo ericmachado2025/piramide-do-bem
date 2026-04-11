@@ -14,6 +14,13 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import PasswordInput, { validatePassword } from '../components/PasswordInput'
 
+const COUNTRY_CODES = [
+  { value: '+55', label: '+55 Brasil' },
+  { value: '+1', label: '+1 EUA/Canadá' },
+  { value: '+351', label: '+351 Portugal' },
+  { value: '+54', label: '+54 Argentina' },
+]
+
 const BR_STATES = [
   'AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT',
   'PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO',
@@ -68,6 +75,7 @@ export default function PatrocinadorCadastro() {
   const [document, setDocument] = useState('')
   const [contactName, setContactName] = useState('')
   const [phone, setPhone] = useState('')
+  const [phoneCountryCode, setPhoneCountryCode] = useState('+55')
 
   // Step 3
   const [state, setState] = useState('')
@@ -199,7 +207,7 @@ export default function PatrocinadorCadastro() {
       // continue even if insert fails
     }
 
-    console.log(`[Piramide do Bem] Codigo de verificacao: ${code}`)
+    // Code sent via Edge Function — no console logging
     setCodeSent(true)
     setCodeError('')
   }
@@ -392,7 +400,7 @@ export default function PatrocinadorCadastro() {
               type="text"
               placeholder={personType === 'PJ' ? 'Nome da empresa' : 'Nome completo'}
               value={businessName}
-              onChange={(e) => setBusinessName(e.target.value)}
+              onChange={(e) => { setBusinessName(e.target.value); if (personType === 'PF') setContactName(e.target.value) }}
               className={inputClass}
               onKeyDown={(e) => e.key === 'Enter' && canAdvance() && handleNext()}
               autoFocus
@@ -405,22 +413,24 @@ export default function PatrocinadorCadastro() {
               className={inputClass}
               onKeyDown={(e) => e.key === 'Enter' && canAdvance() && handleNext()}
             />
-            <input
-              type="text"
-              placeholder="Nome do contato"
-              value={contactName}
-              onChange={(e) => setContactName(e.target.value)}
-              className={inputClass}
-              onKeyDown={(e) => e.key === 'Enter' && canAdvance() && handleNext()}
-            />
-            <input
-              type="tel"
-              placeholder="Telefone (ex: 51999999999)"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-              className={inputClass}
-              onKeyDown={(e) => e.key === 'Enter' && canAdvance() && handleNext()}
-            />
+            {personType === 'PF' ? (
+              <input value={businessName} disabled placeholder="Preenchido automaticamente"
+                className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-100 bg-gray-50 text-gray-500 text-lg" />
+            ) : (
+              <input type="text" placeholder="Nome do contato" value={contactName}
+                onChange={(e) => setContactName(e.target.value)} className={inputClass}
+                onKeyDown={(e) => e.key === 'Enter' && canAdvance() && handleNext()} />
+            )}
+            <div className="flex gap-2">
+              <select value={phoneCountryCode} onChange={(e) => setPhoneCountryCode(e.target.value)}
+                className="w-40 flex-shrink-0 px-3 py-3.5 rounded-xl border-2 border-gray-200 focus:border-[#028090] focus:outline-none text-base transition-colors bg-white">
+                {COUNTRY_CODES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+              <input type="tel" placeholder="(61) 99999-9999" value={phone}
+                onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
+                className="flex-1 min-w-0 px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-[#028090] focus:outline-none text-lg transition-colors"
+                onKeyDown={(e) => e.key === 'Enter' && canAdvance() && handleNext()} />
+            </div>
           </div>
         )}
 

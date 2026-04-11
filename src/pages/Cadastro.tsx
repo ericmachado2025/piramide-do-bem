@@ -127,6 +127,7 @@ function getNivelByAge(age: number | null): string {
 // Normal flow: 1=Email, 2=Nome, 3=Senha, 4=Nascimento, 5=Escola, 6=WhatsApp, 7=LGPD
 // Google flow: 3=Senha(opcional), 4=Nascimento, 5=Escola, 6=WhatsApp, 7=LGPD
 const NORMAL_STEPS = [1, 2, 3, 4, 5, 6, 7]
+const NORMAL_STEPS_WITH_EMAIL = [2, 3, 4, 5, 6, 7]
 const GOOGLE_STEPS = [3, 4, 5, 6, 7]
 
 export default function Cadastro() {
@@ -157,7 +158,7 @@ export default function Cadastro() {
       })
   }, [user, navigate])
 
-  const stepSequence = fromGoogle ? GOOGLE_STEPS : NORMAL_STEPS
+  const stepSequence = fromGoogle ? GOOGLE_STEPS : (emailFromUrl ? NORMAL_STEPS_WITH_EMAIL : NORMAL_STEPS)
   const [stepIndex, setStepIndex] = useState(0)
   const step = stepSequence[stepIndex] ?? stepSequence[0]
 
@@ -853,21 +854,29 @@ export default function Cadastro() {
             {form.schoolId && (() => {
               const isSuperior = form.nivel === 'superior'
               const isEjaProf = form.nivel === 'eja' || form.nivel === 'profissional'
-              const gradeLabel = isSuperior ? 'Semestre' : isEjaProf ? 'Turma' : 'Série'
+              const gradeLabel = isSuperior ? 'Semestre' : isEjaProf ? 'Período' : 'Série/Ano'
               return (
-                <div className="flex gap-3">
-                  <select value={form.grade} onChange={(e) => update('grade', e.target.value)}
-                    className="flex-1 px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white">
-                    <option value="">{gradeLabel}</option>
-                    {availableGrades.map((g) => (<option key={g} value={g}>{g}</option>))}
-                  </select>
-                  {!isSuperior && !isEjaProf && (
-                    <select value={form.section} onChange={(e) => update('section', e.target.value)}
-                      className="w-24 px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white">
-                      <option value="">Turma</option>
-                      {sections.map((s) => (<option key={s} value={s}>{s === 'N/A' ? 'Não se aplica' : s}</option>))}
-                    </select>
-                  )}
+                <div className="space-y-2">
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <p className="text-xs font-semibold text-gray-500 mb-1">{gradeLabel}</p>
+                      <select value={form.grade} onChange={(e) => update('grade', e.target.value)}
+                        className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white">
+                        <option value="">Selecione</option>
+                        {availableGrades.map((g) => (<option key={g} value={g}>{g}</option>))}
+                      </select>
+                    </div>
+                    {!isSuperior && !isEjaProf && (
+                      <div className="w-28">
+                        <p className="text-xs font-semibold text-gray-500 mb-1">Turma</p>
+                        <select value={form.section} onChange={(e) => update('section', e.target.value)}
+                          className="w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-base transition-colors bg-white">
+                          <option value="">Letra</option>
+                          {sections.map((s) => (<option key={s} value={s}>{s === 'N/A' ? 'N/A' : s}</option>))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )
             })()}

@@ -15,29 +15,30 @@ export function usePhoneVerification() {
     setGeneratedCode(code)
 
     try {
-      // Save code to DB
       await supabase.from('phone_verifications').insert({
-        phone,
-        code,
-        verified: false,
-        created_at: new Date().toISOString(),
+        phone, code, verified: false, created_at: new Date().toISOString(),
       })
 
-      // Try Edge Function for Twilio
       const { data, error: fnError } = await supabase.functions.invoke('send-verification', {
         body: { to: phone, channel, code, type: 'verification' },
       })
 
       if (fnError || !data?.success) {
-        // Fallback: code saved in DB, show message to check console
-        console.log(`[Piramide do Bem] Codigo: ${code}`)
+        if (channel === 'whatsapp') {
+          const { data: smsData } = await supabase.functions.invoke('send-verification', {
+            body: { to: phone, channel: 'sms', code, type: 'verification' },
+          })
+          if (!smsData?.success) {
+            setError('Não foi possível enviar o código. Verifique o número e tente novamente.')
+          }
+        } else {
+          setError('Não foi possível enviar o código. Tente via WhatsApp.')
+        }
       }
-
       setStatus('sent')
     } catch {
-      // Fallback mode
-      console.log(`[Piramide do Bem] Codigo: ${code}`)
-      setStatus('sent')
+      setError('Erro ao enviar código. Verifique sua conexão.')
+      setStatus('error')
     }
   }, [])
 
@@ -50,7 +51,7 @@ export function usePhoneVerification() {
       })
       setStatus('sent')
     } catch {
-      setStatus('sent') // fallback - token already saved
+      setStatus('sent')
     }
   }, [])
 
@@ -62,7 +63,7 @@ export function usePhoneVerification() {
       return true
     } else {
       setStatus('error')
-      setError('Codigo incorreto. Tente novamente.')
+      setError('Código incorreto. Tente novamente.')
       return false
     }
   }, [generatedCode])

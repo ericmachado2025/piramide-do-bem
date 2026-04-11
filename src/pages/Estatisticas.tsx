@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import {
@@ -11,13 +11,33 @@ import {
   Trophy,
   Flame,
   MapPin,
+  GraduationCap,
+  Building2,
+  Gift,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+
+/* ------------------------------------------------------------------ */
+/*  Interfaces                                                         */
+/* ------------------------------------------------------------------ */
+
+interface GlobalStats {
+  total_schools: number
+  total_students: number
+  total_teachers: number
+  total_sponsors: number
+  total_rewards: number
+  total_actions: number
+  active_states: number
+}
 
 interface StateMapData {
   state: string
   total_schools: number
   total_students: number
+  total_teachers: number
+  total_sponsors: number
+  total_rewards: number
   total_actions: number
   lat: number
   lng: number
@@ -31,6 +51,8 @@ interface SchoolMapData {
   latitude: number
   longitude: number
   total_students: number
+  total_teachers: number
+  total_sponsors: number
   recent_actions: number
 }
 
@@ -46,21 +68,40 @@ interface TribeRanking {
   student_count: number
 }
 
-function getStateIcon(d: StateMapData): L.DivIcon {
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+
+const STATE_NAMES: Record<string, string> = {
+  AC:'Acre',AL:'Alagoas',AM:'Amazonas',AP:'Amapa',BA:'Bahia',CE:'Ceara',
+  DF:'Distrito Federal',ES:'Espirito Santo',GO:'Goias',MA:'Maranhao',
+  MG:'Minas Gerais',MS:'Mato Grosso do Sul',MT:'Mato Grosso',PA:'Para',
+  PB:'Paraiba',PE:'Pernambuco',PI:'Piaui',PR:'Parana',RJ:'Rio de Janeiro',
+  RN:'Rio Grande do Norte',RO:'Rondonia',RR:'Roraima',RS:'Rio Grande do Sul',
+  SC:'Santa Catarina',SE:'Sergipe',SP:'Sao Paulo',TO:'Tocantins',
+}
+
+/* ------------------------------------------------------------------ */
+/*  Helper components                                                  */
+/* ------------------------------------------------------------------ */
+
+function MapController({ mapRef }: { mapRef: React.MutableRefObject<L.Map | null> }) {
+  const map = useMap()
+  useEffect(() => { mapRef.current = map }, [map, mapRef])
+  return null
+}
+
+function getStateIcon(d: StateMapData, isSelected: boolean): L.DivIcon {
   let color = '#9CA3AF'
   if (d.total_students > 0 && d.total_actions === 0) color = '#3B82F6'
   if (d.total_actions > 0) color = '#10B981'
-
+  const border = isSelected ? '3px solid #F59E0B' : '2px solid white'
+  const shadow = isSelected ? '0 0 0 3px rgba(245,158,11,0.4), 0 2px 8px rgba(0,0,0,0.35)' : '0 1px 4px rgba(0,0,0,0.25)'
   return L.divIcon({
     className: '',
-    html: `<div style="
-      background:${color};color:white;padding:4px 8px;
-      border-radius:12px;font-size:11px;font-weight:700;
-      border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.25);
-      white-space:nowrap;
-    ">${d.state}<br/><span style="font-size:10px;font-weight:400;">${d.total_schools.toLocaleString('pt-BR')} esc.</span></div>`,
     iconSize: [60, 36],
     iconAnchor: [30, 18],
+    html: `<div style="background:${color};color:white;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:700;border:${border};box-shadow:${shadow};white-space:nowrap;">${d.state}<br/><span style="font-size:10px;font-weight:400;">${d.total_schools.toLocaleString('pt-BR')} esc.</span></div>`,
   })
 }
 
@@ -84,45 +125,45 @@ function getSchoolIcon(students: number, actions: number): L.DivIcon {
 
 function StatCard({ label, value, icon: Icon }: { label: string; value: string; icon: typeof Users }) {
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-5 flex items-start gap-4">
-      <div className="shrink-0 w-11 h-11 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#028090' }}>
-        <Icon size={22} className="text-white" />
+    <div className="bg-white rounded-2xl shadow-lg p-4 flex items-start gap-3">
+      <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#028090' }}>
+        <Icon size={20} className="text-white" />
       </div>
       <div>
         <p className="text-xs text-gray-500">{label}</p>
-        <p className="text-2xl font-bold" style={{ color: '#1F4E79' }}>{value}</p>
+        <p className="text-xl font-bold" style={{ color: '#1F4E79' }}>{value}</p>
       </div>
     </div>
   )
 }
 
+/* ------------------------------------------------------------------ */
+/*  Main component                                                     */
+/* ------------------------------------------------------------------ */
+
 export default function Estatisticas() {
+  const mapRef = useRef<L.Map | null>(null)
+
   const [loading, setLoading] = useState(true)
-  const [mapMode, setMapMode] = useState<'brasil' | 'estado'>('brasil')
   const [selectedState, setSelectedState] = useState<string | null>(null)
   const [stateData, setStateData] = useState<StateMapData[]>([])
   const [schoolData, setSchoolData] = useState<SchoolMapData[]>([])
   const [loadingDrill, setLoadingDrill] = useState(false)
-  const [totalStudents, setTotalStudents] = useState(0)
-  const [totalActions, setTotalActions] = useState(0)
-  const [totalSchools, setTotalSchools] = useState(0)
+  const [globalStats, setGlobalStats] = useState<GlobalStats | null>(null)
   const [topSchools, setTopSchools] = useState<SchoolRanking[]>([])
   const [topTribes, setTopTribes] = useState<TribeRanking[]>([])
+
+  /* ---------- data fetching ---------- */
 
   useEffect(() => {
     async function fetchData() {
       try {
-        // State-level map data via RPC
-        const { data: rpcData } = await supabase.rpc('get_map_schools_by_state')
+        const [{ data: rpcData }, { data: statsData }] = await Promise.all([
+          supabase.rpc('get_map_schools_by_state'),
+          supabase.rpc('get_global_stats'),
+        ])
         setStateData((rpcData as StateMapData[]) ?? [])
-
-        // Totals
-        const { count: sc } = await supabase.from('students').select('id', { count: 'exact', head: true })
-        const { count: ac } = await supabase.from('actions').select('id', { count: 'exact', head: true }).eq('status', 'validated')
-        const { count: sk } = await supabase.from('schools').select('id', { count: 'exact', head: true })
-        setTotalStudents(sc ?? 0)
-        setTotalActions(ac ?? 0)
-        setTotalSchools(sk ?? 0)
+        if (statsData && statsData[0]) setGlobalStats(statsData[0] as GlobalStats)
 
         // Top 10 schools
         const { data: studentSchools } = await supabase.from('students').select('school_id')
@@ -154,7 +195,7 @@ export default function Estatisticas() {
           setTopTribes(sortedTribes.map(([id, count]) => ({ community_id: id, community_name: tNameMap[id] || 'Comunidade', student_count: count })))
         }
       } catch (err) {
-        console.error('Erro ao buscar estatísticas:', err)
+        console.error('Erro ao buscar estatisticas:', err)
       } finally {
         setLoading(false)
       }
@@ -162,20 +203,38 @@ export default function Estatisticas() {
     fetchData()
   }, [])
 
+  /* ---------- map interactions ---------- */
+
   async function handleStateClick(state: string) {
     setLoadingDrill(true)
     setSelectedState(state)
-    setMapMode('estado')
     const { data } = await supabase.rpc('get_map_schools_by_uf', { p_state: state })
     setSchoolData((data as SchoolMapData[]) ?? [])
     setLoadingDrill(false)
+    const si = stateData.find(s => s.state === state)
+    if (si && mapRef.current) mapRef.current.flyTo([si.lat, si.lng], 7, { duration: 1.2 })
   }
 
   function handleBackToBrasil() {
-    setMapMode('brasil')
     setSelectedState(null)
     setSchoolData([])
+    if (mapRef.current) mapRef.current.flyTo([-14.235, -51.925], 4, { duration: 1.2 })
   }
+
+  /* ---------- derived UF stats ---------- */
+
+  const ufStats = useMemo(() => {
+    if (!selectedState || schoolData.length === 0) return null
+    return {
+      schools: schoolData.length,
+      students: schoolData.reduce((s, c) => s + c.total_students, 0),
+      teachers: schoolData.reduce((s, c) => s + c.total_teachers, 0),
+      sponsors: schoolData.reduce((s, c) => s + c.total_sponsors, 0),
+      actions: schoolData.reduce((s, c) => s + c.recent_actions, 0),
+    }
+  }, [selectedState, schoolData])
+
+  /* ---------- render ---------- */
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -187,73 +246,109 @@ export default function Estatisticas() {
           </Link>
         </div>
         <div className="max-w-5xl mx-auto mt-3">
-          <h1 className="text-2xl md:text-3xl font-bold">Impacto da Pirâmide do Bem</h1>
+          <h1 className="text-2xl md:text-3xl font-bold">Impacto da Piramide do Bem</h1>
           <p className="text-white/70 text-sm mt-1">Acompanhe o crescimento da nossa comunidade em tempo real</p>
         </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-8 space-y-10">
-        {/* Stat cards — sempre visíveis */}
+        {/* Stat cards */}
         <section>
           {loading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {[1, 2, 3, 4].map(i => (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              {[1, 2, 3, 4, 5, 6].map(i => (
                 <div key={i} className="bg-white rounded-2xl shadow-lg p-6 animate-pulse">
                   <div className="h-4 bg-gray-200 rounded w-2/3 mb-3" />
                   <div className="h-8 bg-gray-200 rounded w-1/3" />
                 </div>
               ))}
             </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <StatCard label="Escolas no Brasil" value={totalSchools.toLocaleString('pt-BR')} icon={School} />
-              <StatCard label="Alunos cadastrados" value={totalStudents.toLocaleString('pt-BR')} icon={Users} />
-              <StatCard label="Ações validadas" value={totalActions.toLocaleString('pt-BR')} icon={CheckCircle} />
-              <StatCard label="Estados ativos" value={stateData.filter(s => s.total_students > 0).length.toString()} icon={MapPin} />
+          ) : selectedState && ufStats ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <StatCard label="Escolas" value={ufStats.schools.toLocaleString('pt-BR')} icon={School} />
+              <StatCard label="Alunos cadastrados" value={ufStats.students.toLocaleString('pt-BR')} icon={Users} />
+              <StatCard label="Professores" value={ufStats.teachers.toLocaleString('pt-BR')} icon={GraduationCap} />
+              <StatCard label="Patrocinadores" value={ufStats.sponsors.toLocaleString('pt-BR')} icon={Building2} />
+              <StatCard label="Acoes esta semana" value={ufStats.actions.toLocaleString('pt-BR')} icon={CheckCircle} />
             </div>
-          )}
+          ) : globalStats ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <StatCard label="Escolas no Brasil" value={globalStats.total_schools.toLocaleString('pt-BR')} icon={School} />
+              <StatCard label="Alunos cadastrados" value={globalStats.total_students.toLocaleString('pt-BR')} icon={Users} />
+              <StatCard label="Professores" value={globalStats.total_teachers.toLocaleString('pt-BR')} icon={GraduationCap} />
+              <StatCard label="Patrocinadores" value={globalStats.total_sponsors.toLocaleString('pt-BR')} icon={Building2} />
+              <StatCard label="Ofertas" value={globalStats.total_rewards.toLocaleString('pt-BR')} icon={Gift} />
+              <StatCard label="Acoes validadas" value={globalStats.total_actions.toLocaleString('pt-BR')} icon={CheckCircle} />
+            </div>
+          ) : null}
         </section>
 
         {/* Mapa */}
         {!loading && (
           <section>
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2" style={{ color: '#1F4E79' }}>
-              <MapPin size={22} style={{ color: '#028090' }} />
-              Mapa das Escolas
-            </h2>
+            <div className="flex items-center gap-3 mb-4">
+              {selectedState && (
+                <button onClick={handleBackToBrasil} className="flex items-center gap-1 text-sm hover:underline" style={{ color: '#028090' }}>
+                  <ArrowLeft size={16} /> Voltar
+                </button>
+              )}
+              <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: '#1F4E79' }}>
+                <MapPin size={22} style={{ color: '#028090' }} />
+                {selectedState
+                  ? `${selectedState} — ${STATE_NAMES[selectedState] ?? selectedState}`
+                  : 'Mapa das Escolas'}
+              </h2>
+              {selectedState && (
+                <span className="ml-auto text-sm text-gray-500">
+                  {loadingDrill ? 'Carregando...' : `${schoolData.length.toLocaleString('pt-BR')} escolas`}
+                </span>
+              )}
+            </div>
 
             <div className="bg-white rounded-2xl shadow-lg overflow-hidden" style={{ height: 480 }}>
               <MapContainer center={[-14.235, -51.925]} zoom={4} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false}>
-                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' />
+                <TileLayer
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                />
+                <MapController mapRef={mapRef} />
 
-                {mapMode === 'brasil' && stateData.map(d => (
-                  <Marker key={d.state} position={[d.lat, d.lng]} icon={getStateIcon(d)}
-                    eventHandlers={{ click: () => handleStateClick(d.state) }}>
+                {/* State markers — always visible */}
+                {stateData.map(d => (
+                  <Marker
+                    key={d.state}
+                    position={[d.lat, d.lng]}
+                    icon={getStateIcon(d, d.state === selectedState)}
+                    eventHandlers={{ click: () => handleStateClick(d.state) }}
+                  >
                     <Popup>
                       <div className="text-sm">
-                        <p className="font-bold" style={{ color: '#1F4E79' }}>{d.state}</p>
+                        <p className="font-bold" style={{ color: '#1F4E79' }}>{d.state} — {STATE_NAMES[d.state] ?? d.state}</p>
                         <p>{d.total_schools.toLocaleString('pt-BR')} escolas</p>
                         <p>{d.total_students} alunos cadastrados</p>
-                        <p>{d.total_actions} ações esta semana</p>
-                        <button onClick={() => handleStateClick(d.state)} className="mt-2 text-xs text-teal underline">
-                          Ver escolas →
+                        <p>{d.total_actions} acoes esta semana</p>
+                        <button onClick={() => handleStateClick(d.state)} className="mt-2 text-xs underline" style={{ color: '#028090' }}>
+                          Ver escolas
                         </button>
                       </div>
                     </Popup>
                   </Marker>
                 ))}
 
-                {mapMode === 'estado' && schoolData.map(s => (
-                  <Marker key={s.id} position={[s.latitude, s.longitude]}
-                    icon={getSchoolIcon(s.total_students, s.recent_actions)}>
+                {/* School markers — visible when state selected */}
+                {selectedState && schoolData.map(s => (
+                  <Marker
+                    key={s.id}
+                    position={[s.latitude, s.longitude]}
+                    icon={getSchoolIcon(s.total_students, s.recent_actions)}
+                  >
                     <Popup>
                       <div className="text-sm">
                         <p className="font-bold" style={{ color: '#1F4E79' }}>{s.name}</p>
                         <p className="text-gray-500">{s.city} — {s.state}</p>
                         <p>{s.total_students} aluno{s.total_students !== 1 ? 's' : ''} cadastrado{s.total_students !== 1 ? 's' : ''}</p>
                         {s.recent_actions > 0 && (
-                          <p className="text-green-600">{s.recent_actions} ação{s.recent_actions !== 1 ? 'ões' : ''} esta semana</p>
+                          <p className="text-green-600">{s.recent_actions} acao{s.recent_actions !== 1 ? 'es' : ''} esta semana</p>
                         )}
                       </div>
                     </Popup>
@@ -262,25 +357,20 @@ export default function Estatisticas() {
               </MapContainer>
             </div>
 
-            <div className="flex items-center justify-between mt-3 mb-6">
-              {mapMode === 'estado' ? (
-                <button onClick={handleBackToBrasil} className="flex items-center gap-1 text-sm text-teal hover:underline">
-                  ← Voltar para visão Brasil
-                </button>
-              ) : (
-                <p className="text-xs text-gray-400">Clique em um estado para ver as escolas</p>
-              )}
-              {mapMode === 'estado' && selectedState && (
-                <span className="text-sm font-semibold" style={{ color: '#1F4E79' }}>
-                  {loadingDrill ? 'Carregando...' : `${schoolData.length.toLocaleString('pt-BR')} escolas em ${selectedState}`}
-                </span>
-              )}
-            </div>
+            {!selectedState && (
+              <p className="text-xs text-gray-400 mt-3">Clique em um estado para ver as escolas</p>
+            )}
 
-            <div className="flex gap-4 text-xs text-gray-500 flex-wrap">
+            <div className="flex gap-4 text-xs text-gray-500 flex-wrap mt-3">
               <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-gray-400" /><span>Sem alunos</span></div>
               <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-blue-500" /><span>Com alunos</span></div>
               <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-green-500" /><span>Ativa esta semana</span></div>
+              {selectedState && (
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded-full" style={{ border: '2px solid #F59E0B', backgroundColor: 'transparent' }} />
+                  <span>Estado selecionado</span>
+                </div>
+              )}
             </div>
           </section>
         )}
