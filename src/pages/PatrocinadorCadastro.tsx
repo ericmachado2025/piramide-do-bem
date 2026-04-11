@@ -195,6 +195,7 @@ export default function PatrocinadorCadastro() {
   const handleSendCode = async () => {
     const code = String(Math.floor(100000 + Math.random() * 900000))
     setGeneratedCode(code)
+    setVerificationCode(code)  // DEV: preenche automaticamente enquanto WhatsApp não está ativo
 
     try {
       await supabase.from('phone_verifications').insert({

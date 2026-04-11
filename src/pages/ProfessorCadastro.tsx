@@ -825,6 +825,7 @@ export default function ProfessorCadastro() {
                 <PhoneCodeInput
                   onVerify={(code) => phoneVerification.verifyCode(code)}
                   error={phoneVerification.error}
+                  initialCode={phoneVerification.generatedCode}
                   onResendWhatsApp={() => {
                     const fullPhone = `${form.phoneCountryCode}${form.phone.replace(/\D/g, '')}`
                     phoneVerification.sendCode(fullPhone, 'whatsapp')
@@ -893,13 +894,15 @@ function PhoneCodeInput({
   error,
   onResendWhatsApp,
   onResendSMS,
+  initialCode,
 }: {
   onVerify: (code: string) => boolean
   error: string
   onResendWhatsApp: () => void
   onResendSMS: () => void
+  initialCode?: string
 }) {
-  const [code, setCode] = useState('')
+  const [code, setCode] = useState(initialCode || '')
   const inputClass =
     'w-full px-4 py-3.5 rounded-xl border-2 border-gray-200 focus:border-[#028090] focus:outline-none text-lg text-center tracking-widest transition-colors'
 

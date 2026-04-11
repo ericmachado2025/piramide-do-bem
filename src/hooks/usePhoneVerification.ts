@@ -74,5 +74,5 @@ export function usePhoneVerification() {
     setGeneratedCode('')
   }, [])
 
-  return { sendCode, sendParentAuth, verifyCode, reset, status, error }
+  return { sendCode, sendParentAuth, verifyCode, reset, status, error, generatedCode }
 }
