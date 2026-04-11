@@ -38,7 +38,7 @@ export default function Login() {
   const [forgotLoading, setForgotLoading] = useState(false)
 
   // New user states
-  const [tempPassword, setTempPassword] = useState('')
+  const [emailOtpCode, setEmailOtpCode] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [emailVerifError, setEmailVerifError] = useState('')
@@ -71,54 +71,21 @@ export default function Login() {
     setLoading(true)
     setError('')
 
-    // Estratégia: tentar signIn com senha inválida para distinguir os casos:
-    // → "email_not_confirmed": email existe mas não confirmado → tratar como NOVO (reenviar link)
-    // → "invalid_credentials": pode ser email existente com senha errada OU email inexistente
-    //    Para distinguir os dois, verificar se existe registro em public.users
-    const { error: signInErr } = await supabase.auth.signInWithPassword({
-      email, password: '___probe___',
+    // Enviar OTP de 6 dígitos para o email
+    // shouldCreateUser: true → funciona para emails novos e existentes
+    const { error: otpErr } = await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: true },
     })
-    const signInMsg = signInErr?.message?.toLowerCase() || ''
-    const isNotConfirmed = signInMsg.includes('email not confirmed') || signInMsg.includes('not confirmed')
-    const isInvalidCreds = signInMsg.includes('invalid') || signInMsg.includes('credentials')
-
-    if (isNotConfirmed) {
-      // Email existe mas não confirmado — reenviar link de confirmação
-      const { error: resendErr } = await supabase.auth.resend({ type: 'signup', email })
-      if (!resendErr) {
-        setStep('confirmar-email')
-      } else {
-        setError('Erro ao reenviar email. Tente novamente.')
-      }
-    } else if (isInvalidCreds) {
-      // Pode ser existente (senha errada) ou inexistente
-      // Verificar em public.users
-      const { data: userRec } = await supabase.from('users').select('name').eq('email', email).maybeSingle()
-      if (userRec) {
-        // Email existe no sistema → pedir senha
-        setUserName(userRec.name || '')
-          setStep('senha')
-      } else {
-        // Email não existe → criar conta e enviar confirmação
-        const tempPwd = Math.random().toString(36).slice(-10) + 'Aa1!'
-        setTempPassword(tempPwd)
-        const { error: signUpErr } = await supabase.auth.signUp({
-          email, password: tempPwd,
-          options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-        })
-        const signUpMsg = signUpErr?.message?.toLowerCase() || ''
-        if (!signUpErr || signUpMsg.includes('already registered')) {
-              setStep('confirmar-email')
-        } else {
-          setError('Erro ao criar conta. Tente novamente.')
-        }
-      }
-    } else if (!signInErr) {
-      // Login bem sucedido com probe (improvável mas tratado)
-      setStep('senha')
-    } else {
-      setError('Erro ao verificar email. Tente novamente.')
+    if (otpErr) {
+      setError('Erro ao enviar código. Tente novamente.')
+      setLoading(false)
+      return
     }
+    // Verificar se é usuário existente para personalizar comportamento após verificação
+    const { data: userRec } = await supabase.from('users').select('name').eq('email', email).maybeSingle()
+    if (userRec) setUserName(userRec.name || '')
+    setStep('confirmar-email')
     setLoading(false)
   }
 
@@ -136,19 +103,38 @@ export default function Login() {
   }
 
   async function handleEmailVerified() {
-    setEmailVerifLoading(true); setEmailVerifError('')
-    const { data } = await supabase.auth.signInWithPassword({ email, password: tempPassword })
+    if (emailOtpCode.length !== 6) return
+    setEmailVerifLoading(true)
+    setEmailVerifError('')
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token: emailOtpCode,
+      type: 'email',
+    })
     if (data?.session) {
-      setStep('criar-senha')
+      if (userName) {
+        // Usuário existente já confirmado — redirecionar direto
+        await redirectByRole(data.session.user.id)
+      } else {
+        // Novo usuário — criar senha
+        setStep('criar-senha')
+      }
     } else {
-      setEmailVerifError('Email ainda não confirmado. Verifique sua caixa de entrada e clique no link.')
+      const msg = error?.message?.toLowerCase() || ''
+      if (msg.includes('invalid') || msg.includes('expired') || msg.includes('token')) {
+        setEmailVerifError('Código incorreto ou expirado. Solicite um novo.')
+      } else {
+        setEmailVerifError('Erro ao verificar. Tente novamente.')
+      }
     }
     setEmailVerifLoading(false)
   }
 
   async function handleResendEmail() {
-    await supabase.auth.resend({ type: 'signup', email })
-    setEmailVerifError('Email reenviado! Verifique sua caixa de entrada.')
+    setEmailOtpCode('')
+    setEmailVerifError('')
+    await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } })
+    setEmailVerifError('Novo código enviado para ' + email)
   }
 
   async function handleCreatePassword() {
@@ -289,20 +275,36 @@ export default function Login() {
         {step === 'confirmar-email' && (
           <div className="space-y-4">
             <div className="text-center mb-2">
-              <h2 className="text-2xl font-extrabold text-navy mt-2">Confirme seu email</h2>
-              <p className="text-gray-400 text-sm mt-1">Enviamos um link para <strong>{email}</strong></p>
+              <span className="text-5xl">📧</span>
+              <h2 className="text-2xl font-extrabold text-navy mt-2">Verifique seu email</h2>
+              <p className="text-gray-400 text-sm mt-1">
+                Enviamos um código de 6 dígitos para <strong>{email}</strong>
+              </p>
             </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-1 text-sm text-blue-700">
-              <p>1. Abra sua caixa de entrada</p>
-              <p>2. Clique no link "Confirmar email"</p>
-              <p>3. Volte aqui e clique em Continuar</p>
-            </div>
-            <button onClick={handleEmailVerified} disabled={emailVerifLoading}
-              className="w-full py-3.5 rounded-xl font-bold text-lg text-white transition-all disabled:opacity-50" style={{ backgroundColor: '#028090' }}>
-              {emailVerifLoading ? 'Verificando...' : 'Já confirmei meu email →'}
+            <input
+              type="number"
+              inputMode="numeric"
+              placeholder="000000"
+              value={emailOtpCode}
+              onChange={(e) => { setEmailOtpCode(e.target.value.slice(0, 6)); setEmailVerifError('') }}
+              onKeyDown={(e) => e.key === 'Enter' && emailOtpCode.length === 6 && handleEmailVerified()}
+              className="w-full px-4 py-4 rounded-xl border-2 border-gray-200 focus:border-teal focus:outline-none text-3xl text-center tracking-widest font-bold transition-colors"
+              autoFocus
+            />
+            <button
+              onClick={handleEmailVerified}
+              disabled={emailOtpCode.length !== 6 || emailVerifLoading}
+              className={`w-full py-3.5 rounded-xl font-bold text-lg text-white transition-all ${emailOtpCode.length === 6 && !emailVerifLoading ? 'opacity-100' : 'opacity-50 cursor-not-allowed'}`}
+              style={{ backgroundColor: '#028090' }}
+            >
+              {emailVerifLoading ? 'Verificando...' : 'Confirmar código →'}
             </button>
-            {emailVerifError && <div className="bg-red/10 border border-red/30 rounded-xl p-3 text-sm text-red">{emailVerifError}</div>}
-            <button onClick={handleResendEmail} className="w-full text-sm text-gray-400 hover:text-teal text-center">Reenviar email de confirmação</button>
+            {emailVerifError && (
+              <div className="bg-red/10 border border-red/30 rounded-xl p-3 text-sm text-red text-center">{emailVerifError}</div>
+            )}
+            <button onClick={handleResendEmail} className="w-full text-sm text-gray-400 hover:text-teal text-center transition-colors">
+              Reenviar código
+            </button>
           </div>
         )}
 
