@@ -84,6 +84,10 @@ export default function Perfil() {
   const [inviteInput, setInviteInput] = useState('')
   const [inviteBulk, setInviteBulk] = useState('')
   const [showInviteModal, setShowInviteModal] = useState(false)
+  const [showMonitorModal, setShowMonitorModal] = useState(false)
+  const [allSubjects, setAllSubjects] = useState<{ id: string; name: string }[]>([])
+  const [myMonitorSubjects, setMyMonitorSubjects] = useState<string[]>([])
+  const [monitorSaving, setMonitorSaving] = useState(false)
   const [inviteSending, setInviteSending] = useState(false)
   const [inviteMsg, setInviteMsg] = useState('')
 
@@ -188,6 +192,23 @@ export default function Perfil() {
         if (cRefs) setConfirmedRefs(cRefs)
         const { data: pRefs } = await supabase.from('referrals').select('id, referred_email, referral_code, created_at').eq('referrer_id', studentData.id).eq('status', 'pending').order('created_at', { ascending: false })
         if (pRefs) setPendingRefs(pRefs)
+      }
+
+      // Load subjects (dedup by normalized name) and monitor status
+      const { data: subjs } = await supabase.from('subjects').select('id, name').order('display_order')
+      if (subjs) {
+        const seen = new Set<string>()
+        const unique = subjs.filter(s => {
+          const norm = s.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+          if (seen.has(norm)) return false
+          seen.add(norm)
+          return true
+        })
+        setAllSubjects(unique)
+      }
+      if (studentData) {
+        const { data: mons } = await supabase.from('monitors').select('subject_id').eq('student_id', studentData.id)
+        if (mons) setMyMonitorSubjects(mons.map(m => m.subject_id))
       }
 
       // Check Google link status
@@ -333,6 +354,24 @@ export default function Perfil() {
     setInviteContacts(prev => [...prev, ...toAdd])
     setInviteBulk('')
     setInviteMsg(`${toAdd.length} contato(s) adicionado(s).`)
+  }
+
+  const toggleMonitorSubject = (subjectId: string) => {
+    setMyMonitorSubjects(prev => prev.includes(subjectId) ? prev.filter(x => x !== subjectId) : [...prev, subjectId])
+  }
+
+  const handleMonitorSave = async () => {
+    if (!student) return
+    setMonitorSaving(true)
+    // Delete all existing, re-insert selected
+    await supabase.from('monitors').delete().eq('student_id', student.id)
+    if (myMonitorSubjects.length > 0) {
+      await supabase.from('monitors').insert(
+        myMonitorSubjects.map(sid => ({ student_id: student.id, subject_id: sid }))
+      )
+    }
+    setMonitorSaving(false)
+    setShowMonitorModal(false)
   }
 
   const handleInvite = async () => {
@@ -579,6 +618,41 @@ export default function Perfil() {
 
               <p className="text-[10px] text-gray-400 mt-2">1a-5a: 25pts | 6a-10a: 15pts | 11a-20a: 8pts | 21a+: 4pts</p>
             </>
+          )}
+        </section>
+
+        {/* ===== MONITORIA ===== */}
+        <section>
+          <h2 className="text-lg font-bold text-navy mb-3">Monitoria</h2>
+          {myMonitorSubjects.length === 0 ? (
+            <div className="bg-white rounded-xl shadow-md p-5 text-center">
+              <span className="text-4xl block mb-2">{'\u{1F393}'}</span>
+              <p className="text-gray-500 text-sm mb-3">Voce e bom em alguma materia e quer ajudar outros alunos?</p>
+              <button onClick={() => setShowMonitorModal(true)}
+                className="bg-teal text-white text-sm font-bold px-4 py-2 rounded-lg">
+                Quero ser monitor!
+              </button>
+              <p className="text-[10px] text-gray-400 mt-2">Monitores ganham pontos em dobro ao ajudar colegas.</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl shadow-md p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">{'\u{1F393}'}</span>
+                  <p className="text-sm font-semibold text-navy">Voce e monitor em {myMonitorSubjects.length} materia(s)</p>
+                </div>
+                <button onClick={() => setShowMonitorModal(true)} className="text-xs text-teal font-semibold">Editar</button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {myMonitorSubjects.map(sid => {
+                  const subj = allSubjects.find(s => s.id === sid)
+                  return subj ? (
+                    <span key={sid} className="bg-teal/10 text-teal text-xs font-semibold px-2.5 py-1 rounded-full">{subj.name}</span>
+                  ) : null
+                })}
+              </div>
+              <p className="text-[10px] text-gray-400 mt-2">Pontos x2 ao ajudar colegas nestas materias!</p>
+            </div>
           )}
         </section>
 
@@ -933,6 +1007,42 @@ export default function Perfil() {
       </div>
 
       {/* Invite modal */}
+      {showMonitorModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowMonitorModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-bold text-navy text-lg mb-1">Quero ser monitor!</h3>
+            <p className="text-xs text-gray-400 mb-4">Marque as materias em que voce e bom e quer ajudar outros alunos. Monitores ganham pontos em dobro!</p>
+
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              {allSubjects.filter(s => s.name !== 'Outros').map(s => {
+                const selected = myMonitorSubjects.includes(s.id)
+                return (
+                  <button key={s.id} onClick={() => toggleMonitorSubject(s.id)}
+                    className={`py-2.5 px-3 rounded-xl text-sm font-semibold transition-all text-left ${
+                      selected ? 'bg-teal text-white shadow-sm' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                    }`}>
+                    {selected ? '\u2713 ' : ''}{s.name}
+                  </button>
+                )
+              })}
+            </div>
+
+            {myMonitorSubjects.length > 0 && (
+              <p className="text-xs text-teal font-semibold mb-3">{myMonitorSubjects.length} materia(s) selecionada(s)</p>
+            )}
+
+            <div className="flex gap-2">
+              <button onClick={() => setShowMonitorModal(false)}
+                className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-500 text-sm font-semibold">Cancelar</button>
+              <button onClick={handleMonitorSave} disabled={monitorSaving}
+                className="flex-1 py-2.5 rounded-lg bg-teal text-white text-sm font-semibold disabled:opacity-50">
+                {monitorSaving ? 'Salvando...' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showInviteModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowInviteModal(false)}>
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
