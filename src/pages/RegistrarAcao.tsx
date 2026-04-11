@@ -1,18 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Search, Check } from 'lucide-react'
+import { ArrowLeft, Check } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { getScoringRule } from '../lib/database'
 import StudentSearch from '../components/StudentSearch'
 import type { ActionType } from '../types'
-
-interface Classmate {
-  id: string
-  name: string
-  school?: { name: string; city: string; state: string } | null
-}
 
 export default function RegistrarAcao() {
   const navigate = useNavigate()
@@ -22,14 +16,10 @@ export default function RegistrarAcao() {
   const [selectedBeneficiaries, setSelectedBeneficiaries] = useState<string[]>([])
   const [description, setDescription] = useState('')
   const [customTitle, setCustomTitle] = useState('')
-  const [searchQuery, setSearchQuery] = useState('')
   const [qrToken] = useState(() => `piramidebem://validar/${Date.now()}`)
+  const [beneficiaryNames, setBeneficiaryNames] = useState<Record<string, string>>({})
 
   const [actionTypes, setActionTypes] = useState<ActionType[]>([])
-  const [classmates, setClassmates] = useState<Classmate[]>([])
-  const [classmatePage, setClassmatePage] = useState(0)
-  const [classmatesTotal, setClassmatesTotal] = useState(0)
-  const PAGE_SIZE = 20
   const [studentId, setStudentId] = useState<string | null>(null)
   const [mySchoolId, setMySchoolId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -66,46 +56,6 @@ export default function RegistrarAcao() {
   const selectedActionType = actionTypes.find((a) => a.id === selectedAction)
   const isOtherAction = selectedActionType?.name?.toLowerCase().includes('outr') ?? false
   const allowsMultiple = true // allow selecting multiple beneficiaries
-
-  const [showAll, setShowAll] = useState(false)
-
-  // Debounced search for all participants (open, not restricted to school)
-  useEffect(() => {
-    if (!showAll && searchQuery.length < 2) { setClassmates([]); setClassmatesTotal(0); return }
-    const timer = setTimeout(async () => {
-      let q = supabase.from('students')
-        .select('id, user:users!students_users_id_fkey(name), school:schools(name, city, state)', { count: 'exact' })
-        .neq('id', studentId ?? '')
-      if (searchQuery.length >= 2) {
-        // Search in users table for name match
-        const { data: matchingUsers } = await supabase.from('users').select('auth_id').ilike('name', `%${searchQuery}%`).limit(50)
-        if (matchingUsers && matchingUsers.length > 0) {
-          q = q.in('user_id', matchingUsers.map(u => u.auth_id))
-        } else {
-          if (classmatePage === 0) setClassmates([])
-          setClassmatesTotal(0)
-          return
-        }
-      } else {
-        q = q.order('created_at', { ascending: false })
-      }
-      q = q.range(classmatePage * PAGE_SIZE, (classmatePage + 1) * PAGE_SIZE - 1)
-      const { data, count } = await q
-      if (data) {
-        const mapped = data.map((d: Record<string, unknown>) => ({
-          id: d.id as string,
-          name: ((d.user as Record<string, unknown>)?.name as string) || 'Aluno',
-          school: d.school as { name: string; city: string; state: string } | null,
-        }))
-        if (classmatePage === 0) setClassmates(mapped)
-        else setClassmates(prev => [...prev, ...mapped])
-        setClassmatesTotal(count ?? 0)
-      }
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [searchQuery, studentId, showAll, classmatePage])
-
-  const availablePeople = classmates
 
   async function saveAction() {
     if (!studentId || !selectedAction) return
@@ -153,7 +103,8 @@ export default function RegistrarAcao() {
     setSelectedBeneficiaries([])
   }
 
-  function toggleBeneficiary(id: string) {
+  function toggleBeneficiary(id: string, name?: string) {
+    if (name) setBeneficiaryNames(prev => ({ ...prev, [id]: name }))
     if (allowsMultiple) {
       setSelectedBeneficiaries((prev) =>
         prev.includes(id) ? prev.filter((b) => b !== id) : [...prev, id]
@@ -344,7 +295,7 @@ export default function RegistrarAcao() {
               </div>
               <p className="text-gray-500 text-xs">
                 Beneficiado(s): {selectedBeneficiaries
-                  .map((id) => classmates.find((c) => c.id === id)?.name)
+                  .map((id) => beneficiaryNames[id])
                   .filter(Boolean)
                   .join(', ') || '---'}
               </p>

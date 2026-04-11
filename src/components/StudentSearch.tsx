@@ -28,7 +28,7 @@ interface StudentSearchProps {
   mySchoolId: string | null
   myStudentId: string | null
   selected: string[]
-  onToggle: (id: string) => void
+  onToggle: (id: string, name?: string) => void
   multiple?: boolean
   label?: string
   sublabel?: string
@@ -191,7 +191,7 @@ export default function StudentSearch({
               const locParts = [s.school_state, s.school_city, s.school_neighborhood, s.school_name].filter(Boolean)
               const locText = locParts.join(' · ')
               return (
-                <button key={s.id} onClick={() => onToggle(s.id)}
+                <button key={s.id} onClick={() => onToggle(s.id, s.name)}
                   className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-150 active:scale-[0.98] text-left ${
                     isSelected ? 'bg-teal/10 border-2 border-teal' : 'bg-white border-2 border-transparent shadow-sm hover:shadow-md'
                   }`}>
