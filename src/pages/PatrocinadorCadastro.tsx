@@ -521,9 +521,7 @@ export default function PatrocinadorCadastro() {
               </button>
             ) : !codeVerified ? (
               <>
-                <p className="text-sm text-gray-500 text-center bg-gray-50 rounded-xl p-3">
-                  Código enviado para {phone}. Se não receber em 1 minuto, use o código de teste exibido no console do navegador (F12).
-                </p>
+                <p className="text-xs text-red-500 text-center font-semibold">Codigo exibido na tela no MVP (aguardando ativacao do WhatsApp - prazo: 1 a 7 dias)</p>
                 <input
                   type="text"
                   placeholder="Digite o código de 6 dígitos"

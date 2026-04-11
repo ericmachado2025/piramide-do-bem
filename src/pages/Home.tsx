@@ -137,10 +137,26 @@ export default function Home() {
       {/* Header */}
       <div className="gradient-bg px-5 pt-8 pb-6 rounded-b-3xl">
         <div className="max-w-md mx-auto">
-          <h1 className="text-2xl font-bold text-white">
-            Ola, {(student as any).user?.name || authUser?.user_metadata?.full_name || authUser?.user_metadata?.name || 'Heroi'}! <span className="inline-block animate-bounce">🎮</span>
-          </h1>
-          <p className="text-white/70 text-sm mt-1">O que você vai aprontar hoje?</p>
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-white">
+                Ola, {(student as any).user?.name || authUser?.user_metadata?.full_name || authUser?.user_metadata?.name || 'Heroi'}! <span className="inline-block animate-bounce">🎮</span>
+              </h1>
+              <p className="text-white/70 text-sm mt-1">O que você vai aprontar hoje?</p>
+            </div>
+            {(() => {
+              const totalNotifs = pendingCount + friendRequests.length
+              return totalNotifs > 0 ? (
+                <button onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })}
+                  className="relative p-2">
+                  <span className="text-2xl">{'\u{1F514}'}</span>
+                  <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">{totalNotifs}</span>
+                </button>
+              ) : (
+                <span className="text-2xl opacity-40 p-2">{'\u{1F514}'}</span>
+              )
+            })()}
+          </div>
 
           {/* Mini avatar / stats */}
           <div className="mt-4 bg-white/15 backdrop-blur-sm rounded-2xl p-4 flex items-center gap-4">

@@ -339,13 +339,13 @@ export default function ProfessorCadastro() {
       // 1. Insert into users table
       const { data: userData, error: userErr } = await supabase
         .from('users')
-        .insert({
+        .upsert({
           auth_id: authUserId,
           name: form.nome,
           email: authEmail,
           phone: `${form.phoneCountryCode}${form.phone.replace(/\D/g, '')}`,
           cpf: form.cpf.replace(/\D/g, '') || null,
-        })
+        }, { onConflict: 'auth_id' })
         .select()
         .single()
 
@@ -914,6 +914,9 @@ function PhoneCodeInput({
 
   return (
     <div className="space-y-3">
+      <p className="text-xs text-red-500 text-center font-semibold">
+        Codigo exibido na tela no MVP (aguardando ativacao do WhatsApp - prazo: 1 a 7 dias)
+      </p>
       <p className="text-sm text-gray-500">
         Digite o codigo de 6 digitos enviado para seu telefone
       </p>

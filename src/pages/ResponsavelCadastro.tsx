@@ -389,6 +389,7 @@ export default function ResponsavelCadastro() {
               </button>
             ) : !phoneVerified ? (
               <div className="space-y-3">
+                <p className="text-xs text-red-500 text-center font-semibold">Codigo exibido na tela no MVP (aguardando ativacao do WhatsApp - prazo: 1 a 7 dias)</p>
                 <input type="text" inputMode="numeric" placeholder="000000" value={phoneOtpCode}
                   onChange={(e) => setPhoneOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   onKeyDown={(e) => e.key === 'Enter' && phoneOtpCode.length === 6 && handleVerifyPhoneOtp()}
