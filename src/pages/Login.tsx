@@ -109,7 +109,7 @@ export default function Login() {
     const { data, error } = await supabase.auth.verifyOtp({
       email,
       token: emailOtpCode,
-      type: 'email',
+      type: 'magiclink',
     })
     if (data?.session) {
       if (userName) {
