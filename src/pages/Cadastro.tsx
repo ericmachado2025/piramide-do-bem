@@ -48,6 +48,7 @@ const GRADES_BY_TYPE: Record<string, string[]> = {
   fundamental: ['1o ano', '2o ano', '3o ano', '4o ano', '5o ano', '6o ano', '7o ano', '8o ano', '9o ano'],
   medio: ['1o EM', '2o EM', '3o EM'],
   tecnico: ['1o Tecnico', '2o Tecnico', '3o Tecnico', '4o Tecnico'],
+  profissional: ['1o Tecnico', '2o Tecnico', '3o Tecnico', '4o Tecnico'],
   eja: ['EJA Fundamental', 'EJA Medio'],
   superior: ['1o sem', '2o sem', '3o sem', '4o sem', '5o sem', '6o sem', '7o sem', '8o sem', '9o sem', '10o sem'],
 }
@@ -276,6 +277,19 @@ export default function Cadastro() {
 
   // Get available grades based on selected school type
   const availableGrades = useMemo(() => {
+    // Primeiro tentar pelo nível selecionado (mais confiável)
+    const nivelMap: Record<string, string[]> = {
+      infantil: GRADES_BY_TYPE.infantil,
+      fundamental1: ['1o ano', '2o ano', '3o ano', '4o ano', '5o ano'],
+      fundamental2: ['6o ano', '7o ano', '8o ano', '9o ano'],
+      medio: GRADES_BY_TYPE.medio,
+      profissional: GRADES_BY_TYPE.tecnico,
+      eja: GRADES_BY_TYPE.eja,
+      superior: GRADES_BY_TYPE.superior,
+    }
+    if (form.nivel && nivelMap[form.nivel]) return nivelMap[form.nivel]
+
+    // Fallback: tentar pelo schoolType
     if (!form.schoolType) return ALL_GRADES
     const types = form.schoolType.split(',').map(t => t.trim())
     const grades: string[] = []
@@ -283,7 +297,7 @@ export default function Cadastro() {
       if (GRADES_BY_TYPE[type]) grades.push(...GRADES_BY_TYPE[type])
     }
     return grades.length > 0 ? grades : ALL_GRADES
-  }, [form.schoolType])
+  }, [form.nivel, form.schoolType])
 
   const currentYear = new Date().getFullYear()
   const minYear = currentYear - 80
@@ -322,9 +336,9 @@ export default function Cadastro() {
     }
   }, [age, form.nivel])
 
-  // Auto-set section N/A for superior/eja/profissional
+  // Auto-set section N/A for superior/eja (profissional shows turma)
   useEffect(() => {
-    if ((form.nivel === 'superior' || form.nivel === 'eja' || form.nivel === 'profissional') && !form.section) {
+    if ((form.nivel === 'superior' || form.nivel === 'eja') && !form.section) {
       setForm(prev => ({ ...prev, section: 'N/A' }))
     }
   }, [age, form.nivel])
@@ -352,7 +366,7 @@ export default function Cadastro() {
       case 3: return fromGoogle ? true : (passwordValidation.valid && form.password === form.confirmPassword)
       case 4: return birthDateValid
       case 5: {
-        const needsSection = form.nivel !== 'superior' && form.nivel !== 'eja' && form.nivel !== 'profissional'
+        const needsSection = form.nivel !== 'superior' && form.nivel !== 'eja'
         return form.schoolId !== '' && form.grade !== '' && (!needsSection || form.section !== '')
       }
       case 6: return form.whatsapp.replace(/\D/g, '').length >= 10
@@ -430,6 +444,15 @@ export default function Cadastro() {
 
       if (!authUserId) {
         setEmailError('Erro: usuário não autenticado. Tente novamente.')
+        setSubmitting(false)
+        return
+      }
+
+      // Garantir sessão antes do INSERT
+      const { data: { user: currentUser } } = await supabase.auth.getUser()
+      if (currentUser && !authUserId) authUserId = currentUser.id
+      if (!authUserId) {
+        setEmailError('Sessão perdida. Faça login novamente.')
         setSubmitting(false)
         return
       }
@@ -853,7 +876,7 @@ export default function Cadastro() {
             {/* Grade + Section — labels dinâmicos por nível */}
             {form.schoolId && (() => {
               const isSuperior = form.nivel === 'superior'
-              const isEjaProf = form.nivel === 'eja' || form.nivel === 'profissional'
+              const isEjaProf = form.nivel === 'eja'  // apenas EJA não tem letra de turma
               const gradeLabel = isSuperior ? 'Semestre' : isEjaProf ? 'Período' : 'Série/Ano'
               return (
                 <div className="space-y-2">
