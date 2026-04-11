@@ -62,6 +62,11 @@ export default function AuthCallback() {
       if (sponsor) { navigate('/patrocinador/dashboard', { replace: true }); return }
 
       // Nenhum perfil — escolher tipo de cadastro
+      const isNewSignup = window.location.hash.includes('type=signup')
+      if (isNewSignup) {
+        navigate('/login', { replace: true })
+        return
+      }
       navigate('/cadastro/perfil?from=google', { replace: true })
     }
 

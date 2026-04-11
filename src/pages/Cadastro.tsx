@@ -125,18 +125,19 @@ function getNivelByAge(age: number | null): string {
   return found?.value || ''
 }
 
-// Normal flow: 1=Email, 2=Nome, 3=Senha, 4=Nascimento, 5=Escola, 6=WhatsApp, 7=LGPD
-// Google flow: 3=Senha(opcional), 4=Nascimento, 5=Escola, 6=WhatsApp, 7=LGPD
-const NORMAL_STEPS = [1, 2, 3, 4, 5, 6, 7]
-const NORMAL_STEPS_WITH_EMAIL = [2, 3, 4, 5, 6, 7]
-const GOOGLE_STEPS = [3, 4, 5, 6, 7]
+// Normal flow: 2=Nome, 4=Nascimento, 5=Escola, 7=LGPD (email/password/phone handled in Login)
+// Google flow: 4=Nascimento, 5=Escola, 7=LGPD (Google has name)
+const NORMAL_STEPS = [2, 4, 5, 7]  // Nome, Nascimento, Escola, LGPD
+const NORMAL_STEPS_WITH_EMAIL = [2, 4, 5, 7]
+const GOOGLE_STEPS = [4, 5, 7]  // Nascimento, Escola, LGPD (Google has name)
 
 export default function Cadastro() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { user, signInWithGoogle, signUpWithEmail } = useAuth()
+  const { user, signInWithGoogle } = useAuth()
   const fromGoogle = searchParams.get('from') === 'google'
   const emailFromUrl = searchParams.get('email') || ''
+  const phoneFromUrl = searchParams.get('phone') || ''
 
   // Capture referral code from URL
   useEffect(() => {
@@ -413,44 +414,9 @@ export default function Cadastro() {
     setSubmitting(true)
 
     try {
-      let authUserId = user?.id
-
-      if (fromGoogle) {
-        // Google user — already authenticated, optionally set password
-        if (form.password && form.password.length >= 8) {
-          await supabase.auth.updateUser({ password: form.password })
-        }
-      } else if (form.email && form.password) {
-        // Email/password — try signIn first, then signUp
-        const { error: signInErr, data: signInData } = await supabase.auth.signInWithPassword({
-          email: form.email, password: form.password
-        })
-        if (!signInErr && signInData.user) {
-          authUserId = signInData.user.id
-        } else {
-          const { error, user: newUser } = await signUpWithEmail(form.email, form.password)
-          if (error && !error.includes('already registered')) {
-            setEmailError(error.includes('rate limit') ? 'Muitas tentativas. Aguarde alguns minutos.' : error)
-            setSubmitting(false)
-            return
-          }
-          if (newUser) authUserId = newUser.id
-          if (!authUserId) {
-            const { data } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password })
-            authUserId = data.user?.id
-          }
-        }
-      }
-
-      if (!authUserId) {
-        setEmailError('Erro: usuário não autenticado. Tente novamente.')
-        setSubmitting(false)
-        return
-      }
-
-      // Garantir sessão antes do INSERT
+      // User already authenticated from Login flow
       const { data: { user: currentUser } } = await supabase.auth.getUser()
-      if (currentUser && !authUserId) authUserId = currentUser.id
+      let authUserId = currentUser?.id || user?.id
       if (!authUserId) {
         setEmailError('Sessão perdida. Faça login novamente.')
         setSubmitting(false)
@@ -468,7 +434,7 @@ export default function Cadastro() {
         parent_email: form.parentEmail || null,
         parent_phone: form.parentPhone.replace(/\D/g, '') || null,
         parent_consent: form.lgpdConsent,
-        whatsapp: form.whatsapp.replace(/\D/g, '') ? (form.whatsappCountryCode + form.whatsapp.replace(/\D/g, '')) : null,
+        whatsapp: phoneFromUrl || (form.whatsapp.replace(/\D/g, '') ? (form.whatsappCountryCode + form.whatsapp.replace(/\D/g, '')) : null),
         whatsapp_country_code: form.whatsappCountryCode,
         whatsapp_visibility: form.whatsappVisibility,
         total_points: 0,

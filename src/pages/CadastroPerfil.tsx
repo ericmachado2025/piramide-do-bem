@@ -34,9 +34,12 @@ export default function CadastroPerfil() {
   const emailFromUrl = searchParams.get('email') || ''
   const fromGoogle = searchParams.get('from') === 'google'
 
+  const phoneFromUrl = searchParams.get('phone') || ''
+
   const buildQuery = () => {
     const params = new URLSearchParams()
     if (emailFromUrl) params.set('email', emailFromUrl)
+    if (phoneFromUrl) params.set('phone', phoneFromUrl)
     if (fromGoogle) params.set('from', 'google')
     const qs = params.toString()
     return qs ? `?${qs}` : ''
