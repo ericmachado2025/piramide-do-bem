@@ -39,6 +39,7 @@ export default function Login() {
 
   // New user states
   const [emailOtpCode, setEmailOtpCode] = useState('')
+  const [otpEmail, setOtpEmail] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [emailVerifError, setEmailVerifError] = useState('')
@@ -85,6 +86,7 @@ export default function Login() {
     // Verificar se é usuário existente para personalizar comportamento após verificação
     const { data: userRec } = await supabase.from('users').select('name').eq('email', email).maybeSingle()
     if (userRec) setUserName(userRec.name || '')
+    setOtpEmail(email)
     setStep('confirmar-email')
     setLoading(false)
   }
@@ -107,9 +109,9 @@ export default function Login() {
     setEmailVerifLoading(true)
     setEmailVerifError('')
     const { data, error } = await supabase.auth.verifyOtp({
-      email,
-      token: emailOtpCode,
-      type: 'magiclink',
+      email: otpEmail || email,
+      token: emailOtpCode.trim().replace(/\D/g, ''),
+      type: 'email',
     })
     if (data?.session) {
       if (userName) {
@@ -133,7 +135,7 @@ export default function Login() {
   async function handleResendEmail() {
     setEmailOtpCode('')
     setEmailVerifError('')
-    await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } })
+    await supabase.auth.signInWithOtp({ email: otpEmail || email, options: { shouldCreateUser: true } })
     setEmailVerifError('Novo código enviado para ' + email)
   }
 
