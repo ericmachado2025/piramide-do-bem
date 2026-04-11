@@ -71,22 +71,36 @@ export default function ValidarAcao() {
       if (!me) { setLoading(false); return }
       setStudentId(me.id)
 
-      // Load pending actions from same school (not authored by me)
+      // Load pending actions where I am the beneficiary (not authored by me)
       const { data: pending } = await supabase
         .from('actions')
-        .select('id, points_awarded, created_at, author:students!actions_author_id_fkey(name), action_type:action_types(name, icon), beneficiary:students!actions_beneficiary_id_fkey(name)')
+        .select('id, points_awarded, created_at, author_id, action_type:action_types(name, icon), beneficiary_id')
         .eq('status', 'pending')
+        .eq('beneficiary_id', me.id)
         .neq('author_id', me.id)
         .order('created_at', { ascending: false })
         .limit(20)
 
       if (pending) {
+        // Fetch author names via students -> users
+        const authorIds = [...new Set(pending.map(a => a.author_id).filter(Boolean))]
+        const authorNames: Record<string, string> = {}
+        if (authorIds.length > 0) {
+          const { data: authors } = await supabase.from('students')
+            .select('id, user:users!students_users_id_fkey(name)')
+            .in('id', authorIds as string[])
+          if (authors) {
+            for (const a of authors) {
+              authorNames[a.id] = ((a.user as unknown as { name: string }) ?? { name: 'Colega' }).name
+            }
+          }
+        }
         setPendingActions(pending.map((a: Record<string, unknown>) => ({
           id: a.id as string,
-          authorName: (a.author as { name: string } | null)?.name ?? 'Desconhecido',
+          authorName: authorNames[a.author_id as string] ?? 'Colega',
           actionTypeName: (a.action_type as { name: string; icon: string | null } | null)?.name ?? 'Boa acao',
           actionIcon: (a.action_type as { name: string; icon: string | null } | null)?.icon ?? '\u{1F91D}',
-          beneficiaryName: (a.beneficiary as { name: string } | null)?.name ?? 'Colega',
+          beneficiaryName: 'Voce',
           points: (a.points_awarded as number) ?? 0,
           createdAt: a.created_at as string,
         })))

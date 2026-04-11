@@ -214,7 +214,7 @@ export default function Home() {
             <div className="flex items-center gap-3">
               <span className="text-3xl">📷</span>
               <div>
-                <h3 className="font-bold text-lg text-navy">Confirmar colega</h3>
+                <h3 className="font-bold text-lg text-navy">Confirmar acao de um colega</h3>
                 <p className="text-gray-500 text-sm">Alguém precisa do seu ok!</p>
               </div>
             </div>
