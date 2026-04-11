@@ -38,7 +38,6 @@ export default function Login() {
   const [forgotLoading, setForgotLoading] = useState(false)
 
   // New user states
-  const [isNewUser, setIsNewUser] = useState(false)
   const [tempPassword, setTempPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [showNewPassword, setShowNewPassword] = useState(false)
@@ -85,7 +84,6 @@ export default function Login() {
 
     if (isNotConfirmed) {
       // Email existe mas não confirmado — reenviar link de confirmação
-      setIsNewUser(true)
       const { error: resendErr } = await supabase.auth.resend({ type: 'signup', email })
       if (!resendErr) {
         setStep('confirmar-email')
@@ -99,8 +97,7 @@ export default function Login() {
       if (userRec) {
         // Email existe no sistema → pedir senha
         setUserName(userRec.name || '')
-        setIsNewUser(false)
-        setStep('senha')
+          setStep('senha')
       } else {
         // Email não existe → criar conta e enviar confirmação
         const tempPwd = Math.random().toString(36).slice(-10) + 'Aa1!'
@@ -111,15 +108,13 @@ export default function Login() {
         })
         const signUpMsg = signUpErr?.message?.toLowerCase() || ''
         if (!signUpErr || signUpMsg.includes('already registered')) {
-          setIsNewUser(true)
-          setStep('confirmar-email')
+              setStep('confirmar-email')
         } else {
           setError('Erro ao criar conta. Tente novamente.')
         }
       }
     } else if (!signInErr) {
       // Login bem sucedido com probe (improvável mas tratado)
-      setIsNewUser(false)
       setStep('senha')
     } else {
       setError('Erro ao verificar email. Tente novamente.')
