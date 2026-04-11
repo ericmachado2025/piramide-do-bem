@@ -79,17 +79,29 @@ serve(async (req) => {
       )
     }
 
-    let body = ''
-    if (type === 'parent_auth') {
-      body = `Piramide do Bem Escolar: ${childName} quer entrar na plataforma. Acesse para autorizar: ${appUrl}/autorizar?token=${code}`
-    } else if (type === 'delete_account') {
-      body = `Piramide do Bem Escolar: Seu codigo para EXCLUIR sua conta e ${code}. Se nao foi voce, ignore esta mensagem.`
-    } else {
-      body = `Piramide do Bem Escolar: seu codigo de verificacao e *${code}*. Valido por 10 minutos.`
-    }
-
     const from = channel === 'whatsapp' ? whatsappFrom : smsFrom
     const toFormatted = channel === 'whatsapp' ? `whatsapp:${to}` : to
+
+    const params = new URLSearchParams()
+    params.append('From', from)
+    params.append('To', toFormatted)
+
+    if (channel === 'whatsapp') {
+      // Use Content Template for WhatsApp
+      params.append('ContentSid', 'HX06f396a69a7684990635393d11344a0a')
+      params.append('ContentVariables', JSON.stringify({ '1': code }))
+    } else {
+      // SMS uses Body directly
+      let body = ''
+      if (type === 'parent_auth') {
+        body = `Piramide do Bem Escolar: ${childName} quer entrar na plataforma. Acesse para autorizar: ${appUrl}/autorizar?token=${code}`
+      } else if (type === 'delete_account') {
+        body = `Piramide do Bem Escolar: Seu codigo para EXCLUIR sua conta e ${code}. Se nao foi voce, ignore esta mensagem.`
+      } else {
+        body = `Piramide do Bem Escolar: seu codigo de verificacao e *${code}*. Valido por 10 minutos.`
+      }
+      params.append('Body', body)
+    }
 
     const response = await fetch(
       `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
@@ -99,7 +111,7 @@ serve(async (req) => {
           'Authorization': `Basic ${btoa(`${accountSid}:${authToken}`)}`,
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: new URLSearchParams({ From: from, To: toFormatted, Body: body }),
+        body: params,
       }
     )
 
