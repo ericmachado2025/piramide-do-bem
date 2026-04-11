@@ -16,7 +16,7 @@ export default function RegistrarAcao() {
   const [selectedBeneficiaries, setSelectedBeneficiaries] = useState<string[]>([])
   const [description, setDescription] = useState('')
   const [customTitle, setCustomTitle] = useState('')
-  const [qrToken] = useState(() => `piramidebem://validar/${Date.now()}`)
+  const [qrToken, setQrToken] = useState(() => crypto.randomUUID())
   const [beneficiaryNames, setBeneficiaryNames] = useState<Record<string, string>>({})
 
   const [actionTypes, setActionTypes] = useState<ActionType[]>([])
@@ -70,16 +70,22 @@ export default function RegistrarAcao() {
       }
     }
 
-    await supabase.from('actions').insert({
-      author_id: studentId,
-      beneficiary_id: selectedBeneficiaries[0] || null,
-      action_type_id: selectedAction,
-      description: isOtherAction ? `${customTitle}: ${description}` : description || null,
-      status: 'pending',
-      qr_code_token: qrToken,
-      expires_at: new Date(Date.now() + 48 * 3600000).toISOString(),
-      points_awarded: finalPoints,
-    })
+    const beneficiaries = selectedBeneficiaries.length > 0 ? selectedBeneficiaries : [null]
+    for (const bId of beneficiaries) {
+      const token = crypto.randomUUID()
+      const { error } = await supabase.from('actions').insert({
+        author_id: studentId,
+        beneficiary_id: bId,
+        action_type_id: selectedAction,
+        description: isOtherAction ? `${customTitle}: ${description}` : description || null,
+        status: 'pending',
+        qr_code_token: token,
+        expires_at: new Date(Date.now() + 48 * 3600000).toISOString(),
+        points_awarded: finalPoints,
+      })
+      if (error) console.error('Erro ao salvar ação:', error.message)
+      else setQrToken(token)
+    }
   }
 
   function handleNext() {
