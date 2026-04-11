@@ -38,6 +38,7 @@ export default function Login() {
   const [forgotLoading, setForgotLoading] = useState(false)
 
   // New user states
+  const [isNewUser, setIsNewUser] = useState(false)
   const [tempPassword, setTempPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [showNewPassword, setShowNewPassword] = useState(false)
