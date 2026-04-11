@@ -225,11 +225,30 @@ export default function EscolhaTribo() {
     setSaving(true)
     setConfirmError('')
     try {
-      const { data: student, error: studentErr } = await supabase
+      const { data: { user: currentUser } } = await supabase.auth.getUser()
+      const uid = currentUser?.id || authUser.id
+
+      let { data: student, error: studentErr } = await supabase
         .from('students')
         .select('id')
-        .eq('user_id', authUser.id)
-        .single()
+        .eq('user_id', uid)
+        .maybeSingle()
+
+      if (!student && !studentErr) {
+        const { data: newStudent, error: insertErr } = await supabase
+          .from('students')
+          .insert({ user_id: uid, total_points: 0, available_points: 0, redeemed_points: 0, role: 'student' })
+          .select('id')
+          .single()
+        if (insertErr) {
+          console.error('Student insert fallback error:', insertErr)
+          setConfirmError('Erro ao carregar seu perfil. Tente novamente.')
+          setSaving(false)
+          return
+        }
+        student = newStudent
+      }
+
       if (studentErr || !student) {
         console.error('Student fetch error:', studentErr)
         setConfirmError('Erro ao carregar seu perfil. Tente novamente.')

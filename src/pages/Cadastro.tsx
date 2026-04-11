@@ -175,7 +175,7 @@ export default function Cadastro() {
     state: '', city: '', citySearch: '',
     schoolId: '', schoolSearch: '', schoolType: '',
     grade: '', section: '',
-    whatsapp: '', whatsappCountryCode: '+55', whatsappVisibility: 'private',
+    whatsapp: '', whatsappCountryCode: '+55', whatsappVisibility: 'public',
     parentEmail: '', parentPhone: '', parentRelation: '',
     lgpdConsent: false,
   })
