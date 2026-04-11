@@ -63,7 +63,7 @@ export default function SchoolSelector({
   // City autocomplete
   const [citySearch, setCitySearch] = useState('')
   const [showCityDropdown, setShowCityDropdown] = useState(false)
-  const cityDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
 
   // School autocomplete
   const [schoolSearch, setSchoolSearch] = useState('')

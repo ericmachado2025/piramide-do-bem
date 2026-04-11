@@ -135,7 +135,7 @@ function formatPhone(value: string): string {
 
 export default function ProfessorCadastro() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  useAuth()
   const phoneVerification = usePhoneVerification()
 
   // Auth state

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { ArrowLeft, Users, CheckCircle, School, Trophy, Flame, MapPin, GraduationCap, Building2, Gift } from 'lucide-react'
+import { ArrowLeft, Users, CheckCircle, School, Trophy, Flame, GraduationCap, Building2, Gift } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 type MapLevel = 'brasil' | 'estado' | 'cidade' | 'bairro'
