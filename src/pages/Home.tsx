@@ -431,8 +431,9 @@ export default function Home() {
         {/* Quick links row */}
         <div className="flex gap-3">
           <Link to="/monitoria" className="flex-1 bg-white rounded-2xl shadow-md p-4 text-center hover:shadow-lg transition-all active:scale-[0.98]">
-            <span className="text-2xl block mb-1">📖</span>
+            <span className="text-2xl block mb-1">{'\u{1F4D6}'}</span>
             <p className="font-semibold text-navy text-xs">Monitoria</p>
+            <p className="text-[10px] text-teal">Pedidos de ajuda</p>
           </Link>
           <Link to="/patrocinadores" className="flex-1 bg-white rounded-2xl shadow-md p-4 text-center hover:shadow-lg transition-all active:scale-[0.98]">
             <span className="text-2xl block mb-1">🏪</span>
