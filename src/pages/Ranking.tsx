@@ -111,20 +111,30 @@ export default function Ranking() {
         if (activeTab === 'escola' && mySchoolId) {
           q = q.eq('school_id', mySchoolId)
         } else if (activeTab === 'cidade' && myCity) {
-          // Filter by city via school join — need to get school IDs first
-          const { data: citySchools } = await supabase.from('schools').select('id').eq('city', myCity)
-          if (citySchools && citySchools.length > 0) {
-            q = q.in('school_id', citySchools.map(s => s.id))
-          }
+          // Use inner join filter on school city
+          q = q.not('school_id', 'is', null)
+          // Post-filter after fetch
         } else if (activeTab === 'estado' && myState) {
-          const { data: stateSchools } = await supabase.from('schools').select('id').eq('state', myState)
-          if (stateSchools && stateSchools.length > 0) {
-            q = q.in('school_id', stateSchools.map(s => s.id))
-          }
+          // Post-filter after fetch
+          q = q.not('school_id', 'is', null)
         }
         // 'nacional' = no filter
 
         const { data, error: queryError } = await q
+
+        // Post-filter for city/state (since Supabase can't filter by nested join field efficiently)
+        let filtered = data
+        if (data && activeTab === 'cidade' && myCity) {
+          filtered = data.filter((s: Record<string, unknown>) => {
+            const sch = s.school as unknown as { city: string; state: string } | null
+            return sch?.city === myCity
+          })
+        } else if (data && activeTab === 'estado' && myState) {
+          filtered = data.filter((s: Record<string, unknown>) => {
+            const sch = s.school as unknown as { city: string; state: string } | null
+            return sch?.state === myState
+          })
+        }
 
         if (queryError) {
           console.error('Ranking: error loading students:', queryError)
@@ -132,9 +142,9 @@ export default function Ranking() {
           return
         }
 
-        if (data && data.length > 0) {
-          const total = data.length
-          const sorted = [...data].sort((a, b) => a.total_points - b.total_points)
+        if (filtered && filtered.length > 0) {
+          const total = filtered.length
+          const sorted = [...filtered].sort((a, b) => a.total_points - b.total_points)
 
           const ranked: RankedStudent[] = sorted.map((s, idx) => {
             const percentile = ((idx + 1) / total) * 100
