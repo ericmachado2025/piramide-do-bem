@@ -3,6 +3,7 @@ import { ArrowLeft, ScanLine, CheckCircle2, XCircle, Clock, User, Shield, X } fr
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { getScoringRule } from '../lib/database'
 import BottomNav from '../components/BottomNav'
 import ConfettiEffect from '../components/ConfettiEffect'
 import { QRCodeSVG } from 'qrcode.react'
@@ -288,7 +289,9 @@ export default function ValidarAcao() {
       }
     }
 
-    // Award validator bonus (+3 pts)
+    // Award validator bonus from scoring_rules
+    const validationRule = await getScoringRule('validation_bonus')
+    const validatorBonus = validationRule?.points ?? 15
     const { data: validator } = await supabase
       .from('students')
       .select('total_points, available_points')
@@ -299,8 +302,8 @@ export default function ValidarAcao() {
       await supabase
         .from('students')
         .update({
-          total_points: (validator.total_points ?? 0) + 3,
-          available_points: (validator.available_points ?? 0) + 3,
+          total_points: (validator.total_points ?? 0) + validatorBonus,
+          available_points: (validator.available_points ?? 0) + validatorBonus,
         })
         .eq('id', studentId)
     }

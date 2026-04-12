@@ -144,18 +144,21 @@ export default function Home() {
               </h1>
               <p className="text-white/70 text-sm mt-1">O que você vai aprontar hoje?</p>
             </div>
-            {(() => {
-              const totalNotifs = pendingCount + friendRequests.length
-              return totalNotifs > 0 ? (
-                <button onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })}
-                  className="relative p-2">
-                  <span className="text-2xl">{'\u{1F514}'}</span>
-                  <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">{totalNotifs}</span>
-                </button>
-              ) : (
-                <span className="text-2xl opacity-40 p-2">{'\u{1F514}'}</span>
-              )
-            })()}
+            <div className="flex items-center gap-1">
+              <Link to="/como-funciona" className="p-2 text-white/60 hover:text-white text-lg font-bold">?</Link>
+              {(() => {
+                const totalNotifs = pendingCount + friendRequests.length
+                return totalNotifs > 0 ? (
+                  <button onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })}
+                    className="relative p-2">
+                    <span className="text-2xl">{'\u{1F514}'}</span>
+                    <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">{totalNotifs}</span>
+                  </button>
+                ) : (
+                  <span className="text-2xl opacity-40 p-2">{'\u{1F514}'}</span>
+                )
+              })()}
+            </div>
           </div>
 
           {/* Mini avatar / stats */}
@@ -217,7 +220,21 @@ export default function Home() {
                   </div>
                   <div className="flex gap-2">
                     <button onClick={async () => {
-                      await supabase.from('friendships').update({ status: 'accepted' }).eq('id', fr.id)
+                      await supabase.from('friendships').update({ status: 'accepted', points_awarded: true }).eq('id', fr.id)
+                      // Award 10 pts to both (me = addressee, fr = requester)
+                      const { data: friendship } = await supabase.from('friendships').select('requester_id, addressee_id').eq('id', fr.id).single()
+                      if (friendship) {
+                        for (const sid of [friendship.requester_id, friendship.addressee_id]) {
+                          if (!sid) continue
+                          const { data: s } = await supabase.from('students').select('total_points, available_points').eq('id', sid).single()
+                          if (s) {
+                            await supabase.from('students').update({
+                              total_points: (s.total_points ?? 0) + 10,
+                              available_points: (s.available_points ?? 0) + 10,
+                            }).eq('id', sid)
+                          }
+                        }
+                      }
                       setFriendRequests(prev => prev.filter(r => r.id !== fr.id))
                     }} className="bg-teal text-white text-xs font-bold px-3 py-1.5 rounded-lg">Aceitar</button>
                     <button onClick={async () => {
@@ -297,6 +314,21 @@ export default function Home() {
               </div>
             </div>
             <ChevronRight className="text-gray-300 group-hover:translate-x-1 transition-transform" />
+          </div>
+        </Link>
+
+        {/* Convide amigos */}
+        <Link to="/perfil"
+          className="block bg-gradient-to-r from-purple-600 to-pink-500 rounded-2xl shadow-md p-5 text-white group hover:shadow-lg transition-all duration-200 active:scale-[0.98]">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">{'\u{1F4E8}'}</span>
+              <div>
+                <h3 className="font-bold text-lg">Convide amigos para a Piramide!</h3>
+                <p className="text-white/70 text-sm">Ganhe ate 25 pts por convite aceito</p>
+              </div>
+            </div>
+            <ChevronRight className="text-white/50 group-hover:translate-x-1 transition-transform" />
           </div>
         </Link>
 

@@ -12,6 +12,7 @@ import RegistrarAcao from './pages/RegistrarAcao'
 import ValidarAcao from './pages/ValidarAcao'
 import Perfil from './pages/Perfil'
 import Ranking from './pages/Ranking'
+import ComoFunciona from './pages/ComoFunciona'
 import Mapa from './pages/Mapa'
 import Recompensas from './pages/Recompensas'
 import Dashboard from './pages/Dashboard'
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="/validar" element={<VerificationGuard><ValidarAcao /></VerificationGuard>} />
           <Route path="/perfil" element={<VerificationGuard><Perfil /></VerificationGuard>} />
           <Route path="/ranking" element={<VerificationGuard><Ranking /></VerificationGuard>} />
+          <Route path="/como-funciona" element={<VerificationGuard><ComoFunciona /></VerificationGuard>} />
           <Route path="/mapa" element={<VerificationGuard><Mapa /></VerificationGuard>} />
           <Route path="/recompensas" element={<VerificationGuard><Recompensas /></VerificationGuard>} />
           <Route path="/monitoria" element={<VerificationGuard><Monitoria /></VerificationGuard>} />
