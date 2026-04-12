@@ -664,17 +664,16 @@ export default function Perfil() {
           <h2 className="text-lg font-bold text-navy mb-3 mt-6">Cofrinhos Digitais</h2>
           <div className="grid grid-cols-3 gap-3">
             {[
-              { emoji: '\u{1F3C6}', label: 'Pontos Ganhos', value: student.total_points },
-              { emoji: '\u{1F4B0}', label: 'Saldo Dispon\u00edvel', value: student.available_points },
-              { emoji: '\u{1F381}', label: 'Pontos Resgatados', value: student.redeemed_points },
+              { emoji: '\u{1F3C6}', label: 'Pontos', value: student.total_points },
+              { emoji: '\u{1F4B0}', label: 'Creditos', value: student.available_points, link: '/creditos' },
+              { emoji: '\u{1F381}', label: 'Utilizados', value: student.redeemed_points },
             ].map((c) => (
-              <div
-                key={c.label}
-                className="bg-white rounded-xl shadow-md p-4 flex flex-col items-center text-center"
-              >
+              <div key={c.label} onClick={() => (c as { link?: string }).link && navigate((c as { link: string }).link)}
+                className={`bg-white rounded-xl shadow-md p-4 flex flex-col items-center text-center ${(c as { link?: string }).link ? 'cursor-pointer hover:shadow-lg transition-shadow' : ''}`}>
                 <span className="text-3xl mb-1">{c.emoji}</span>
                 <span className="text-[11px] text-gray-500 leading-tight">{c.label}</span>
                 <span className="text-2xl font-bold text-navy mt-1">{c.value}</span>
+                {(c as { link?: string }).link && <span className="text-[9px] text-teal font-semibold mt-1">Ver extrato →</span>}
               </div>
             ))}
           </div>
