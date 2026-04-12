@@ -477,7 +477,7 @@ export default function EscolhaTribo() {
                   {characters.filter(c => c.level?.tier === 1).map((char) => (
                     <button
                       key={char.id}
-                      onClick={() => setSelectedCharacter(char)}
+                      onClick={() => { setSelectedCharacter(char); setConfirmError('') }}
                       className={`w-full bg-white rounded-2xl shadow-md p-4 flex items-center gap-4 transition-all ${
                         selectedCharacter?.id === char.id
                           ? 'border-2 border-teal ring-2 ring-teal/20 scale-[1.01]'
