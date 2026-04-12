@@ -205,7 +205,17 @@ export default function Home() {
     )
   }
 
-  if (!student) return null
+  if (!student) return (
+    <div className="min-h-screen bg-bg flex flex-col items-center justify-center px-4">
+      <p className="text-gray-500 text-sm mb-4">Nao foi possivel carregar seu perfil.</p>
+      <button onClick={() => window.location.reload()} className="bg-teal text-white font-bold py-3 px-6 rounded-xl">
+        Recarregar
+      </button>
+      <button onClick={() => window.location.href = '/login'} className="mt-3 text-gray-400 text-sm">
+        Ir para o login
+      </button>
+    </div>
+  )
 
   const tribeEmoji = getTribeEmoji(student.community?.icon_class ?? null)
   const currentTier = student.character?.level?.tier ?? 1
@@ -542,7 +552,11 @@ export default function Home() {
       <FloatingFriendButton />
       <RecommendSponsorButton />
       {showSmartScanner && (
-        <QrScanner onScan={handleSmartScan} onClose={() => setShowSmartScanner(false)} />
+        <QrScanner onScan={(data) => {
+          setShowSmartScanner(false)
+          // Pequeno delay para garantir que o scanner desmontou antes de processar
+          setTimeout(() => handleSmartScan(data), 200)
+        }} onClose={() => setShowSmartScanner(false)} />
       )}
 
       <BottomNav />
