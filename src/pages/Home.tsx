@@ -57,23 +57,26 @@ export default function Home() {
   const [showHelpModal, setShowHelpModal] = useState(false)
   const [friendRequests, setFriendRequests] = useState<{ id: string; name: string; created_at: string }[]>([])
   const [showSmartScanner, setShowSmartScanner] = useState(false)
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [transferMsg, setTransferMsg] = useState('')
 
   // Auto-process transfer from URL (camera nativa escaneia QR → abre /home?transfer=CODE)
   useEffect(() => {
     const transferCode = searchParams.get('transfer')
     if (!transferCode || !student) return
+    // Remove param from URL immediately to prevent re-processing on refresh
+    setSearchParams({}, { replace: true })
     async function processTransfer(code: string) {
       const { data: pt, error } = await supabase.from('pending_transfers')
         .select('id, sender_id, amount, status').eq('code', code).eq('status', 'waiting').single()
-      if (error || !pt) { alert('Codigo de transferencia invalido ou expirado.'); return }
+      if (error || !pt) { setTransferMsg('Codigo de transferencia invalido ou expirado.'); return }
       await supabase.from('pending_transfers')
         .update({ status: 'scanned', receiver_id: (student as any).id, scanned_at: new Date().toISOString() })
         .eq('id', pt.id)
-      alert(`Transferencia de ${pt.amount} creditos registrada! Aguarde a confirmacao do remetente.`)
+      setTransferMsg(`Transferencia de ${pt.amount} creditos registrada! Aguarde a confirmacao do remetente.`)
     }
     processTransfer(transferCode)
-  }, [searchParams, student])
+  }, [searchParams, student, setSearchParams])
 
   const handleSmartScan = useCallback(async (data: string) => {
     setShowSmartScanner(false)
@@ -95,13 +98,13 @@ export default function Home() {
           const { data: pt, error } = await supabase.from('pending_transfers')
             .select('id, sender_id, amount, status').eq('code', code).eq('status', 'waiting').single()
           if (error || !pt) {
-            alert('Codigo de transferencia invalido ou expirado.')
+            setTransferMsg('Codigo de transferencia invalido ou expirado.')
             return
           }
           await supabase.from('pending_transfers')
             .update({ status: 'scanned', receiver_id: (student as any).id, scanned_at: new Date().toISOString() })
             .eq('id', pt.id)
-          alert(`Transferencia de ${pt.amount} creditos recebida! Aguarde a confirmacao do remetente.`)
+          setTransferMsg(`Transferencia de ${pt.amount} creditos registrada! Aguarde a confirmacao do remetente.`)
         } else {
           navigate('/creditos')
         }
@@ -281,6 +284,15 @@ export default function Home() {
       <div className="max-w-md mx-auto px-5 mt-6 space-y-4">
         {/* PWA Install */}
         <InstallButton />
+
+        {/* Transfer notification banner */}
+        {transferMsg && (
+          <div className="bg-green-50 border-2 border-green-300 rounded-2xl p-4 text-center">
+            <span className="text-2xl block mb-1">{'\u{1F389}'}</span>
+            <p className="text-green-800 font-semibold text-sm">{transferMsg}</p>
+            <button onClick={() => setTransferMsg('')} className="mt-2 text-xs text-gray-400">Fechar</button>
+          </div>
+        )}
 
         {/* Friend Requests */}
         {friendRequests.length > 0 && (
