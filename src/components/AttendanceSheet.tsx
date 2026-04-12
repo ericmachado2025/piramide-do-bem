@@ -110,7 +110,28 @@ export default function AttendanceSheet({ classroomId, teacherId, date }: Props)
           await supabase.from('evasion_alerts').insert({
             student_id: sid,
             consecutive_absences: recentAbs.length,
+            notified_friends: true,
+            notified_monitors: true,
           })
+
+          // Notify friends of the absent student
+          const { data: friends } = await supabase.from('friendships')
+            .select('requester_id, addressee_id')
+            .or(`requester_id.eq.${sid},addressee_id.eq.${sid}`)
+            .eq('status', 'accepted')
+          if (friends) {
+            const friendIds = friends.map(f => f.requester_id === sid ? f.addressee_id : f.requester_id).filter(Boolean)
+            for (const fid of friendIds) {
+              await supabase.from('help_requests').insert({
+                student_id: sid,
+                subject_id: (await supabase.from('subjects').select('id').limit(1).single()).data?.id,
+                description: `Alerta de evasao: colega com ${recentAbs.length} faltas consecutivas. Ajude a traze-lo de volta!`,
+                visibility: 'friends',
+                target_student_id: fid,
+                status: 'open',
+              })
+            }
+          }
         }
       }
     }
