@@ -461,7 +461,7 @@ export default function EscolhaTribo() {
               <>
                 {/* Tier 1 characters — selectable */}
                 <div className="space-y-3 mb-6">
-                  <h3 className="text-sm font-bold text-navy">Personagens disponiveis (Tier 1):</h3>
+                  <h3 className="text-sm font-bold text-navy">Personagens disponiveis (Nivel 1):</h3>
                   {characters.filter(c => c.level?.tier === 1).map((char) => (
                     <button
                       key={char.id}

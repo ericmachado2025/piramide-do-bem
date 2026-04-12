@@ -190,7 +190,7 @@ export default function EscolhaPersonagem() {
                         }`}
                           style={char.level?.color_hex ? { backgroundColor: isActive ? char.level.color_hex : undefined } : undefined}
                         >
-                          {char.level?.name || `Tier ${char.level?.tier ?? 0}`} ({getTierLabel(char.level?.tier ?? 1)})
+                          {char.level?.name || `Nivel ${char.level?.tier ?? 0}`} ({getTierLabel(char.level?.tier ?? 1)})
                         </span>
                         {[...Array((char.level?.tier ?? 0))].map((_, i) => (
                           <Star key={i} className={`w-3.5 h-3.5 ${isActive ? 'text-yellow fill-yellow' : 'text-gray-300'}`} />

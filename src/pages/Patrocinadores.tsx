@@ -51,7 +51,7 @@ export default function Patrocinadores() {
           </button>
           <h1 className="text-2xl font-bold text-white">Patrocinadores</h1>
           <p className="text-white/80 text-sm mt-1">
-            Descontos exclusivos baseados no seu Tier!
+            Descontos exclusivos baseados no seu Nivel!
           </p>
           <div className="mt-3 inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-full px-4 py-2">
             <Star className="w-4 h-4 text-white fill-white" />

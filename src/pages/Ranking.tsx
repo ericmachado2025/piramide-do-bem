@@ -366,7 +366,7 @@ export default function Ranking() {
                                   </p>
                                 </div>
                                 <span className="text-xs font-medium text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">
-                                  Tier {s.tier}
+                                  Nivel {s.tier}
                                 </span>
                               </div>
                             ))

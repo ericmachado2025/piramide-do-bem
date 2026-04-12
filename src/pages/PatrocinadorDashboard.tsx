@@ -351,11 +351,11 @@ export default function PatrocinadorDashboard() {
                     className="flex-1 px-3 py-2.5 rounded-lg border border-gray-200 focus:border-teal focus:outline-none text-sm" />
                   <select value={promoMinTier} onChange={e => setPromoMinTier(Number(e.target.value))}
                     className="flex-1 px-3 py-2.5 rounded-lg border border-gray-200 text-sm">
-                    <option value={1}>Tier 1+</option>
-                    <option value={2}>Tier 2+</option>
-                    <option value={3}>Tier 3+</option>
-                    <option value={4}>Tier 4+</option>
-                    <option value={5}>Tier 5+</option>
+                    <option value={1}>Nivel 1+</option>
+                    <option value={2}>Nivel 2+</option>
+                    <option value={3}>Nivel 3+</option>
+                    <option value={4}>Nivel 4+</option>
+                    <option value={5}>Nivel 5+</option>
                   </select>
                 </div>
                 <div className="flex gap-2">
@@ -433,7 +433,7 @@ export default function PatrocinadorDashboard() {
                 <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
                   <span className="text-3xl block mb-2">{'\u2705'}</span>
                   <p className="text-lg font-bold text-navy">{scanStudent.name}</p>
-                  <p className="text-sm text-gray-500">Tier {scanStudent.tier} · {scanStudent.points} pts</p>
+                  <p className="text-sm text-gray-500">Nivel {scanStudent.tier} · {scanStudent.points} pts</p>
                 </div>
 
                 {promotions.filter(p => p.active).length > 0 ? (
