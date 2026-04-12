@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Send, QrCode } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import BottomNav from '../components/BottomNav'
@@ -36,6 +37,11 @@ export default function Creditos() {
   const [transferQrCode, setTransferQrCode] = useState<string | null>(null)
   const [transferConfirmCode, setTransferConfirmCode] = useState('')
   const [transferGenerated, setTransferGenerated] = useState('')
+  const [transferStep, setTransferStep] = useState<'amount' | 'qr' | 'confirm'>('amount')
+  const [transferTimer, setTransferTimer] = useState(30)
+  const [transferExpired, setTransferExpired] = useState(false)
+  const [userPhone, setUserPhone] = useState('')
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Scan states
   const [showScan, setShowScan] = useState(false)
@@ -66,6 +72,9 @@ export default function Creditos() {
       setCredits(data.available_points ?? 0)
       setTotalPoints(data.total_points ?? 0)
     }
+    // Load phone
+    const { data: u } = await supabase.from('users').select('phone').eq('auth_id', user!.id).single()
+    if (u?.phone) setUserPhone(u.phone)
     setLoading(false)
   }
 
@@ -102,15 +111,46 @@ export default function Creditos() {
     }
   }
 
-  const handleTransferGenerate = () => {
+  const handleTransferGenerate = useCallback(() => {
     const amt = parseInt(transferAmount)
     if (!amt || amt <= 0 || amt > credits) return
-    const code = crypto.randomUUID().slice(0, 8).toUpperCase()
+    const code = `TRNF-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
     setTransferQrCode(code)
+    setTransferStep('qr')
+    setTransferExpired(false)
+    setTransferTimer(30)
+    // Start 30s countdown
+    if (timerRef.current) clearInterval(timerRef.current)
+    timerRef.current = setInterval(() => {
+      setTransferTimer(prev => {
+        if (prev <= 1) {
+          if (timerRef.current) clearInterval(timerRef.current)
+          setTransferExpired(true)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+  }, [transferAmount, credits])
+
+  const handleTransferScanned = useCallback(() => {
+    // Simulate: friend scanned → now show OTP confirm
+    if (timerRef.current) clearInterval(timerRef.current)
     const confirmPIN = String(Math.floor(100000 + Math.random() * 900000))
     setTransferConfirmCode(confirmPIN)
     setTransferGenerated(confirmPIN)
-  }
+    setTransferStep('confirm')
+  }, [])
+
+  const resetTransfer = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current)
+    setShowTransfer(false)
+    setTransferStep('amount')
+    setTransferAmount('')
+    setTransferQrCode(null)
+    setTransferExpired(false)
+    setTransferTimer(30)
+  }, [])
 
   const handleTransferConfirm = async () => {
     if (transferConfirmCode !== transferGenerated) return
@@ -132,9 +172,7 @@ export default function Creditos() {
     })
 
     setCredits(prev => prev - amt)
-    setShowTransfer(false)
-    setTransferAmount('')
-    setTransferQrCode(null)
+    resetTransfer()
     loadTransactions(0, true)
   }
 
@@ -268,7 +306,8 @@ export default function Creditos() {
       {showTransfer && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
-            {!transferQrCode ? (
+
+            {transferStep === 'amount' && (
               <>
                 <h3 className="font-bold text-navy text-lg mb-3">Transferir creditos</h3>
                 <p className="text-xs text-gray-400 mb-3">Digite o valor e gere um QR Code para o amigo escanear.</p>
@@ -277,32 +316,76 @@ export default function Creditos() {
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-teal focus:outline-none text-center text-lg mb-2" />
                 <p className="text-xs text-gray-400 text-center mb-3">Saldo: {credits} creditos</p>
                 <div className="flex gap-2">
-                  <button onClick={() => setShowTransfer(false)} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-500 text-sm">Cancelar</button>
+                  <button onClick={resetTransfer} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-500 text-sm">Cancelar</button>
                   <button onClick={handleTransferGenerate} disabled={!transferAmount || parseInt(transferAmount) > credits || parseInt(transferAmount) <= 0}
-                    className="flex-1 py-2.5 rounded-lg bg-teal text-white text-sm font-semibold disabled:opacity-50">Gerar codigo</button>
+                    className="flex-1 py-2.5 rounded-lg bg-teal text-white text-sm font-semibold disabled:opacity-50">Gerar QR Code</button>
                 </div>
               </>
-            ) : (
+            )}
+
+            {transferStep === 'qr' && !transferExpired && (
               <>
-                <h3 className="font-bold text-navy text-lg mb-2">Codigo gerado!</h3>
-                <p className="text-xs text-gray-400 mb-3">Peca para seu amigo digitar este codigo na area "Usar beneficio".</p>
-                <div className="bg-gray-50 rounded-xl p-6 text-center mb-3">
-                  <p className="text-3xl font-mono font-bold text-navy tracking-widest">{transferQrCode}</p>
-                  <p className="text-sm text-teal font-bold mt-2">{transferAmount} creditos</p>
+                <h3 className="font-bold text-navy text-lg mb-2">QR Code gerado!</h3>
+                <p className="text-xs text-gray-400 mb-3">Peca para seu amigo escanear este codigo para prosseguir com a transferencia.</p>
+                <div className="bg-gray-50 rounded-xl p-6 flex flex-col items-center mb-3">
+                  <QRCodeSVG value={transferQrCode || ''} size={180} level="M" />
+                  <p className="text-sm text-teal font-bold mt-3">{transferAmount} creditos</p>
                 </div>
-                <p className="text-xs text-red-500 text-center font-semibold mb-2">Codigo exibido na tela no MVP (aguardando ativacao do WhatsApp - prazo: 1 a 7 dias)</p>
-                <p className="text-xs text-gray-500 text-center mb-2">Confirme com seu codigo de verificacao:</p>
+                <div className="flex items-center justify-center gap-2 mb-3">
+                  <div className={`text-2xl font-bold font-mono ${transferTimer <= 10 ? 'text-red-500' : 'text-navy'}`}>
+                    00:{transferTimer.toString().padStart(2, '0')}
+                  </div>
+                </div>
+                <p className="text-[10px] text-gray-400 text-center mb-3">O codigo expira em {transferTimer} segundos</p>
+                {/* DEV: botão simular scan */}
+                <button onClick={handleTransferScanned}
+                  className="w-full py-2.5 rounded-lg bg-orange-100 text-orange-700 text-xs font-semibold mb-2">
+                  [MVP] Simular que amigo escaneou
+                </button>
+                <button onClick={resetTransfer} className="w-full py-2 text-gray-400 text-sm">Cancelar</button>
+              </>
+            )}
+
+            {transferStep === 'qr' && transferExpired && (
+              <>
+                <div className="text-center py-6">
+                  <span className="text-5xl block mb-3">{'\u23F0'}</span>
+                  <h3 className="font-bold text-navy text-lg mb-2">Tempo expirado!</h3>
+                  <p className="text-sm text-gray-400">O codigo nao foi escaneado em 30 segundos. Gere um novo codigo para tentar novamente.</p>
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <button onClick={resetTransfer} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-500 text-sm">Fechar</button>
+                  <button onClick={() => { setTransferStep('amount'); setTransferExpired(false) }}
+                    className="flex-1 py-2.5 rounded-lg bg-teal text-white text-sm font-semibold">Tentar novamente</button>
+                </div>
+              </>
+            )}
+
+            {transferStep === 'confirm' && (
+              <>
+                <h3 className="font-bold text-navy text-lg mb-2">Confirmar transferencia</h3>
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center mb-3">
+                  <p className="text-sm text-navy">Transferencia de</p>
+                  <p className="text-2xl font-bold text-teal">{transferAmount} creditos</p>
+                </div>
+                <p className="text-xs text-gray-500 text-center mb-1">
+                  Confirme a transferencia com o codigo enviado para seu WhatsApp
+                </p>
+                <p className="text-xs text-navy font-semibold text-center mb-2">
+                  {userPhone ? `+${userPhone.replace(/^(\d{2})(\d{2})(\d{5})(\d{4})$/, '$1 $2 $3-$4')}` : 'telefone cadastrado'}
+                </p>
+                <p className="text-xs text-red-500 text-center font-semibold mb-2">Codigo exibido na tela no MVP (aguardando ativacao do WhatsApp)</p>
                 <input type="text" inputMode="numeric" value={transferConfirmCode}
                   onChange={e => setTransferConfirmCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 text-center text-lg tracking-widest mb-3" />
                 <div className="flex gap-2">
-                  <button onClick={() => { setShowTransfer(false); setTransferQrCode(null) }}
-                    className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-500 text-sm">Cancelar</button>
+                  <button onClick={resetTransfer} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-500 text-sm">Cancelar</button>
                   <button onClick={handleTransferConfirm} disabled={transferConfirmCode !== transferGenerated}
                     className="flex-1 py-2.5 rounded-lg bg-teal text-white text-sm font-semibold disabled:opacity-50">Confirmar</button>
                 </div>
               </>
             )}
+
           </div>
         </div>
       )}
