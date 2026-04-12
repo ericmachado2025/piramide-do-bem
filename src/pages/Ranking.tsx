@@ -155,7 +155,12 @@ export default function Ranking() {
             }
             return {
               id: s.id,
-              name: ((s.user as unknown as { name: string }) ?? { name: 'Aluno' }).name,
+              name: (() => {
+                const u = s.user as unknown
+                if (Array.isArray(u) && u.length > 0) return (u[0] as { name: string }).name
+                if (u && typeof u === 'object' && 'name' in u) return (u as { name: string }).name
+                return 'Aluno'
+              })(),
               communityIcon: community?.icon_class ? (ICON_MAP[community.icon_class] ?? '\u{1F5A4}') : '\u{1F5A4}',
               communityName: community?.name ?? 'Desconhecida',
               communityColor: community?.color_hex ?? null,
