@@ -278,14 +278,21 @@ export default function ValidarAcao() {
         .single()
 
       if (author) {
+        const newBalance = (author.available_points ?? 0) + actionPoints
         await supabase
           .from('students')
           .update({
             total_points: (author.total_points ?? 0) + actionPoints,
-            available_points: (author.available_points ?? 0) + actionPoints,
+            available_points: newBalance,
             last_action_date: new Date().toISOString(),
           })
           .eq('id', authorAction.author_id)
+        await supabase.from('credit_transactions').insert({
+          student_id: authorAction.author_id, type: 'earned', amount: actionPoints,
+          balance_after: newBalance,
+          description: `Boa acao: ${selectedAction.actionTypeName}`,
+          related_id: selectedAction.id, related_type: 'action',
+        })
       }
     }
 
@@ -299,13 +306,20 @@ export default function ValidarAcao() {
       .single()
 
     if (validator) {
+      const newValBalance = (validator.available_points ?? 0) + validatorBonus
       await supabase
         .from('students')
         .update({
           total_points: (validator.total_points ?? 0) + validatorBonus,
-          available_points: (validator.available_points ?? 0) + validatorBonus,
+          available_points: newValBalance,
         })
         .eq('id', studentId)
+      await supabase.from('credit_transactions').insert({
+        student_id: studentId, type: 'earned', amount: validatorBonus,
+        balance_after: newValBalance,
+        description: `Bonus validacao: ${selectedAction.actionTypeName}`,
+        related_id: selectedAction.id, related_type: 'validation',
+      })
     }
 
     setPendingActions((prev) => prev.filter((a) => a.id !== selectedAction.id))

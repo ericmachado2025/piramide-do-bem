@@ -228,10 +228,17 @@ export default function Home() {
                           if (!sid) continue
                           const { data: s } = await supabase.from('students').select('total_points, available_points').eq('id', sid).single()
                           if (s) {
+                            const newBalance = (s.available_points ?? 0) + 10
                             await supabase.from('students').update({
                               total_points: (s.total_points ?? 0) + 10,
-                              available_points: (s.available_points ?? 0) + 10,
+                              available_points: newBalance,
                             }).eq('id', sid)
+                            await supabase.from('credit_transactions').insert({
+                              student_id: sid, type: 'earned', amount: 10,
+                              balance_after: newBalance,
+                              description: 'Amizade aceita (+10 pts)',
+                              related_id: fr.id, related_type: 'friendship',
+                            })
                           }
                         }
                       }
