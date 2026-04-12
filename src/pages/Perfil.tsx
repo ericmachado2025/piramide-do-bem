@@ -84,6 +84,8 @@ export default function Perfil() {
   const [inviteInput, setInviteInput] = useState('')
   const [inviteBulk, setInviteBulk] = useState('')
   const [showInviteModal, setShowInviteModal] = useState(false)
+  const [inviteMode, setInviteMode] = useState<'choose' | 'email' | 'whatsapp'>('choose')
+  const [linkCopied, setLinkCopied] = useState(false)
   const [showMonitorModal, setShowMonitorModal] = useState(false)
   const [allSubjects, setAllSubjects] = useState<{ id: string; name: string }[]>([])
   const [myMonitorSubjects, setMyMonitorSubjects] = useState<string[]>([])
@@ -1045,61 +1047,134 @@ export default function Perfil() {
       )}
 
       {showInviteModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowInviteModal(false)}>
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => { setShowInviteModal(false); setInviteMode('choose') }}>
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-bold text-navy text-lg mb-1">Convidar amigos para a Piramide</h3>
-            <p className="text-xs text-gray-400 mb-4">Escolha amigos que realmente vao participar. Limite: 5 convites por dia.</p>
 
-            <div className="flex gap-2 mb-2">
-              <input type="text" placeholder="Email ou WhatsApp com DDD" value={inviteInput}
-                onChange={(e) => setInviteInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && addContact()}
-                className="flex-1 px-3 py-2.5 rounded-lg border border-gray-200 focus:border-teal focus:outline-none text-sm" autoFocus />
-              <button onClick={() => addContact()} disabled={inviteContacts.length >= 5}
-                className="px-3 py-2.5 rounded-lg bg-teal text-white text-sm font-semibold disabled:opacity-50 whitespace-nowrap">
-                Adicionar
-              </button>
-            </div>
-
-            <details className="mb-3">
-              <summary className="text-xs text-teal cursor-pointer font-semibold">Colar lista de contatos</summary>
-              <div className="mt-2">
-                <textarea placeholder="Cole emails ou telefones separados por virgula ou Enter" value={inviteBulk}
-                  onChange={(e) => setInviteBulk(e.target.value)} rows={3}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-teal focus:outline-none text-sm resize-none" />
-                <button onClick={addBulkContacts} disabled={inviteContacts.length >= 5}
-                  className="mt-1 w-full py-2 rounded-lg bg-gray-100 text-teal text-sm font-semibold hover:bg-gray-200 disabled:opacity-50">
-                  Adicionar da lista
-                </button>
-              </div>
-            </details>
-
-            {inviteContacts.length > 0 && (
-              <div className="mb-3 space-y-1.5">
-                <p className="text-xs font-semibold text-navy">{inviteContacts.length}/5 contato(s):</p>
-                {inviteContacts.map((c, i) => (
-                  <div key={i} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">{c.includes('@') ? '\u2709\uFE0F' : '\u{1F4F1}'}</span>
-                      <span className="text-sm text-navy">{c}</span>
+            {inviteMode === 'choose' && (
+              <>
+                <h3 className="font-bold text-navy text-lg mb-1">Convidar amigos para a Piramide</h3>
+                <p className="text-xs text-gray-400 mb-4">Como voce deseja convidar?</p>
+                <div className="space-y-3">
+                  <button onClick={() => setInviteMode('email')}
+                    className="w-full p-4 rounded-xl border-2 border-gray-200 hover:border-teal hover:bg-teal/5 transition-all text-left">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{'\u2709\uFE0F'}</span>
+                      <div>
+                        <p className="font-bold text-navy text-sm">Por Email</p>
+                        <p className="text-xs text-gray-400">Envie convites por email (limite: 5/dia)</p>
+                      </div>
                     </div>
-                    <button onClick={() => setInviteContacts(prev => prev.filter((_, j) => j !== i))}
-                      className="text-red text-lg leading-none font-bold hover:text-red/70">&times;</button>
-                  </div>
-                ))}
-              </div>
+                  </button>
+                  <button onClick={() => setInviteMode('whatsapp')}
+                    className="w-full p-4 rounded-xl border-2 border-gray-200 hover:border-green-500 hover:bg-green-50 transition-all text-left">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{'\u{1F4F1}'}</span>
+                      <div>
+                        <p className="font-bold text-navy text-sm">Por WhatsApp</p>
+                        <p className="text-xs text-gray-400">Copie seu link pessoal e envie para quantos quiser!</p>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+                <button onClick={() => { setShowInviteModal(false); setInviteMode('choose') }}
+                  className="w-full mt-3 py-2 text-gray-400 text-sm">Cancelar</button>
+              </>
             )}
 
-            {inviteMsg && <p className={`text-sm mb-2 ${inviteMsg.includes('sucesso') || inviteMsg.includes('adicionado') ? 'text-green-600' : 'text-red'}`}>{inviteMsg}</p>}
+            {inviteMode === 'whatsapp' && (
+              <>
+                <h3 className="font-bold text-navy text-lg mb-1">Convide pelo WhatsApp</h3>
+                <p className="text-xs text-gray-400 mb-4">Copie seu link pessoal e envie para seus amigos. Quem se cadastrar por esse link gera pontos para voce!</p>
 
-            <div className="flex gap-2">
-              <button onClick={() => { setShowInviteModal(false); setInviteContacts([]); setInviteMsg('') }}
-                className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-500 text-sm font-semibold">Cancelar</button>
-              <button onClick={handleInvite} disabled={inviteSending || inviteContacts.length === 0}
-                className="flex-1 py-2.5 rounded-lg bg-teal text-white text-sm font-semibold disabled:opacity-50">
-                {inviteSending ? 'Enviando...' : `Enviar ${inviteContacts.length} convite(s)`}
-              </button>
-            </div>
+                <div className="bg-gray-50 rounded-xl p-4 mb-3">
+                  <p className="text-xs text-gray-500 mb-2">Seu link de convite:</p>
+                  <div className="bg-white rounded-lg p-3 border border-gray-200 text-sm text-navy break-all font-mono">
+                    {`${window.location.origin}/?ref=${referralCode}`}
+                  </div>
+                </div>
+
+                <button onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/?ref=${referralCode}`)
+                  setLinkCopied(true)
+                  setTimeout(() => setLinkCopied(false), 3000)
+                }}
+                  className="w-full py-3 rounded-xl bg-green-500 text-white font-bold text-sm mb-2">
+                  {linkCopied ? '\u2705 Link copiado!' : '\u{1F4CB} Copiar link'}
+                </button>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-3">
+                  <p className="text-xs text-blue-700"><strong>Dica:</strong> Abra o WhatsApp, cole o link e envie para seus amigos. Nao ha limite de convites por link!</p>
+                </div>
+
+                <p className="text-[10px] text-gray-400 text-center mb-2">Codigo: {referralCode}</p>
+
+                <div className="flex gap-2">
+                  <button onClick={() => setInviteMode('choose')}
+                    className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-500 text-sm font-semibold">Voltar</button>
+                  <button onClick={() => { setShowInviteModal(false); setInviteMode('choose') }}
+                    className="flex-1 py-2.5 rounded-lg bg-teal text-white text-sm font-semibold">Fechar</button>
+                </div>
+              </>
+            )}
+
+            {inviteMode === 'email' && (
+              <>
+                <h3 className="font-bold text-navy text-lg mb-1">Convidar por Email</h3>
+                <p className="text-xs text-gray-400 mb-4">Escolha amigos que realmente vao participar. Limite: 5 convites por dia.</p>
+
+                <div className="flex gap-2 mb-2">
+                  <input type="email" placeholder="Informe o email a ser convidado" value={inviteInput}
+                    onChange={(e) => setInviteInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && addContact()}
+                    className="flex-1 px-3 py-2.5 rounded-lg border border-gray-200 focus:border-teal focus:outline-none text-sm" autoFocus />
+                  <button onClick={() => addContact()} disabled={inviteContacts.length >= 5}
+                    className="px-3 py-2.5 rounded-lg bg-teal text-white text-sm font-semibold disabled:opacity-50 whitespace-nowrap">
+                    Adicionar
+                  </button>
+                </div>
+
+                <details className="mb-3">
+                  <summary className="text-xs text-teal cursor-pointer font-semibold">Colar lista de emails</summary>
+                  <div className="mt-2">
+                    <textarea placeholder="Cole emails separados por virgula ou Enter" value={inviteBulk}
+                      onChange={(e) => setInviteBulk(e.target.value)} rows={3}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-teal focus:outline-none text-sm resize-none" />
+                    <button onClick={addBulkContacts} disabled={inviteContacts.length >= 5}
+                      className="mt-1 w-full py-2 rounded-lg bg-gray-100 text-teal text-sm font-semibold hover:bg-gray-200 disabled:opacity-50">
+                      Adicionar da lista
+                    </button>
+                  </div>
+                </details>
+
+                {inviteContacts.length > 0 && (
+                  <div className="mb-3 space-y-1.5">
+                    <p className="text-xs font-semibold text-navy">{inviteContacts.length}/5 email(s):</p>
+                    {inviteContacts.map((c, i) => (
+                      <div key={i} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm">{'\u2709\uFE0F'}</span>
+                          <span className="text-sm text-navy">{c}</span>
+                        </div>
+                        <button onClick={() => setInviteContacts(prev => prev.filter((_, j) => j !== i))}
+                          className="text-red text-lg leading-none font-bold hover:text-red/70">&times;</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {inviteMsg && <p className={`text-sm mb-2 ${inviteMsg.includes('sucesso') || inviteMsg.includes('adicionado') ? 'text-green-600' : 'text-red'}`}>{inviteMsg}</p>}
+
+                <div className="flex gap-2">
+                  <button onClick={() => setInviteMode('choose')}
+                    className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-500 text-sm font-semibold">Voltar</button>
+                  <button onClick={handleInvite} disabled={inviteSending || inviteContacts.length === 0}
+                    className="flex-1 py-2.5 rounded-lg bg-teal text-white text-sm font-semibold disabled:opacity-50">
+                    {inviteSending ? 'Enviando...' : `Enviar ${inviteContacts.length} convite(s)`}
+                  </button>
+                </div>
+              </>
+            )}
+
           </div>
         </div>
       )}
