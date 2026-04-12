@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Send, QrCode } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { supabase } from '../lib/supabase'
@@ -20,6 +20,7 @@ type FilterPeriod = '15d' | '30d' | 'month' | 'custom'
 
 export default function Creditos() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { user } = useAuth()
   const [studentId, setStudentId] = useState<string | null>(null)
   const [credits, setCredits] = useState(0)
@@ -43,6 +44,33 @@ export default function Creditos() {
   const [transferExpired, setTransferExpired] = useState(false)
   const [userPhone, setUserPhone] = useState('')
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Auto-process transfer code from URL (when friend scans QR with native camera)
+  useEffect(() => {
+    const transferCode = searchParams.get('transfer')
+    if (!transferCode || !studentId) return
+
+    async function processIncomingTransfer(code: string) {
+      // Mark as scanned in pending_transfers
+      const { data: pt, error } = await supabase
+        .from('pending_transfers')
+        .select('id, sender_id, amount, status')
+        .eq('code', code)
+        .eq('status', 'waiting')
+        .single()
+
+      if (error || !pt) {
+        alert('Código de transferência inválido ou expirado.')
+        return
+      }
+
+      // Update status to scanned + set receiver
+      await supabase.from('pending_transfers')
+        .update({ status: 'scanned', receiver_id: studentId })
+        .eq('id', pt.id)
+    }
+    processIncomingTransfer(transferCode)
+  }, [searchParams, studentId])
 
   // Scan states
   const [showScan, setShowScan] = useState(false)
