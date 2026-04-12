@@ -115,7 +115,7 @@ export default function PatrocinadorDashboard() {
           id,
           created_at,
           status,
-          students ( name ),
+          student:students ( user:users!students_users_id_fkey(name) ),
           rewards!inner ( name, sponsor_id )
         `)
         .eq('rewards.sponsor_id', sponsorData.id)
@@ -125,11 +125,13 @@ export default function PatrocinadorDashboard() {
 
       setRedemptions(
         (redemptionData || []).map((r: Record<string, unknown>) => {
-          const student = r.students as Record<string, unknown> | null
+          const studentObj = r.student as Record<string, unknown> | null
+          const userObj = studentObj?.user as Record<string, unknown> | Record<string, unknown>[] | null
+          const userName = Array.isArray(userObj) ? (userObj[0]?.name as string) : (userObj?.name as string)
           const reward = r.rewards as Record<string, unknown> | null
           return {
             id: r.id as string,
-            student_name: (student?.name as string) || 'Aluno',
+            student_name: userName || 'Aluno',
             reward_name: (reward?.name as string) || 'Recompensa',
             created_at: r.created_at as string,
             status: (r.status as string) || 'pending',

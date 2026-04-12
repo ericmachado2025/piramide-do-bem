@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ChevronRight, Clock, CheckCircle2, Sparkles } from 'lucide-react'
+import { ChevronRight, Clock, CheckCircle2, Sparkles, ScanLine } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { getCharacterDisplayName, getTierLabel } from '../lib/database'
 import { generateCharacterAvatar } from '../lib/avatarGenerator'
 import { useAuth } from '../contexts/AuthContext'
 import BottomNav from '../components/BottomNav'
+import QrScanner from '../components/QrScanner'
 import FloatingFriendButton from '../components/FloatingFriendButton'
 import RecommendSponsorButton from '../components/RecommendSponsorButton'
 import InstallButton from '../components/InstallButton'
@@ -55,6 +56,48 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [showHelpModal, setShowHelpModal] = useState(false)
   const [friendRequests, setFriendRequests] = useState<{ id: string; name: string; created_at: string }[]>([])
+  const [showSmartScanner, setShowSmartScanner] = useState(false)
+
+  const handleSmartScan = useCallback((data: string) => {
+    setShowSmartScanner(false)
+    try {
+      const url = new URL(data)
+      const path = url.pathname
+      const params = url.searchParams
+
+      // Validar ação de colega
+      if (params.get('token') || path.includes('/validar')) {
+        const token = params.get('token')
+        navigate(token ? `/validar?token=${token}` : '/validar')
+        return
+      }
+      // Receber transferência de créditos
+      if (params.get('transfer') || path.includes('/creditos')) {
+        const code = params.get('transfer')
+        navigate(code ? `/creditos?transfer=${code}` : '/creditos')
+        return
+      }
+      // Perfil de aluno
+      if (path.includes('/aluno/')) {
+        navigate(path)
+        return
+      }
+      // Benefício de patrocinador
+      if (params.get('code') || path.includes('/beneficio')) {
+        const code = params.get('code')
+        navigate(code ? `/recompensas?code=${code}` : '/recompensas')
+        return
+      }
+    } catch {
+      // Não é URL — pode ser UUID puro (QR antigo de ação)
+      if (/^[0-9a-f-]{36}$/i.test(data)) {
+        navigate(`/validar?token=${data}`)
+        return
+      }
+    }
+    // Fallback — não reconhecido
+    alert('QR Code não reconhecido')
+  }, [navigate])
 
   useEffect(() => {
     if (authLoading) return
@@ -145,6 +188,9 @@ export default function Home() {
               <p className="text-white/70 text-sm mt-1">O que você vai aprontar hoje?</p>
             </div>
             <div className="flex items-center gap-1">
+              <button onClick={() => setShowSmartScanner(true)} className="p-2 text-white/60 hover:text-white" title="Escanear QR Code">
+                <ScanLine className="w-5 h-5" />
+              </button>
               <Link to="/como-funciona" className="p-2 text-white/60 hover:text-white text-lg font-bold">?</Link>
               {(() => {
                 const totalNotifs = pendingCount + friendRequests.length
@@ -431,6 +477,10 @@ export default function Home() {
       )}
       <FloatingFriendButton />
       <RecommendSponsorButton />
+      {showSmartScanner && (
+        <QrScanner onScan={handleSmartScan} onClose={() => setShowSmartScanner(false)} />
+      )}
+
       <BottomNav />
     </div>
   )
