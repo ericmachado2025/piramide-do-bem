@@ -106,7 +106,7 @@ export default function Ranking() {
           .from('students')
           .select('id, total_points, school_id, user:users!students_users_id_fkey(name), community:communities!left(name, icon_class, color_hex), school:schools!left(city, state)')
           .order('total_points', { ascending: false })
-          .limit(200)
+          .limit(1500)
 
         if (activeTab === 'escola' && mySchoolId) {
           q = q.eq('school_id', mySchoolId)
