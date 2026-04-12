@@ -14,13 +14,26 @@ export default function AuthCallback() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  const [recoveryDetected, setRecoveryDetected] = useState(false)
+
+  // Listen for PASSWORD_RECOVERY event from Supabase
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setRecoveryDetected(true)
+      }
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
   useEffect(() => {
     if (loading) return
 
-    // Check if this is a password recovery flow
+    // Check if this is a password recovery flow (hash, query params, or event)
     const hash = window.location.hash
-    const isRecovery = hash.includes('type=recovery')
-    const isMagicLink = hash.includes('type=magiclink')
+    const search = window.location.search
+    const isRecovery = hash.includes('type=recovery') || search.includes('type=recovery') || recoveryDetected
+    const isMagicLink = hash.includes('type=magiclink') || search.includes('type=magiclink')
 
     if (isRecovery && user) {
       setMode('new_password')
@@ -88,7 +101,7 @@ export default function AuthCallback() {
     }
 
     checkProfile()
-  }, [user, loading, navigate])
+  }, [user, loading, navigate, recoveryDetected])
 
   const handleSavePassword = async () => {
     if (!validatePassword(newPassword).valid) {

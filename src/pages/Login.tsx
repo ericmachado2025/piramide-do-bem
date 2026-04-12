@@ -278,7 +278,7 @@ export default function Login() {
             <div className="text-center mb-2"><h2 className="text-xl font-extrabold text-navy">Recuperar senha</h2><p className="text-gray-400 text-sm mt-1">Enviaremos um link para {email}</p></div>
             {!forgotSent ? (
               <button onClick={handleForgotPassword} disabled={forgotLoading} className="w-full py-3.5 rounded-xl bg-teal text-white font-bold text-lg disabled:opacity-50">
-                {forgotLoading ? 'Enviando...' : 'Enviar link de acesso'}
+                {forgotLoading ? 'Enviando...' : 'Enviar link de troca de senha'}
               </button>
             ) : <p className="text-sm text-green font-medium text-center">Link enviado! Verifique sua caixa de entrada.</p>}
             <div className="text-center"><button onClick={() => { setForgotMode(false); setForgotSent(false) }} className="text-gray-400 text-sm hover:text-teal">Voltar ao login</button></div>
