@@ -74,20 +74,27 @@ export default function Login() {
     setLoading(true)
     setError('')
 
-    // Enviar OTP de 6 dígitos para o email
-    // shouldCreateUser: true → funciona para emails novos e existentes
+    // Check if user exists
+    const { data: userRec } = await supabase.from('users').select('name').eq('email', email).maybeSingle()
+    
+    if (userRec) {
+      // Existing user — go directly to password step
+      setUserName(userRec.name || '')
+      setStep('senha')
+      setLoading(false)
+      return
+    }
+
+    // New user — send OTP for registration
     const { error: otpErr } = await supabase.auth.signInWithOtp({
       email,
       options: { shouldCreateUser: true },
     })
     if (otpErr) {
-      setError('Erro ao enviar código. Tente novamente.')
+      setError('Erro ao enviar codigo. Tente novamente.')
       setLoading(false)
       return
     }
-    // Verificar se é usuário existente para personalizar comportamento após verificação
-    const { data: userRec } = await supabase.from('users').select('name').eq('email', email).maybeSingle()
-    if (userRec) setUserName(userRec.name || '')
     setOtpEmail(email)
     setStep('confirmar-email')
     setLoading(false)
