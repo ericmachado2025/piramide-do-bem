@@ -80,6 +80,7 @@ export default function Perfil() {
   const [refTab, setRefTab] = useState<'confirmed' | 'pending'>('confirmed')
   const [confirmedRefs, setConfirmedRefs] = useState<{ id: string; referred_email: string; points_awarded: number; referral_position: number; confirmed_at: string }[]>([])
   const [pendingRefs, setPendingRefs] = useState<{ id: string; referred_email: string; referral_code: string; created_at: string }[]>([])
+  const [friends, setFriends] = useState<{ id: string; name: string; accepted_at: string }[]>([])
   const [inviteContacts, setInviteContacts] = useState<string[]>([])
   const [inviteInput, setInviteInput] = useState('')
   const [inviteBulk, setInviteBulk] = useState('')
@@ -194,6 +195,28 @@ export default function Perfil() {
         if (cRefs) setConfirmedRefs(cRefs)
         const { data: pRefs } = await supabase.from('referrals').select('id, referred_email, referral_code, created_at').eq('referrer_id', studentData.id).eq('status', 'pending').order('created_at', { ascending: false })
         if (pRefs) setPendingRefs(pRefs)
+
+        // Load friends (accepted friendships)
+        const { data: fReq } = await supabase.from('friendships')
+          .select('id, addressee_id, accepted_at').eq('requester_id', studentData.id).eq('status', 'accepted')
+        const { data: fAddr } = await supabase.from('friendships')
+          .select('id, requester_id, accepted_at').eq('addressee_id', studentData.id).eq('status', 'accepted')
+        const friendIds = [...(fReq || []).map(f => f.addressee_id), ...(fAddr || []).map(f => f.requester_id)]
+        if (friendIds.length > 0) {
+          const { data: friendStudents } = await supabase.from('students')
+            .select('id, user:users!students_users_id_fkey(name)').in('id', friendIds)
+          if (friendStudents) {
+            const allDates = [...(fReq || []), ...(fAddr || [])].reduce((m, f) => {
+              m[(f as Record<string,unknown>).addressee_id as string || (f as Record<string,unknown>).requester_id as string] = f.accepted_at
+              return m
+            }, {} as Record<string, string>)
+            setFriends(friendStudents.map(s => ({
+              id: s.id,
+              name: (Array.isArray(s.user) ? s.user[0]?.name : (s.user as {name:string}|null)?.name) || 'Amigo',
+              accepted_at: allDates[s.id] || '',
+            })))
+          }
+        }
       }
 
       // Load subjects (dedup by normalized name) and monitor status
@@ -376,19 +399,38 @@ export default function Perfil() {
   }
 
   const handleInvite = async () => {
+    // Auto-add input content if list is empty
+    if (inviteContacts.length === 0 && inviteInput.trim()) {
+      const v = inviteInput.trim()
+      if (isEmail(v) || isPhone(v)) {
+        setInviteContacts([v])
+        setInviteInput('')
+        // Need to wait for state to settle — use local var
+        await doInvite([v])
+        return
+      } else {
+        setInviteMsg('Informe um email ou WhatsApp valido.')
+        return
+      }
+    }
     if (inviteContacts.length === 0 || !student) return
+    await doInvite(inviteContacts)
+  }
+
+  const doInvite = async (contacts: string[]) => {
+    if (!student) return
     // Check daily limit
     const today = new Date().toISOString().slice(0, 10)
     const { count: todayCount } = await supabase.from('referrals').select('id', { count: 'exact', head: true })
       .eq('referrer_id', student.id).gte('created_at', `${today}T00:00:00`)
-    if ((todayCount || 0) + inviteContacts.length > 5) {
+    if ((todayCount || 0) + contacts.length > 5) {
       setInviteMsg(`Voce ja enviou ${todayCount} convite(s) hoje. Limite diario: 5.`)
       return
     }
     setInviteSending(true)
     setInviteMsg('')
     let sent = 0
-    for (const contact of inviteContacts) {
+    for (const contact of contacts) {
       await supabase.from('referrals').insert({
         referrer_id: student.id,
         referred_email: contact,
@@ -553,6 +595,36 @@ export default function Perfil() {
                   className="flex-1 py-2.5 rounded-lg bg-teal text-white text-sm font-semibold flex items-center justify-center gap-1 disabled:opacity-50">
                   <Save className="w-4 h-4" /> {saving ? 'Salvando...' : 'Salvar'}
                 </button>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* ===== MEUS AMIGOS ===== */}
+        <section className="mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-bold text-navy">{'\u{1F465}'} Meus Amigos ({friends.length})</h2>
+            <button onClick={() => navigate('/home')} className="text-sm font-semibold text-teal">+ Adicionar</button>
+          </div>
+          {friends.length === 0 ? (
+            <div className="bg-white rounded-2xl shadow-sm p-4 text-center">
+              <p className="text-gray-400 text-sm">Voce ainda nao tem amigos adicionados.</p>
+              <button onClick={() => navigate('/home')} className="mt-2 text-sm text-teal font-semibold">Adicionar meu primeiro amigo</button>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl shadow-sm p-4">
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {friends.map(f => (
+                  <div key={f.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-gray-50">
+                    <div className="w-8 h-8 rounded-full bg-teal/10 flex items-center justify-center text-sm font-bold text-teal">
+                      {f.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-navy truncate">{f.name}</p>
+                      {f.accepted_at && <p className="text-[10px] text-gray-400">Amigos desde {new Date(f.accepted_at).toLocaleDateString('pt-BR')}</p>}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
