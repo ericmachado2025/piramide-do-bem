@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ChevronRight, Clock, CheckCircle2, Sparkles, ScanLine } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { getCharacterDisplayName, getTierLabel } from '../lib/database'
@@ -57,8 +57,25 @@ export default function Home() {
   const [showHelpModal, setShowHelpModal] = useState(false)
   const [friendRequests, setFriendRequests] = useState<{ id: string; name: string; created_at: string }[]>([])
   const [showSmartScanner, setShowSmartScanner] = useState(false)
+  const [searchParams] = useSearchParams()
 
-  const handleSmartScan = useCallback((data: string) => {
+  // Auto-process transfer from URL (camera nativa escaneia QR → abre /home?transfer=CODE)
+  useEffect(() => {
+    const transferCode = searchParams.get('transfer')
+    if (!transferCode || !student) return
+    async function processTransfer(code: string) {
+      const { data: pt, error } = await supabase.from('pending_transfers')
+        .select('id, sender_id, amount, status').eq('code', code).eq('status', 'waiting').single()
+      if (error || !pt) { alert('Codigo de transferencia invalido ou expirado.'); return }
+      await supabase.from('pending_transfers')
+        .update({ status: 'scanned', receiver_id: (student as any).id, scanned_at: new Date().toISOString() })
+        .eq('id', pt.id)
+      alert(`Transferencia de ${pt.amount} creditos registrada! Aguarde a confirmacao do remetente.`)
+    }
+    processTransfer(transferCode)
+  }, [searchParams, student])
+
+  const handleSmartScan = useCallback(async (data: string) => {
     setShowSmartScanner(false)
     try {
       const url = new URL(data)
@@ -71,10 +88,23 @@ export default function Home() {
         navigate(token ? `/validar?token=${token}` : '/validar')
         return
       }
-      // Receber transferência de créditos
+      // Receber transferência de créditos — processar direto
       if (params.get('transfer') || path.includes('/creditos')) {
         const code = params.get('transfer')
-        navigate(code ? `/creditos?transfer=${code}` : '/creditos')
+        if (code && student) {
+          const { data: pt, error } = await supabase.from('pending_transfers')
+            .select('id, sender_id, amount, status').eq('code', code).eq('status', 'waiting').single()
+          if (error || !pt) {
+            alert('Codigo de transferencia invalido ou expirado.')
+            return
+          }
+          await supabase.from('pending_transfers')
+            .update({ status: 'scanned', receiver_id: (student as any).id, scanned_at: new Date().toISOString() })
+            .eq('id', pt.id)
+          alert(`Transferencia de ${pt.amount} creditos recebida! Aguarde a confirmacao do remetente.`)
+        } else {
+          navigate('/creditos')
+        }
         return
       }
       // Perfil de aluno
@@ -83,7 +113,7 @@ export default function Home() {
         return
       }
       // Benefício de patrocinador
-      if (params.get('code') || path.includes('/beneficio')) {
+      if (params.get('code') || path.includes('/beneficio') || path.includes('/recompensas')) {
         const code = params.get('code')
         navigate(code ? `/recompensas?code=${code}` : '/recompensas')
         return
@@ -95,9 +125,8 @@ export default function Home() {
         return
       }
     }
-    // Fallback — não reconhecido
-    alert('QR Code não reconhecido')
-  }, [navigate])
+    alert('QR Code nao reconhecido')
+  }, [navigate, student])
 
   useEffect(() => {
     if (authLoading) return
