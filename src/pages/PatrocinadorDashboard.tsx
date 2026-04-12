@@ -51,7 +51,10 @@ export default function PatrocinadorDashboard() {
   const [redemptions, setRedemptions] = useState<Redemption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [activeTab, setActiveTab] = useState<'rewards' | 'promotions'>('rewards')
+  const [activeTab, setActiveTab] = useState<'rewards' | 'promotions' | 'scanner'>('rewards')
+  const [scanResult, setScanResult] = useState<string | null>(null)
+  const [scanStudent, setScanStudent] = useState<{ name: string; tier: number; points: number } | null>(null)
+  const [scanningActive, setScanningActive] = useState(false)
 
   // Promotions
   const [promotions, setPromotions] = useState<{ id: string; title: string; description: string | null; discount_percent: number | null; active: boolean }[]>([])
@@ -310,6 +313,10 @@ export default function PatrocinadorDashboard() {
             className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors ${activeTab === 'promotions' ? 'bg-teal text-white' : 'bg-gray-100 text-gray-500'}`}>
             Promocoes
           </button>
+          <button onClick={() => setActiveTab('scanner')}
+            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors ${activeTab === 'scanner' ? 'bg-teal text-white' : 'bg-gray-100 text-gray-500'}`}>
+            Escanear
+          </button>
         </div>
 
         {activeTab === 'promotions' ? (
@@ -374,6 +381,76 @@ export default function PatrocinadorDashboard() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        ) : activeTab === 'scanner' ? (
+          <div className="bg-white rounded-2xl shadow-lg p-6 space-y-4">
+            <h3 className="font-bold text-lg" style={{ color: '#1F4E79' }}>Validar uso de beneficio</h3>
+            <p className="text-sm text-gray-500">Escaneie o QR Code do aluno para registrar que ele utilizou um beneficio seu.</p>
+
+            {!scanStudent ? (
+              <>
+                <div className="bg-gray-50 rounded-xl p-4 text-center">
+                  <p className="text-sm text-gray-600 mb-3">Digite o codigo do aluno ou escaneie o QR Code:</p>
+                  <input type="text" placeholder="Codigo ou ID do aluno" value={scanResult || ''}
+                    onChange={e => setScanResult(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-teal focus:outline-none text-center text-sm mb-3" />
+                  <button onClick={async () => {
+                    if (!scanResult) return
+                    setScanningActive(true)
+                    const { data: student } = await supabase.from('students')
+                      .select('id, total_points, user:users!students_users_id_fkey(name), community:communities(name)')
+                      .or(`id.eq.${scanResult},referral_code.eq.${scanResult}`)
+                      .maybeSingle()
+                    if (student) {
+                      setScanStudent({
+                        name: ((student.user as unknown as { name: string }) ?? { name: 'Aluno' }).name,
+                        tier: Math.min(5, Math.floor(student.total_points / 100) + 1),
+                        points: student.total_points,
+                      })
+                    }
+                    setScanningActive(false)
+                  }} disabled={scanningActive || !scanResult}
+                    className="w-full py-3 rounded-xl bg-teal text-white font-bold text-sm disabled:opacity-50">
+                    {scanningActive ? 'Buscando...' : 'Buscar aluno'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="space-y-3">
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+                  <span className="text-3xl block mb-2">{'\u2705'}</span>
+                  <p className="text-lg font-bold text-navy">{scanStudent.name}</p>
+                  <p className="text-sm text-gray-500">Tier {scanStudent.tier} · {scanStudent.points} pts</p>
+                </div>
+
+                {promotions.filter(p => p.active).length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-navy">Selecione o beneficio utilizado:</p>
+                    {promotions.filter(p => p.active).map(p => (
+                      <button key={p.id} onClick={async () => {
+                        await supabase.from('promotion_redemptions').insert({
+                          promotion_id: p.id,
+                          student_id: scanResult,
+                          scanned_by: sponsorId,
+                        })
+                        setScanStudent(null)
+                        setScanResult(null)
+                        alert(`Uso de "${p.title}" registrado com sucesso!`)
+                      }}
+                        className="w-full text-left p-3 rounded-xl border border-gray-200 hover:border-teal hover:bg-teal/5 transition-all">
+                        <p className="text-sm font-semibold text-navy">{p.title}</p>
+                        {p.discount_percent && <span className="text-xs text-teal font-bold">{p.discount_percent}% OFF</span>}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400 text-center">Nenhuma promocao ativa. Crie uma na aba Promocoes.</p>
+                )}
+
+                <button onClick={() => { setScanStudent(null); setScanResult(null) }}
+                  className="w-full py-2 rounded-lg border border-gray-200 text-gray-500 text-sm">Cancelar</button>
               </div>
             )}
           </div>
