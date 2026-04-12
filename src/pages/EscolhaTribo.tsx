@@ -96,8 +96,12 @@ export default function EscolhaTribo() {
     }
     loadCategories()
     if (authUser) {
-      supabase.from('students').select('birth_date').eq('user_id', authUser.id).single()
-        .then(({ data }) => { if (data?.birth_date) setStudentAge(calcAge(data.birth_date)) })
+      supabase.from('students').select('birth_date, community_id').eq('user_id', authUser.id).single()
+        .then(({ data }) => {
+          if (data?.birth_date) setStudentAge(calcAge(data.birth_date))
+          // Se já tem comunidade, não precisa escolher — ir para home
+          if (data?.community_id) navigate('/home', { replace: true })
+        })
     }
   }, [authUser])
 
