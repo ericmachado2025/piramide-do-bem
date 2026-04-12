@@ -19,9 +19,15 @@ export default function AuthCallback() {
 
     // Check if this is a password recovery flow
     const hash = window.location.hash
-    const isRecovery = hash.includes('type=recovery') || hash.includes('type=magiclink')
+    const isRecovery = hash.includes('type=recovery')
+    const isMagicLink = hash.includes('type=magiclink')
 
     if (isRecovery && user) {
+      setMode('new_password')
+      return
+    }
+
+    if (isMagicLink && user) {
       setMode('choose')
       return
     }
