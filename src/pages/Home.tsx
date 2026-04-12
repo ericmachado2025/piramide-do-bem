@@ -362,6 +362,21 @@ export default function Home() {
           </div>
         </button>
 
+        {/* See help requests from others */}
+        <Link to="/monitoria"
+          className="w-full block bg-white border-2 border-purple-300 rounded-2xl shadow-md p-5 group hover:shadow-lg transition-all duration-200 active:scale-[0.98]">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">{'\u{1F4D6}'}</span>
+              <div>
+                <h3 className="font-bold text-lg text-navy">Pedidos de ajuda</h3>
+                <p className="text-gray-500 text-sm">Veja quem precisa de ajuda e ofereca a sua</p>
+              </div>
+            </div>
+            <ChevronRight className="text-purple-400 group-hover:translate-x-1 transition-transform" />
+          </div>
+        </Link>
+
         <Link
           to="/validar"
           className="block bg-white border-2 border-teal rounded-2xl shadow-md p-5 group hover:shadow-lg transition-all duration-200 active:scale-[0.98] relative"
