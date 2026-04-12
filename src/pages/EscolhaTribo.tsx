@@ -146,7 +146,7 @@ export default function EscolhaTribo() {
         .eq('status', 'ACTIVE')
         .order('display_order')
 
-      // Fallback: if no results with this gender, try without gender filter
+      // Fallback 1: if no results with this gender, try without gender filter
       if (!data || data.length === 0) {
         console.log('[EscolhaTribo] No characters with gender filter, retrying without...')
         const fallback = await supabase.from('characters').select('*, level:community_levels(*)')
@@ -155,6 +155,16 @@ export default function EscolhaTribo() {
           .eq('status', 'ACTIVE')
           .order('display_order')
         data = fallback.data
+      }
+
+      // Fallback 2: if still no results, try without archetype filter (community may use different archetypes)
+      if (!data || data.length === 0) {
+        console.log('[EscolhaTribo] No characters with archetype filter, loading all from community...')
+        const fallback2 = await supabase.from('characters').select('*, level:community_levels(*)')
+          .eq('community_id', selectedCommunity!.id)
+          .eq('status', 'ACTIVE')
+          .order('display_order')
+        data = fallback2.data
       }
 
       console.log('[EscolhaTribo] Characters loaded:', data?.length)
@@ -491,7 +501,23 @@ export default function EscolhaTribo() {
                   ))}
                 </div>
 
-                {/* Evolution preview */}
+                {confirmError && <p className="text-sm text-red text-center mb-2">{confirmError}</p>}
+                {/* Confirm button — right after character selection */}
+                <button
+                  onClick={handleConfirm}
+                  disabled={!selectedCharacter || saving}
+                  className={`w-full py-3.5 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2 mb-6 ${
+                    selectedCharacter && !saving
+                      ? 'bg-teal text-white hover:bg-teal/90 active:scale-[0.98]'
+                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  {saving ? 'Salvando...' : `Comecar minha jornada como ${selectedCharacter?.name || 'Heroi'}!`}
+                  {!saving && <ChevronRight className="w-5 h-5" />}
+                </button>
+
+                {/* Evolution preview — below the confirm button */}
+                <p className="text-xs text-gray-400 text-center mb-3">Confira abaixo as possibilidades de evolucao do seu personagem:</p>
                 <div className="bg-gray-50 rounded-2xl p-4 mb-6">
                   <h4 className="text-xs font-bold text-gray-500 uppercase mb-3">Progressao na comunidade:</h4>
                   <div className="flex gap-2 overflow-x-auto pb-1">
@@ -522,21 +548,6 @@ export default function EscolhaTribo() {
                     })}
                   </div>
                 </div>
-
-                {confirmError && <p className="text-sm text-red text-center mb-2">{confirmError}</p>}
-                {/* Confirm button */}
-                <button
-                  onClick={handleConfirm}
-                  disabled={!selectedCharacter || saving}
-                  className={`w-full py-3.5 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2 ${
-                    selectedCharacter && !saving
-                      ? 'bg-teal text-white hover:bg-teal/90 active:scale-[0.98]'
-                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  {saving ? 'Salvando...' : 'Esse sou eu! Bora começar! 🎮'}
-                  {!saving && <ChevronRight className="w-5 h-5" />}
-                </button>
               </>
             )}
           </div>

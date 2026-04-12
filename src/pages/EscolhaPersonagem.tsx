@@ -72,13 +72,22 @@ export default function EscolhaPersonagem() {
       const archetype = currentChar?.archetype || 'HERO'
       const gender = currentChar?.gender || 'NEUTRAL'
 
-      const { data: chars } = await supabase
+      let { data: chars } = await supabase
         .from('characters')
         .select('*, level:community_levels(*)')
         .eq('community_id', studentData.community_id)
         .eq('archetype', archetype)
         .eq('status', 'ACTIVE')
         .order('display_order')
+
+      // Fallback: if no characters with this archetype, load all from community
+      if (!chars || chars.length === 0) {
+        const fallback = await supabase.from('characters').select('*, level:community_levels(*)')
+          .eq('community_id', studentData.community_id)
+          .eq('status', 'ACTIVE')
+          .order('display_order')
+        chars = fallback.data
+      }
 
       // Filter by gender: show matching gender or OTHER (neutral)
       const filtered = (chars || []).filter(
