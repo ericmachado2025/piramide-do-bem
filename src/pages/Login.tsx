@@ -74,18 +74,8 @@ export default function Login() {
     setLoading(true)
     setError('')
 
-    // Detectar se email existe via tentativa de login com senha invalida
-    // "Invalid login credentials" = email existe → pedir senha
-    // Qualquer outro erro = email não existe → cadastro
-    const { error: probeError } = await supabase.auth.signInWithPassword({
-      email,
-      password: '___probe___',
-    })
-    const msg = (probeError?.message || '').toLowerCase()
-    const emailExists = msg.includes('invalid login credentials') ||
-      msg.includes('invalid credentials') ||
-      msg.includes('email not confirmed') ||
-      msg.includes('not confirmed')
+    // Verificar se email existe via RPC segura (consulta auth.users)
+    const { data: emailExists } = await supabase.rpc('check_email_exists', { p_email: email })
 
     if (emailExists) {
       // Buscar nome para exibir (pode falhar se users não acessível, ok)
