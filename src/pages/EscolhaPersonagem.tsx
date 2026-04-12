@@ -158,74 +158,37 @@ export default function EscolhaPersonagem() {
           </div>
         ) : (
           <div className="space-y-3">
-            {tribeCharacters.map((char, index) => {
-              const isActive = index === 0
-
-              return (
-                <div
-                  key={char.id}
-                  className={`relative rounded-2xl border-2 p-4 transition-all duration-300 ${
-                    isActive
-                      ? `${tierBgColors[index]} shadow-lg`
-                      : 'bg-white/60 border-gray-200 opacity-70'
-                  }`}
-                >
-                  {isActive && (
-                    <div className="absolute -top-3 left-4 bg-green text-white text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-md">
-                      <Zap className="w-3 h-3" />
-                      VOCE ESTA AQUI
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-4">
-                    <div
-                      className={`w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0 ${
-                        isActive
-                          ? `bg-gradient-to-br ${tierColors[index]} shadow-md`
-                          : 'bg-gray-200'
-                      }`}
-                    >
-                      {isActive ? (
-                        <span className="text-3xl">{tribeEmoji}</span>
-                      ) : (
-                        <Lock className="w-6 h-6 text-gray-400" />
-                      )}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                          isActive ? `bg-gradient-to-r ${tierColors[index]} text-white` : 'bg-gray-200 text-gray-400'
-                        }`}
-                          style={char.level?.color_hex ? { backgroundColor: isActive ? char.level.color_hex : undefined } : undefined}
-                        >
-                          {char.level?.name || `Nivel ${char.level?.tier ?? 0}`} ({getTierLabel(char.level?.tier ?? 1)})
-                        </span>
-                        {[...Array((char.level?.tier ?? 0))].map((_, i) => (
-                          <Star key={i} className={`w-3.5 h-3.5 ${isActive ? 'text-yellow fill-yellow' : 'text-gray-300'}`} />
-                        ))}
-                      </div>
-                      <h3 className={`font-bold text-lg mt-1 ${isActive ? 'text-navy' : 'text-gray-400'}`}>
-                        {getCharacterDisplayName(char, char.level)}
-                      </h3>
-                      <p className={`text-xs mt-0.5 ${isActive ? 'text-gray-500' : 'text-gray-300'}`}>
-                        {char.description}
-                      </p>
-                      <p className={`text-xs mt-1 font-semibold ${isActive ? 'text-teal' : 'text-gray-300'}`}>
-                        {(char.level?.min_points ?? 0).toLocaleString('pt-BR')}+ pontos
-                      </p>
-                    </div>
+            {/* Show only current character (tier 1) prominently */}
+            {tribeCharacters.filter(c => c.level?.tier === 1).slice(0, 1).map((char) => (
+              <div key={char.id} className={`relative rounded-2xl border-2 p-4 ${tierBgColors[0]} shadow-lg`}>
+                <div className="absolute -top-3 left-4 bg-green text-white text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-md">
+                  <Zap className="w-3 h-3" /> VOCE ESTA AQUI
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br ${tierColors[0]} shadow-md`}>
+                    <span className="text-3xl">{tribeEmoji}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full bg-gradient-to-r ${tierColors[0]} text-white`}
+                      style={char.level?.color_hex ? { backgroundColor: char.level.color_hex } : undefined}>
+                      {char.level?.name || 'Nivel 1'} ({getTierLabel(char.level?.tier ?? 1)})
+                    </span>
+                    <h3 className="font-bold text-lg mt-1 text-navy">{getCharacterDisplayName(char, char.level)}</h3>
+                    <p className="text-xs mt-0.5 text-gray-500">{char.description}</p>
                   </div>
                 </div>
-              )
-            })}
-          </div>
-        )}
+              </div>
+            ))}
 
-        {/* Progress bar */}
-        {tribeCharacters.length > 0 && (
-          <>
-            <div className="mt-8 bg-white rounded-2xl shadow-md p-5">
+            {/* Confirm button — right after current character */}
+            <button onClick={handleStart}
+              className="w-full bg-gradient-to-r from-teal to-green text-white font-bold text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+              Comecar minha jornada como {tier1Char?.name || 'Heroi'}!
+              <ChevronRight className="w-6 h-6" />
+            </button>
+
+            {/* Progress bar */}
+            <div className="bg-white rounded-2xl shadow-md p-5">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-sm font-bold text-navy">Seu progresso</span>
                 <span className="text-sm font-bold text-teal">
@@ -233,10 +196,8 @@ export default function EscolhaPersonagem() {
                 </span>
               </div>
               <div className="h-4 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-teal to-green rounded-full transition-all duration-700 relative"
-                  style={{ width: `${Math.max(progress, 3)}%` }}
-                >
+                <div className="h-full bg-gradient-to-r from-teal to-green rounded-full transition-all duration-700 relative"
+                  style={{ width: `${Math.max(progress, 3)}%` }}>
                   <div className="absolute inset-0 bg-white/20 shimmer rounded-full" />
                 </div>
               </div>
@@ -245,14 +206,34 @@ export default function EscolhaPersonagem() {
               </p>
             </div>
 
-            <button
-              onClick={handleStart}
-              className="mt-6 w-full bg-gradient-to-r from-teal to-green text-white font-bold text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-            >
-              Comecar minha jornada como {tier1Char?.name || 'Heroi'}!
-              <ChevronRight className="w-6 h-6" />
-            </button>
-          </>
+            {/* Evolution preview — below button */}
+            <p className="text-xs text-gray-400 text-center pt-2">Confira abaixo as possibilidades de evolucao do seu personagem:</p>
+
+            {tribeCharacters.filter((_, i) => i > 0).map((char) => (
+              <div key={char.id} className="relative rounded-2xl border-2 p-4 bg-white/60 border-gray-200 opacity-70">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0 bg-gray-200">
+                    <Lock className="w-6 h-6 text-gray-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-200 text-gray-400">
+                        {char.level?.name || `Nivel ${char.level?.tier ?? 0}`} ({getTierLabel(char.level?.tier ?? 1)})
+                      </span>
+                      {[...Array((char.level?.tier ?? 0))].map((_, i) => (
+                        <Star key={i} className="w-3.5 h-3.5 text-gray-300" />
+                      ))}
+                    </div>
+                    <h3 className="font-bold text-lg mt-1 text-gray-400">{getCharacterDisplayName(char, char.level)}</h3>
+                    <p className="text-xs mt-0.5 text-gray-300">{char.description}</p>
+                    <p className="text-xs mt-1 font-semibold text-gray-300">
+                      {(char.level?.min_points ?? 0).toLocaleString('pt-BR')}+ pontos
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>
