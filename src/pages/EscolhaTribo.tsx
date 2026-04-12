@@ -242,6 +242,8 @@ export default function EscolhaTribo() {
         .from('students')
         .select('id')
         .eq('user_id', uid)
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle()
 
       if (!student && !studentErr) {
