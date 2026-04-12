@@ -30,6 +30,7 @@ export default function Monitoria() {
   const [helpRequests, setHelpRequests] = useState<HelpRequest[]>([])
   const [monitors, setMonitors] = useState<Monitor[]>([])
   const [myStudentId, setMyStudentId] = useState<string | null>(null)
+  const [mySubjects, setMySubjects] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -40,12 +41,17 @@ export default function Monitoria() {
   async function loadData() {
     setLoading(true)
     const { data: me } = await supabase.from('students').select('id').eq('user_id', user!.id).maybeSingle()
-    if (me) setMyStudentId(me.id)
+    if (me) {
+      setMyStudentId(me.id)
+      // Load my monitor subjects
+      const { data: myMon } = await supabase.from('monitors').select('subject:subjects(name)').eq('student_id', me.id)
+      if (myMon) setMySubjects(new Set(myMon.map(m => ((m.subject as unknown as { name: string }) || {}).name || '').filter(Boolean)))
+    }
 
     // Load open help requests
     const { data: requests } = await supabase.from('help_requests')
       .select('id, description, visibility, status, created_at, subject:subjects(name), student:students(id, user:users!students_users_id_fkey(name), school:schools(name, city, state))')
-      .eq('status', 'open').order('created_at', { ascending: false }).limit(30)
+      .eq('status', 'open').order('created_at', { ascending: false }).limit(50)
     if (requests) setHelpRequests(requests as unknown as HelpRequest[])
 
     // Load monitors
@@ -95,25 +101,51 @@ export default function Monitoria() {
                 <h3 className="text-lg font-bold text-navy mb-2">Nenhum pedido aberto</h3>
                 <p className="text-gray-400 text-sm">Quando alguem pedir ajuda, aparecera aqui.</p>
               </div>
-            ) : helpRequests.map(r => (
-              <div key={r.id} className="bg-white rounded-xl shadow-sm p-4">
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <span className="bg-orange-100 text-orange-600 text-xs font-bold px-2 py-0.5 rounded-full">{r.subject?.name || 'Materia'}</span>
-                    <p className="text-sm font-semibold text-navy mt-1">{(r.student as any)?.user?.name || 'Aluno'}</p>
-                    <p className="text-[11px] text-gray-400">{(r.student as any)?.school?.state} · {(r.student as any)?.school?.city} · {(r.student as any)?.school?.name}</p>
+            ) : (() => {
+              const myMateria = mySubjects.size > 0
+                ? helpRequests.filter(r => mySubjects.has(r.subject?.name || ''))
+                : []
+              const outros = mySubjects.size > 0
+                ? helpRequests.filter(r => !mySubjects.has(r.subject?.name || ''))
+                : helpRequests
+
+              const renderCard = (r: HelpRequest) => (
+                <div key={r.id} className="bg-white rounded-xl shadow-sm p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <span className="bg-orange-100 text-orange-600 text-xs font-bold px-2 py-0.5 rounded-full">{r.subject?.name || 'Materia'}</span>
+                      <p className="text-sm font-semibold text-navy mt-1">{(r.student as any)?.user?.name || 'Aluno'}</p>
+                      <p className="text-[11px] text-gray-400">{(r.student as any)?.school?.state} · {(r.student as any)?.school?.city} · {(r.student as any)?.school?.name}</p>
+                    </div>
+                    <span className="text-[10px] text-gray-400">{new Date(r.created_at).toLocaleDateString('pt-BR')}</span>
                   </div>
-                  <span className="text-[10px] text-gray-400">{new Date(r.created_at).toLocaleDateString('pt-BR')}</span>
+                  {r.description && <p className="text-sm text-gray-600 mb-3 italic">"{r.description}"</p>}
+                  {myStudentId && r.student?.id !== myStudentId && (
+                    <button onClick={() => handleOffer(r.id)}
+                      className="w-full py-2 rounded-lg bg-teal text-white text-sm font-semibold flex items-center justify-center gap-1">
+                      <Check size={14} /> Oferecer ajuda
+                    </button>
+                  )}
                 </div>
-                {r.description && <p className="text-sm text-gray-600 mb-3 italic">"{r.description}"</p>}
-                {myStudentId && r.student?.id !== myStudentId && (
-                  <button onClick={() => handleOffer(r.id)}
-                    className="w-full py-2 rounded-lg bg-teal text-white text-sm font-semibold flex items-center justify-center gap-1">
-                    <Check size={14} /> Oferecer ajuda
-                  </button>
-                )}
-              </div>
-            ))}
+              )
+
+              return (
+                <>
+                  {myMateria.length > 0 && (
+                    <>
+                      <h3 className="text-sm font-bold text-teal flex items-center gap-1">{'\u{2B50}'} Pedidos nas suas materias ({myMateria.length})</h3>
+                      {myMateria.map(renderCard)}
+                    </>
+                  )}
+                  {outros.length > 0 && (
+                    <>
+                      <h3 className="text-sm font-bold text-gray-500 mt-3">{myMateria.length > 0 ? 'Outros pedidos' : 'Pedidos abertos'} ({outros.length})</h3>
+                      {outros.map(renderCard)}
+                    </>
+                  )}
+                </>
+              )
+            })()}
           </>
         ) : (
           <>
