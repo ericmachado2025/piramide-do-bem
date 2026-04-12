@@ -45,13 +45,15 @@ export default function Creditos() {
   const [userPhone, setUserPhone] = useState('')
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // State for incoming transfer notification
+  const [incomingTransfer, setIncomingTransfer] = useState<{ amount: number; senderName: string } | null>(null)
+
   // Auto-process transfer code from URL (when friend scans QR with native camera)
   useEffect(() => {
     const transferCode = searchParams.get('transfer')
     if (!transferCode || !studentId) return
 
     async function processIncomingTransfer(code: string) {
-      // Mark as scanned in pending_transfers
       const { data: pt, error } = await supabase
         .from('pending_transfers')
         .select('id, sender_id, amount, status')
@@ -60,14 +62,21 @@ export default function Creditos() {
         .single()
 
       if (error || !pt) {
-        alert('Código de transferência inválido ou expirado.')
+        alert('Codigo de transferencia invalido ou expirado.')
         return
       }
 
+      // Get sender name
+      const { data: sender } = await supabase.from('students')
+        .select('user:users!students_users_id_fkey(name)').eq('id', pt.sender_id).single()
+      const senderName = Array.isArray(sender?.user) ? sender.user[0]?.name : ((sender?.user as unknown as {name:string}) || {}).name || 'Colega'
+
       // Update status to scanned + set receiver
       await supabase.from('pending_transfers')
-        .update({ status: 'scanned', receiver_id: studentId })
+        .update({ status: 'scanned', receiver_id: studentId, scanned_at: new Date().toISOString() })
         .eq('id', pt.id)
+
+      setIncomingTransfer({ amount: pt.amount, senderName })
     }
     processIncomingTransfer(transferCode)
   }, [searchParams, studentId])
@@ -320,6 +329,15 @@ export default function Creditos() {
       </div>
 
       <div className="max-w-md mx-auto px-5 mt-4 space-y-4">
+        {/* Incoming transfer notification */}
+        {incomingTransfer && (
+          <div className="bg-green-50 border-2 border-green-300 rounded-2xl p-4 text-center">
+            <span className="text-3xl block mb-2">{'\u{1F389}'}</span>
+            <p className="text-green-800 font-bold text-lg">{incomingTransfer.senderName} quer te enviar {incomingTransfer.amount} creditos!</p>
+            <p className="text-green-600 text-sm mt-1">Aguarde a confirmacao do remetente para receber.</p>
+            <button onClick={() => setIncomingTransfer(null)} className="mt-3 text-xs text-gray-400">Fechar</button>
+          </div>
+        )}
         {/* Filters */}
         <div className="flex gap-2 overflow-x-auto pb-1">
           {([
@@ -431,37 +449,42 @@ export default function Creditos() {
                               }} className="p-1 text-red-400 hover:text-red-600" title="Excluir">
                                 {'\u{1F5D1}'}
                               </button>
-                              {t.status === 'waiting' && (
-                                <button onClick={() => {
-                                  setTransferAmount(String(t.amount))
-                                  setTransferQrCode(t.code)
-                                  setTransferStep('qr')
-                                  setTransferExpired(false)
-                                  setTransferTimer(30)
-                                  if (timerRef.current) clearInterval(timerRef.current)
-                                  timerRef.current = setInterval(async () => {
-                                    setTransferTimer(prev => {
-                                      if (prev <= 1) {
-                                        if (timerRef.current) clearInterval(timerRef.current)
-                                        setTransferExpired(true)
-                                        return 0
-                                      }
-                                      return prev - 1
-                                    })
-                                    const { data: pt } = await supabase.from('pending_transfers')
-                                      .select('status, receiver_id').eq('code', t.code).single()
-                                    if (pt?.status === 'scanned') {
+                              <button onClick={async () => {
+                                // Reset status to waiting and extend expiry
+                                await supabase.from('pending_transfers').update({
+                                  status: 'waiting',
+                                  expires_at: new Date(Date.now() + 30000).toISOString(),
+                                  receiver_id: null,
+                                }).eq('id', t.id)
+                                setTransferAmount(String(t.amount))
+                                setTransferQrCode(t.code)
+                                setTransferStep('qr')
+                                setTransferExpired(false)
+                                setTransferTimer(30)
+                                if (timerRef.current) clearInterval(timerRef.current)
+                                timerRef.current = setInterval(async () => {
+                                  setTransferTimer(prev => {
+                                    if (prev <= 1) {
                                       if (timerRef.current) clearInterval(timerRef.current)
-                                      const pin = String(Math.floor(100000 + Math.random() * 900000))
-                                      setTransferConfirmCode(pin)
-                                      setTransferGenerated(pin)
-                                      setTransferStep('confirm')
+                                      setTransferExpired(true)
+                                      supabase.from('pending_transfers').update({ status: 'expired' }).eq('code', t.code)
+                                      return 0
                                     }
-                                  }, 2000)
-                                }} className="p-1 text-teal hover:text-teal/80" title="Reabrir QR Code">
-                                  {'\u{1F4F1}'}
-                                </button>
-                              )}
+                                    return prev - 1
+                                  })
+                                  const { data: pt } = await supabase.from('pending_transfers')
+                                    .select('status, receiver_id').eq('code', t.code).single()
+                                  if (pt?.status === 'scanned') {
+                                    if (timerRef.current) clearInterval(timerRef.current)
+                                    const pin = String(Math.floor(100000 + Math.random() * 900000))
+                                    setTransferConfirmCode(pin)
+                                    setTransferGenerated(pin)
+                                    setTransferStep('confirm')
+                                  }
+                                }, 2000)
+                              }} className="p-1 text-teal hover:text-teal/80" title="Reabrir QR Code">
+                                {'\u{1F4F1}'}
+                              </button>
                             </div>
                           )}
                         </div>
