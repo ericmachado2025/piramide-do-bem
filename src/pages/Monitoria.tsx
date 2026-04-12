@@ -50,7 +50,7 @@ export default function Monitoria() {
 
     // Load open help requests
     const { data: requests } = await supabase.from('help_requests')
-      .select('id, description, visibility, status, created_at, subject:subjects(name), student:students(id, user:users!students_users_id_fkey(name), school:schools(name, city, state))')
+      .select('id, description, visibility, status, created_at, subject:subjects(name), student:students!help_requests_student_id_fkey(id, user:users!students_users_id_fkey(name), school:schools(name, city, state))')
       .eq('status', 'open').order('created_at', { ascending: false }).limit(50)
     if (requests) setHelpRequests(requests as unknown as HelpRequest[])
 
