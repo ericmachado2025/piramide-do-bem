@@ -17,6 +17,7 @@ import {
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import AvatarUpload from '../components/AvatarUpload'
+import EditProfileModal from '../components/EditProfileModal'
 
 interface Reward {
   id: string
@@ -55,6 +56,9 @@ export default function PatrocinadorDashboard() {
   const [scanResult, setScanResult] = useState<string | null>(null)
   const [scanStudent, setScanStudent] = useState<{ name: string; tier: number; points: number } | null>(null)
   const [scanningActive, setScanningActive] = useState(false)
+  const [showEditProfile, setShowEditProfile] = useState(false)
+  const [contactName, setContactName] = useState('')
+  const [contactPhone, setContactPhone] = useState('')
 
   // Promotions
   const [promotions, setPromotions] = useState<{ id: string; title: string; description: string | null; discount_percent: number | null; active: boolean }[]>([])
@@ -90,6 +94,9 @@ export default function PatrocinadorDashboard() {
       if (sponsorError) throw sponsorError
       setBusinessName(sponsorData.business_name)
       setSponsorId(sponsorData.id)
+      const u = sponsorData.user as unknown as Record<string, unknown> | null
+      setContactName((u?.name as string) || '')
+      setContactPhone((u?.phone as string) || '')
 
       // Get rewards
       const { data: rewardData, error: rewardError } = await supabase
@@ -282,9 +289,13 @@ export default function PatrocinadorDashboard() {
               <h1 className="text-xl font-extrabold">{businessName}</h1>
             </div>
           </div>
-          <button onClick={handleSignOut} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 transition-colors text-sm font-semibold">
-            <LogOut className="w-4 h-4" /> Sair
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowEditProfile(true)}
+              className="px-3 py-2 rounded-xl bg-white/15 hover:bg-white/25 transition-colors text-xs font-semibold">Editar</button>
+            <button onClick={handleSignOut} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 transition-colors text-sm font-semibold">
+              <LogOut className="w-4 h-4" /> Sair
+            </button>
+          </div>
         </div>
       </div>
 
@@ -603,6 +614,20 @@ export default function PatrocinadorDashboard() {
         </>
         )}
       </div>
+
+      {showEditProfile && user && (
+        <EditProfileModal
+          userId={user.id}
+          tableName="sponsors"
+          recordId={sponsorId}
+          fields={[
+            { key: 'name', label: 'Nome do contato', value: contactName },
+            { key: 'phone', label: 'Telefone', value: contactPhone },
+          ]}
+          onClose={() => setShowEditProfile(false)}
+          onSaved={(v) => { setContactName(v.name || contactName); setShowEditProfile(false) }}
+        />
+      )}
     </div>
   )
 }

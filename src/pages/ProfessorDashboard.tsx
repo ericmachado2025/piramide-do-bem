@@ -14,6 +14,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import AttendanceSheet from '../components/AttendanceSheet'
 import AvatarUpload from '../components/AvatarUpload'
+import EditProfileModal from '../components/EditProfileModal'
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -54,6 +55,8 @@ export default function ProfessorDashboard() {
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [selectedAssignment, setSelectedAssignment] = useState('')
   const [teacherId, setTeacherId] = useState<string | null>(null)
+  const [showEditProfile, setShowEditProfile] = useState(false)
+  const [teacherPhone, setTeacherPhone] = useState('')
 
   // Metrics
   const [totalAlunos, setTotalAlunos] = useState(0)
@@ -85,6 +88,7 @@ export default function ProfessorDashboard() {
 
       setTeacherId(teacher.id)
       setTeacherName((teacher as any).user?.name || teacher.name)
+      setTeacherPhone((teacher as any).user?.phone || '')
 
       // Get school name
       const { data: school } = await supabase
@@ -344,13 +348,14 @@ export default function ProfessorDashboard() {
               <p className="text-white/70 text-sm mt-1">{schoolName}</p>
             </div>
           </div>
-          <button
-            onClick={handleSignOut}
-            className="flex items-center gap-1.5 text-white/80 hover:text-white text-sm transition-colors mt-1"
-          >
-            <LogOut className="w-4 h-4" />
-            Sair
-          </button>
+          <div className="flex items-center gap-2 mt-1">
+            <button onClick={() => setShowEditProfile(true)}
+              className="text-white/80 hover:text-white text-xs transition-colors">Editar</button>
+            <button onClick={handleSignOut}
+              className="flex items-center gap-1.5 text-white/80 hover:text-white text-sm transition-colors">
+              <LogOut className="w-4 h-4" /> Sair
+            </button>
+          </div>
         </div>
       </header>
 
@@ -521,6 +526,20 @@ export default function ProfessorDashboard() {
         </>
         )}
       </div>
+
+      {showEditProfile && user && teacherId && (
+        <EditProfileModal
+          userId={user.id}
+          tableName="teachers"
+          recordId={teacherId}
+          fields={[
+            { key: 'name', label: 'Nome', value: teacherName || '' },
+            { key: 'phone', label: 'Telefone', value: teacherPhone },
+          ]}
+          onClose={() => setShowEditProfile(false)}
+          onSaved={(v) => { setTeacherName(v.name || teacherName); setShowEditProfile(false) }}
+        />
+      )}
     </div>
   )
 }

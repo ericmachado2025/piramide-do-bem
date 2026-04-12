@@ -16,6 +16,7 @@ import {
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import AvatarUpload from '../components/AvatarUpload'
+import EditProfileModal from '../components/EditProfileModal'
 
 interface ChildData {
   id: string
@@ -51,6 +52,9 @@ export default function ResponsavelDashboard() {
   const [actionsLoading, setActionsLoading] = useState(false)
   const [error, setError] = useState('')
   const [consentLoading, setConsentLoading] = useState(false)
+  const [showEditProfile, setShowEditProfile] = useState(false)
+  const [parentPhone, setParentPhone] = useState('')
+  const [parentId, setParentId] = useState('')
 
   const selectedChild = children[selectedChildIdx] || null
 
@@ -69,6 +73,8 @@ export default function ResponsavelDashboard() {
 
       if (parentError) throw parentError
       setParentName((parentData as any).user?.name || parentData.full_name)
+      setParentId(parentData.id)
+      setParentPhone((parentData as any).user?.phone || '')
 
       // Get linked students
       const { data: links, error: linksError } = await supabase
@@ -225,9 +231,13 @@ export default function ResponsavelDashboard() {
               <h1 className="text-xl font-extrabold">{parentName}</h1>
             </div>
           </div>
-          <button onClick={handleSignOut} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 transition-colors text-sm font-semibold">
-            <LogOut className="w-4 h-4" /> Sair
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowEditProfile(true)}
+              className="px-3 py-2 rounded-xl bg-white/15 hover:bg-white/25 transition-colors text-xs font-semibold">Editar</button>
+            <button onClick={handleSignOut} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 transition-colors text-sm font-semibold">
+              <LogOut className="w-4 h-4" /> Sair
+            </button>
+          </div>
         </div>
       </div>
 
@@ -366,6 +376,20 @@ export default function ResponsavelDashboard() {
           </>
         )}
       </div>
+
+      {showEditProfile && user && (
+        <EditProfileModal
+          userId={user.id}
+          tableName="parents"
+          recordId={parentId}
+          fields={[
+            { key: 'name', label: 'Nome', value: parentName },
+            { key: 'phone', label: 'Telefone', value: parentPhone },
+          ]}
+          onClose={() => setShowEditProfile(false)}
+          onSaved={(v) => { setParentName(v.name || parentName); setShowEditProfile(false) }}
+        />
+      )}
     </div>
   )
 }
