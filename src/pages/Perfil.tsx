@@ -516,6 +516,9 @@ export default function Perfil() {
           <p className="text-white/80 text-sm mt-1 text-center">
             {tribeName} &mdash; {charName} ({getTierLabel(tierInfo.current.tier)})
           </p>
+          <button onClick={() => setShowTribeModal(true)} className="text-white/50 text-xs mt-1 hover:text-white/80 flex items-center gap-1">
+            <RefreshCw className="w-3 h-3" /> Trocar de tribo
+          </button>
 
           {/* progress bar */}
           <div className="w-full max-w-xs mt-5">
