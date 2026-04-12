@@ -77,12 +77,15 @@ export default function Ranking() {
   useEffect(() => {
     async function loadData() {
       try {
-        // Get current user's student ID
+        // Get current user's student with school info
         let myStudentId: string | null = null
+        let mySchoolId: string | null = null
+        let myCity: string | null = null
+        let myState: string | null = null
         if (user) {
           const { data: me, error: meError } = await supabase
             .from('students')
-            .select('id')
+            .select('id, school_id, school:schools(city, state)')
             .eq('user_id', user.id)
             .single()
           if (meError) {
@@ -91,15 +94,37 @@ export default function Ranking() {
           if (me) {
             myStudentId = me.id
             setCurrentStudentId(me.id)
+            mySchoolId = me.school_id
+            const sch = me.school as unknown as { city: string; state: string } | null
+            myCity = sch?.city || null
+            myState = sch?.state || null
           }
         }
 
-        // Load students with tribe info
-        const { data, error: queryError } = await supabase
+        // Load students with tribe info — filtered by scope
+        let q = supabase
           .from('students')
-          .select('id, total_points, user:users!students_users_id_fkey(name), community:communities!left(name, icon_class, color_hex)')
+          .select('id, total_points, school_id, user:users!students_users_id_fkey(name), community:communities!left(name, icon_class, color_hex), school:schools!left(city, state)')
           .order('total_points', { ascending: false })
-          .limit(100)
+          .limit(200)
+
+        if (activeTab === 'escola' && mySchoolId) {
+          q = q.eq('school_id', mySchoolId)
+        } else if (activeTab === 'cidade' && myCity) {
+          // Filter by city via school join — need to get school IDs first
+          const { data: citySchools } = await supabase.from('schools').select('id').eq('city', myCity)
+          if (citySchools && citySchools.length > 0) {
+            q = q.in('school_id', citySchools.map(s => s.id))
+          }
+        } else if (activeTab === 'estado' && myState) {
+          const { data: stateSchools } = await supabase.from('schools').select('id').eq('state', myState)
+          if (stateSchools && stateSchools.length > 0) {
+            q = q.in('school_id', stateSchools.map(s => s.id))
+          }
+        }
+        // 'nacional' = no filter
+
+        const { data, error: queryError } = await q
 
         if (queryError) {
           console.error('Ranking: error loading students:', queryError)
@@ -159,7 +184,7 @@ export default function Ranking() {
       }
     }
     loadData()
-  }, [user])
+  }, [user, activeTab])
 
   const groupedByFaixa = useMemo(() => {
     const map: Record<string, RankedStudent[]> = {}
