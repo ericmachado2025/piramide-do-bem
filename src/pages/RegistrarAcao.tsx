@@ -338,7 +338,7 @@ export default function RegistrarAcao() {
 
             <div className="bg-white rounded-2xl shadow-lg p-6 inline-block mb-4">
               <QRCodeSVG
-                value={qrToken}
+                value={`${window.location.origin}/validar?token=${qrToken}`}
                 size={200}
                 bgColor="#ffffff"
                 fgColor="#1F4E79"

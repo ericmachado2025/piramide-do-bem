@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { ArrowLeft, ScanLine, CheckCircle2, XCircle, Clock, User, Shield, X } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { getScoringRule } from '../lib/database'
@@ -43,6 +43,7 @@ function timeAgo(dateStr: string): string {
 
 export default function ValidarAcao() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { user } = useAuth()
   const [tab, setTab] = useState<Tab>('validar')
   const [pendingActions, setPendingActions] = useState<PendingItem[]>([])
@@ -57,6 +58,47 @@ export default function ValidarAcao() {
   const [scannerActive, setScannerActive] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null)
+
+  // Extract token from QR data (supports raw UUID and full URL)
+  function extractToken(data: string): string {
+    try {
+      const url = new URL(data)
+      return url.searchParams.get('token') || data
+    } catch {
+      return data
+    }
+  }
+
+  // Auto-process token from URL query param (when scanned by native camera)
+  useEffect(() => {
+    const urlToken = searchParams.get('token')
+    if (!urlToken || !user) return
+
+    async function processUrlToken(token: string) {
+      const { data: action, error } = await supabase
+        .from('actions')
+        .select('id, points_awarded, created_at, author:students!actions_author_id_fkey(name), action_type:action_types(name, icon), beneficiary:students!actions_beneficiary_id_fkey(name)')
+        .eq('qr_code_token', token)
+        .eq('status', 'pending')
+        .single()
+
+      if (error || !action) {
+        setScanError('QR Code nao reconhecido ou acao ja validada')
+        return
+      }
+      const a = action as Record<string, unknown>
+      setSelectedAction({
+        id: a.id as string,
+        authorName: (a.author as { name: string } | null)?.name ?? 'Desconhecido',
+        actionTypeName: (a.action_type as { name: string; icon: string | null } | null)?.name ?? 'Boa acao',
+        actionIcon: (a.action_type as { name: string; icon: string | null } | null)?.icon ?? '\u{1F91D}',
+        beneficiaryName: (a.beneficiary as { name: string } | null)?.name ?? 'Colega',
+        points: (a.points_awarded as number) ?? 0,
+        createdAt: a.created_at as string,
+      })
+    }
+    processUrlToken(urlToken)
+  }, [searchParams, user])
 
   useEffect(() => {
     if (!user) return
@@ -205,10 +247,11 @@ export default function ValidarAcao() {
             setScannerActive(false)
 
             // Look up the action by QR token
+            const token = extractToken(decodedText)
             const { data: action, error } = await supabase
               .from('actions')
               .select('id, points_awarded, created_at, author:students!actions_author_id_fkey(name), action_type:action_types(name, icon), beneficiary:students!actions_beneficiary_id_fkey(name)')
-              .eq('qr_code_token', decodedText)
+              .eq('qr_code_token', token)
               .eq('status', 'pending')
               .single()
 
@@ -592,7 +635,7 @@ export default function ValidarAcao() {
                       {showQr === action.id && (
                         <div className="mt-3 flex flex-col items-center">
                           <div className="bg-white p-3 rounded-xl shadow-inner border border-gray-100">
-                            <QRCodeSVG value={action.qrToken} size={140} bgColor="#ffffff" fgColor="#1F4E79" level="M" />
+                            <QRCodeSVG value={`${window.location.origin}/validar?token=${action.qrToken}`} size={140} bgColor="#ffffff" fgColor="#1F4E79" level="M" />
                           </div>
                           <p className="text-[10px] text-gray-400 mt-2">Peca para um colega escanear</p>
                         </div>

@@ -739,7 +739,7 @@ export default function Perfil() {
         <section className="flex flex-col items-center">
           <div className="bg-white rounded-xl shadow-md p-4 flex flex-col items-center">
             <QRCodeSVG
-              value={`piramide://student/${student.id}`}
+              value={`${window.location.origin}/aluno/${student.id}`}
               size={100}
               bgColor="#FFFFFF"
               fgColor="#1F4E79"
@@ -936,7 +936,7 @@ export default function Perfil() {
             </button>
             <h3 className="text-navy font-bold text-lg mb-4">Meu QR Code</h3>
             <QRCodeSVG
-              value={`piramide://student/${student.id}`}
+              value={`${window.location.origin}/aluno/${student.id}`}
               size={240}
               bgColor="#FFFFFF"
               fgColor="#1F4E79"

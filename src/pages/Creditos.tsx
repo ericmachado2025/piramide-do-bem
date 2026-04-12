@@ -371,7 +371,7 @@ export default function Creditos() {
                 <h3 className="font-bold text-navy text-lg mb-2">QR Code gerado!</h3>
                 <p className="text-xs text-gray-400 mb-3">Peca para seu amigo escanear este codigo para prosseguir com a transferencia.</p>
                 <div className="bg-gray-50 rounded-xl p-6 flex flex-col items-center mb-3">
-                  <QRCodeSVG value={transferQrCode || ''} size={180} level="M" />
+                  <QRCodeSVG value={`${window.location.origin}/creditos?transfer=${transferQrCode || ''}`} size={180} level="M" />
                   <p className="text-sm text-teal font-bold mt-3">{transferAmount} creditos</p>
                 </div>
                 <div className="flex items-center justify-center gap-2 mb-3">
