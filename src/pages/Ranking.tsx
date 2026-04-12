@@ -292,6 +292,7 @@ export default function Ranking() {
             ) : (
               /* ===== FAIXA SECTIONS ===== */
               <section className="space-y-3">
+                <p className="text-xs text-gray-400 text-center">{students.length} aluno(s) neste escopo</p>
                 {FAIXAS.map((faixa) => {
                   const faixaStudents = groupedByFaixa[faixa.id] ?? []
                   const isOpen = openFaixas[faixa.id] ?? false
