@@ -425,30 +425,51 @@ export default function Cadastro() {
 
       const userRec = await ensureUserRecord(authUserId, form.email, form.name)
 
-      const { data: studentData, error: studentError } = await supabase.from('students').insert({
-        user_id: authUserId,
-        users_id: userRec?.id || null,
-        birth_date: birthDate || null,
-        school_id: form.schoolId || null,
-        parent_name: null,
-        parent_email: form.parentEmail || null,
-        parent_phone: form.parentPhone.replace(/\D/g, '') || null,
-        parent_consent: form.lgpdConsent,
-        whatsapp: phoneFromUrl || (form.whatsapp.replace(/\D/g, '') ? (form.whatsappCountryCode + form.whatsapp.replace(/\D/g, '')) : null),
-        whatsapp_country_code: form.whatsappCountryCode,
-        whatsapp_visibility: form.whatsappVisibility,
-        total_points: 0,
-        available_points: 0,
-        redeemed_points: 0,
-        role: 'student',
-      }).select('id').single()
+      // Check if student already exists (prevent duplicates)
+      const { data: existingStudent } = await supabase.from('students')
+        .select('id').eq('user_id', authUserId).maybeSingle()
 
-      if (studentError) {
-        if (!studentError.message.includes('duplicate')) {
-          alert(`Erro ao salvar perfil: ${studentError.message}`)
-          setSubmitting(false)
-          return
-        }
+      let studentData: { id: string } | null = existingStudent
+
+      if (!existingStudent) {
+        const { data: newStudent, error: studentError } = await supabase.from('students').insert({
+          user_id: authUserId,
+          users_id: userRec?.id || null,
+          birth_date: birthDate || null,
+          school_id: form.schoolId || null,
+          parent_name: null,
+          parent_email: form.parentEmail || null,
+          parent_phone: form.parentPhone.replace(/\D/g, '') || null,
+          parent_consent: form.lgpdConsent,
+          whatsapp: phoneFromUrl || (form.whatsapp.replace(/\D/g, '') ? (form.whatsappCountryCode + form.whatsapp.replace(/\D/g, '')) : null),
+          whatsapp_country_code: form.whatsappCountryCode,
+          whatsapp_visibility: form.whatsappVisibility,
+          total_points: 0,
+          available_points: 0,
+          redeemed_points: 0,
+          role: 'student',
+        }).select('id').single()
+        if (studentError) { setEmailError(studentError.message); setSubmitting(false); return }
+        studentData = newStudent
+      } else {
+        // Update existing student with new data
+        await supabase.from('students').update({
+          users_id: userRec?.id || null,
+          birth_date: birthDate || null,
+          school_id: form.schoolId || null,
+          parent_email: form.parentEmail || null,
+          parent_phone: form.parentPhone.replace(/\D/g, '') || null,
+          parent_consent: form.lgpdConsent,
+          whatsapp: phoneFromUrl || (form.whatsapp.replace(/\D/g, '') ? (form.whatsappCountryCode + form.whatsapp.replace(/\D/g, '')) : null),
+          whatsapp_country_code: form.whatsappCountryCode,
+          whatsapp_visibility: form.whatsappVisibility,
+        }).eq('id', existingStudent.id)
+      }
+
+      if (!studentData) {
+        setEmailError('Erro ao criar perfil. Tente novamente.')
+        setSubmitting(false)
+        return
       }
 
       // Create classroom and enrollment
