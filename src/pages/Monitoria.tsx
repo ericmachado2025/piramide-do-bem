@@ -63,10 +63,14 @@ export default function Monitoria() {
     setLoading(false)
   }
 
+  const [offeredIds, setOfferedIds] = useState<Set<string>>(new Set())
+
   const handleOffer = async (requestId: string) => {
     if (!myStudentId) return
-    await supabase.from('help_requests').update({ helper_id: myStudentId, status: 'matched' }).eq('id', requestId)
-    loadData()
+    const { error } = await supabase.from('help_requests').update({ helper_id: myStudentId, status: 'matched' }).eq('id', requestId)
+    if (!error) {
+      setOfferedIds(prev => new Set([...prev, requestId]))
+    }
   }
 
   return (
@@ -109,8 +113,10 @@ export default function Monitoria() {
                 ? helpRequests.filter(r => !mySubjects.has(r.subject?.name || ''))
                 : helpRequests
 
-              const renderCard = (r: HelpRequest) => (
-                <div key={r.id} className="bg-white rounded-xl shadow-sm p-4">
+              const renderCard = (r: HelpRequest) => {
+                const offered = offeredIds.has(r.id)
+                return (
+                <div key={r.id} className={`rounded-xl shadow-sm p-4 ${offered ? 'bg-gray-100 opacity-60' : 'bg-white'}`}>
                   <div className="flex items-start justify-between mb-2">
                     <div>
                       <span className="bg-orange-100 text-orange-600 text-xs font-bold px-2 py-0.5 rounded-full">{r.subject?.name || 'Materia'}</span>
@@ -120,14 +126,17 @@ export default function Monitoria() {
                     <span className="text-[10px] text-gray-400">{new Date(r.created_at).toLocaleDateString('pt-BR')}</span>
                   </div>
                   {r.description && <p className="text-sm text-gray-600 mb-3 italic">"{r.description}"</p>}
-                  {myStudentId && r.student?.id !== myStudentId && (
+                  {offered ? (
+                    <p className="text-xs text-teal font-semibold text-center py-2">{'\u2705'} Voce ofereceu ajuda a esse pedido</p>
+                  ) : myStudentId && r.student?.id !== myStudentId ? (
                     <button onClick={() => handleOffer(r.id)}
                       className="w-full py-2 rounded-lg bg-teal text-white text-sm font-semibold flex items-center justify-center gap-1">
                       <Check size={14} /> Oferecer ajuda
                     </button>
-                  )}
+                  ) : null}
                 </div>
-              )
+                )
+              }
 
               return (
                 <>
