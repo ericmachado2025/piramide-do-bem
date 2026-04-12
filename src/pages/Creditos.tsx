@@ -76,6 +76,20 @@ export default function Creditos() {
   const [showScan, setShowScan] = useState(false)
   const [showCamera, setShowCamera] = useState(false)
   const [scanInput, setScanInput] = useState('')
+
+  // Transfer history
+  const [myTransfers, setMyTransfers] = useState<{ id: string; code: string; amount: number; status: string; created_at: string }[]>([])
+
+  async function loadMyTransfers() {
+    if (!studentId) return
+    const { data } = await supabase.from('pending_transfers')
+      .select('id, code, amount, status, created_at')
+      .eq('sender_id', studentId)
+      .in('status', ['waiting', 'scanned', 'confirmed', 'expired'])
+      .order('created_at', { ascending: false })
+      .limit(10)
+    if (data) setMyTransfers(data)
+  }
   const [scanResult, setScanResult] = useState<{ desc: string; amount: number; id: string } | null>(null)
   const [confirmCode, setConfirmCode] = useState('')
   const [confirmGenerated, setConfirmGenerated] = useState('')
@@ -294,7 +308,7 @@ export default function Creditos() {
           <p className="text-white/50 text-xs mt-1">de {totalPoints} pontos ganhos</p>
         </div>
         <div className="flex gap-2 mt-3">
-          <button onClick={() => setShowTransfer(true)}
+          <button onClick={() => { setShowTransfer(true); loadMyTransfers() }}
             className="flex-1 py-2.5 rounded-xl bg-white/20 text-white text-sm font-semibold flex items-center justify-center gap-2">
             <Send size={14} /> Transferir
           </button>
@@ -386,11 +400,75 @@ export default function Creditos() {
                   onChange={e => setTransferAmount(e.target.value)} min={1} max={credits}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-teal focus:outline-none text-center text-lg mb-2" />
                 <p className="text-xs text-gray-400 text-center mb-3">Saldo: {credits} creditos</p>
-                <div className="flex gap-2">
+                <div className="flex gap-2 mb-4">
                   <button onClick={resetTransfer} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-500 text-sm">Cancelar</button>
                   <button onClick={handleTransferGenerate} disabled={!transferAmount || parseInt(transferAmount) > credits || parseInt(transferAmount) <= 0}
                     className="flex-1 py-2.5 rounded-lg bg-teal text-white text-sm font-semibold disabled:opacity-50">Gerar QR Code</button>
                 </div>
+
+                {myTransfers.length > 0 && (
+                  <div className="border-t border-gray-100 pt-3">
+                    <h4 className="text-xs font-bold text-navy mb-2">Historico de transferencias</h4>
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {myTransfers.map(t => (
+                        <div key={t.id} className="flex items-center justify-between p-2 rounded-lg bg-gray-50 text-xs">
+                          <div>
+                            <span className="font-semibold text-navy">{t.amount} pts</span>
+                            <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              t.status === 'confirmed' ? 'bg-green-100 text-green-700' :
+                              t.status === 'waiting' ? 'bg-yellow-100 text-yellow-700' :
+                              t.status === 'scanned' ? 'bg-blue-100 text-blue-700' :
+                              'bg-gray-100 text-gray-500'
+                            }`}>
+                              {t.status === 'confirmed' ? 'Confirmada' : t.status === 'waiting' ? 'Aguardando' : t.status === 'scanned' ? 'Escaneado' : 'Expirada'}
+                            </span>
+                          </div>
+                          {(t.status === 'waiting' || t.status === 'expired') && (
+                            <div className="flex gap-1">
+                              <button onClick={async () => {
+                                await supabase.from('pending_transfers').delete().eq('id', t.id)
+                                loadMyTransfers()
+                              }} className="p-1 text-red-400 hover:text-red-600" title="Excluir">
+                                {'\u{1F5D1}'}
+                              </button>
+                              {t.status === 'waiting' && (
+                                <button onClick={() => {
+                                  setTransferAmount(String(t.amount))
+                                  setTransferQrCode(t.code)
+                                  setTransferStep('qr')
+                                  setTransferExpired(false)
+                                  setTransferTimer(30)
+                                  if (timerRef.current) clearInterval(timerRef.current)
+                                  timerRef.current = setInterval(async () => {
+                                    setTransferTimer(prev => {
+                                      if (prev <= 1) {
+                                        if (timerRef.current) clearInterval(timerRef.current)
+                                        setTransferExpired(true)
+                                        return 0
+                                      }
+                                      return prev - 1
+                                    })
+                                    const { data: pt } = await supabase.from('pending_transfers')
+                                      .select('status, receiver_id').eq('code', t.code).single()
+                                    if (pt?.status === 'scanned') {
+                                      if (timerRef.current) clearInterval(timerRef.current)
+                                      const pin = String(Math.floor(100000 + Math.random() * 900000))
+                                      setTransferConfirmCode(pin)
+                                      setTransferGenerated(pin)
+                                      setTransferStep('confirm')
+                                    }
+                                  }, 2000)
+                                }} className="p-1 text-teal hover:text-teal/80" title="Reabrir QR Code">
+                                  {'\u{1F4F1}'}
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </>
             )}
 

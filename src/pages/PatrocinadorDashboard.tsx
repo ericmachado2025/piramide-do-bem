@@ -13,6 +13,7 @@ import {
   Package,
   Users,
   Calendar,
+  FileText,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -26,6 +27,7 @@ interface Reward {
   points_cost: number
   category: string
   is_spotlight: boolean
+  active: boolean
 }
 
 interface Redemption {
@@ -78,6 +80,44 @@ export default function PatrocinadorDashboard() {
   const [formSaving, setFormSaving] = useState(false)
   const [formError, setFormError] = useState('')
 
+  function openPrintWindow(htmlContent: string) {
+    const w = window.open('', '_blank', 'width=800,height=600')
+    if (!w) { alert('Permita pop-ups para gerar o PDF.'); return }
+    w.document.write(htmlContent)
+    w.document.close()
+    setTimeout(() => w.print(), 500)
+  }
+
+  function rewardCardHTML(r: Reward, biz: string) {
+    const qrUrl = `${window.location.origin}/recompensas?code=${r.id}`
+    return `
+      <div style="page-break-inside:avoid;border:2px solid #028090;border-radius:16px;padding:24px;margin:16px 0;text-align:center;">
+        <h2 style="color:#1F4E79;margin:0 0 4px;">${biz}</h2>
+        <p style="color:#028090;font-size:18px;font-weight:bold;margin:4px 0;">${r.name}</p>
+        ${r.description ? `<p style="color:#666;font-size:13px;">${r.description}</p>` : ''}
+        <div style="margin:16px auto;display:inline-block;padding:12px;background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrUrl)}" width="200" height="200" />
+        </div>
+        <p style="color:#02C39A;font-size:20px;font-weight:bold;margin:8px 0;">${r.points_cost} créditos</p>
+        <p style="color:#999;font-size:11px;">Escaneie para usar • piramidedobem.com.br</p>
+      </div>`
+  }
+
+  function generateRewardPDF(r: Reward) {
+    openPrintWindow(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${r.name}</title>
+      <style>body{font-family:'Segoe UI',sans-serif;max-width:500px;margin:40px auto;}</style></head>
+      <body>${rewardCardHTML(r, businessName)}</body></html>`)
+  }
+
+  function generateAllRewardsPDF() {
+    const activeRewards = rewards.filter(r => r.active)
+    if (activeRewards.length === 0) { alert('Nenhuma recompensa ativa.'); return }
+    const pages = activeRewards.map(r => `<div style="page-break-after:always;">${rewardCardHTML(r, businessName)}</div>`).join('')
+    openPrintWindow(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Recompensas - ${businessName}</title>
+      <style>body{font-family:'Segoe UI',sans-serif;max-width:500px;margin:40px auto;}@media print{div{page-break-after:always;}}</style></head>
+      <body><h1 style="color:#1F4E79;text-align:center;">Recompensas — ${businessName}</h1>${pages}</body></html>`)
+  }
+
   const fetchData = useCallback(async () => {
     if (!user) return
     setLoading(true)
@@ -98,11 +138,12 @@ export default function PatrocinadorDashboard() {
       setContactName((u?.name as string) || '')
       setContactPhone((u?.phone as string) || '')
 
-      // Get rewards
+      // Get rewards (excluir soft-deleted)
       const { data: rewardData, error: rewardError } = await supabase
         .from('rewards')
-        .select('id, name, description, points_cost, category, is_spotlight')
+        .select('id, name, description, points_cost, category, is_spotlight, active')
         .eq('sponsor_id', sponsorData.id)
+        .is('deleted_at', null)
         .order('created_at', { ascending: false })
 
       if (rewardError) throw rewardError
@@ -187,8 +228,9 @@ export default function PatrocinadorDashboard() {
       // Refresh rewards
       const { data } = await supabase
         .from('rewards')
-        .select('id, name, description, points_cost, category, is_spotlight')
+        .select('id, name, description, points_cost, category, is_spotlight, active')
         .eq('sponsor_id', sponsorId)
+        .is('deleted_at', null)
         .order('created_at', { ascending: false })
 
       setRewards(data || [])
@@ -559,28 +601,49 @@ export default function PatrocinadorDashboard() {
           {rewards.length === 0 ? (
             <p className="text-gray-400 text-sm text-center py-4">Você ainda não ofereceu nenhuma recompensa. Que tal começar agora?</p>
           ) : (
-            <div className="space-y-3">
-              {rewards.map((reward) => (
-                <div key={reward.id} className="flex items-start gap-3 p-3 rounded-xl" style={{ backgroundColor: '#f9fafb' }}>
-                  <Package className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: '#028090' }} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold truncate" style={{ color: '#1F4E79' }}>{reward.name}</p>
-                      {reward.is_spotlight && (
-                        <Star className="w-4 h-4 flex-shrink-0" style={{ color: '#f59e0b' }} />
-                      )}
+            <>
+              <div className="flex justify-end mb-2">
+                <button onClick={() => generateAllRewardsPDF()} className="text-xs px-3 py-1.5 rounded-lg bg-navy text-white hover:bg-navy/80 flex items-center gap-1">
+                  <FileText className="w-3.5 h-3.5" /> Imprimir todas as ativas (PDF)
+                </button>
+              </div>
+              <div className="space-y-3">
+                {rewards.map((reward) => (
+                  <div key={reward.id} className={`p-3 rounded-xl border ${reward.active ? 'bg-gray-50 border-gray-100' : 'bg-gray-100 border-gray-200 opacity-60'}`}>
+                    <div className="flex items-start gap-3">
+                      <Package className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: reward.active ? '#028090' : '#999' }} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold truncate" style={{ color: '#1F4E79' }}>{reward.name}</p>
+                          {reward.is_spotlight && <Star className="w-4 h-4 flex-shrink-0" style={{ color: '#f59e0b' }} />}
+                          {!reward.active && <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-500">Inativa</span>}
+                        </div>
+                        {reward.description && <p className="text-xs text-gray-400 truncate">{reward.description}</p>}
+                        <p className="text-xs text-gray-400 mt-0.5">{getCategoryLabel(reward.category)} — {reward.points_cost} pts</p>
+                      </div>
                     </div>
-                    {reward.description && (
-                      <p className="text-xs text-gray-400 truncate">{reward.description}</p>
-                    )}
-                    <p className="text-xs text-gray-400 mt-0.5">{getCategoryLabel(reward.category)}</p>
+                    <div className="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-gray-100">
+                      <button onClick={() => generateRewardPDF(reward)} className="text-xs px-2 py-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100" title="Gerar PDF com QR Code">
+                        <FileText className="w-3.5 h-3.5 inline mr-1" />PDF
+                      </button>
+                      <button onClick={async () => {
+                        await supabase.from('rewards').update({ active: !reward.active }).eq('id', reward.id)
+                        setRewards(prev => prev.map(r => r.id === reward.id ? { ...r, active: !r.active } : r))
+                      }} className={`text-xs px-2 py-1 rounded ${reward.active ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100' : 'bg-green-50 text-green-700 hover:bg-green-100'}`}>
+                        {reward.active ? 'Desativar' : 'Ativar'}
+                      </button>
+                      <button onClick={async () => {
+                        if (!confirm('Tem certeza que deseja excluir esta recompensa?')) return
+                        await supabase.from('rewards').update({ deleted_at: new Date().toISOString(), active: false }).eq('id', reward.id)
+                        setRewards(prev => prev.filter(r => r.id !== reward.id))
+                      }} className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100">
+                        Excluir
+                      </button>
+                    </div>
                   </div>
-                  <span className="text-sm font-bold flex-shrink-0" style={{ color: '#02C39A' }}>
-                    {reward.points_cost} pts
-                  </span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
 
