@@ -85,8 +85,7 @@ export default function Login() {
     const emailExists = msg.includes('invalid login credentials') ||
       msg.includes('invalid credentials') ||
       msg.includes('email not confirmed') ||
-      msg.includes('not confirmed') ||
-      msg.includes('database error')
+      msg.includes('not confirmed')
 
     if (emailExists) {
       // Buscar nome para exibir (pode falhar se users não acessível, ok)
