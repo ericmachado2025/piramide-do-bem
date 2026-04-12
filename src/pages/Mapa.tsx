@@ -69,36 +69,22 @@ export default function Mapa() {
 
   useEffect(() => {
     async function load() {
-      // Aggregate students per school
-      const { data: students } = await supabase
-        .from('students')
-        .select('school_id')
-        .not('school_id', 'is', null)
+      // Use view for state-level counts (fast, no pagination needed)
+      const { data: stateCounts } = await supabase
+        .from('school_counts_by_state')
+        .select('state, school_count, schools_with_students, total_students')
 
-      const schoolCounts: Record<string, number> = {}
-      for (const s of students ?? []) {
-        const sid = (s as { school_id: string }).school_id
-        schoolCounts[sid] = (schoolCounts[sid] || 0) + 1
-      }
-
-      // Get schools with coordinates (geocoded ones) - these are the ones we can plot
-      const { data: schools } = await supabase
-        .from('schools')
-        .select('id, name, state, city, neighborhood, latitude, longitude')
-        .eq('active', true)
-        .not('latitude', 'is', null)
-        .limit(10000)
-
-      if (schools) {
-        const mapped = schools.map((s: { id: string; name: string; state: string; city: string; neighborhood: string | null; latitude: number | null; longitude: number | null }) => ({
+      if (stateCounts) {
+        const mapped = stateCounts.map((s: { state: string; school_count: number; total_students: number }) => ({
           state: s.state,
-          city: s.city,
-          neighborhood: s.neighborhood,
-          school_id: s.id,
-          school_name: s.name,
-          latitude: s.latitude,
-          longitude: s.longitude,
-          student_count: schoolCounts[s.id] || 0,
+          city: '',
+          neighborhood: null as string | null,
+          school_id: '',
+          school_name: '',
+          latitude: null as number | null,
+          longitude: null as number | null,
+          student_count: Number(s.total_students) || 0,
+          school_count_agg: Number(s.school_count) || 0,
         }))
         setAllSchoolData(mapped)
       }
@@ -110,49 +96,31 @@ export default function Mapa() {
   // Load legend counts based on current scope
   useEffect(() => {
     async function loadCounts() {
-      // Get school IDs in current scope
-      let scopeSchools = allSchoolData
-      if (selectedState) scopeSchools = scopeSchools.filter(s => s.state === selectedState)
-      if (selectedCity) scopeSchools = scopeSchools.filter(s => s.city === selectedCity)
-      if (selectedNeighborhood) scopeSchools = scopeSchools.filter(s => (s.neighborhood || 'Sem bairro') === selectedNeighborhood)
+      const totalStudents = allSchoolData.reduce((sum, s) => sum + s.student_count, 0)
 
-      const schoolIds = scopeSchools.map(s => s.school_id)
-      const totalStudents = scopeSchools.reduce((sum, s) => sum + s.student_count, 0)
-
-      // Counts from DB - use head:true for efficient counting
-      const actionsRes = schoolIds.length > 0
-        ? await supabase.from('actions').select('*', { count: 'exact', head: true })
-        : { count: 0 }
-      // Count distinct monitors in scope
-      let monitorCount = 0
-      if (schoolIds.length > 0) {
-        const { data: studentsInScope } = await supabase.from('students').select('id').in('school_id', schoolIds)
-        if (studentsInScope && studentsInScope.length > 0) {
-          const { count } = await supabase.from('monitors').select('student_id', { count: 'exact', head: true })
-            .in('student_id', studentsInScope.map(s => s.id))
-          monitorCount = count ?? 0
-        }
-      }
-      const requestsRes = await supabase.from('mentoring_requests').select('*', { count: 'exact', head: true }).eq('status', 'open')
-      const sponsorsRes = await supabase.from('sponsors').select('*', { count: 'exact', head: true }).eq('active', true)
+      // Global counts (efficient head queries)
+      const { count: actionsCount } = await supabase.from('actions').select('*', { count: 'exact', head: true }).eq('status', 'validated')
+      const { count: monitorsCount } = await supabase.from('monitors').select('*', { count: 'exact', head: true })
+      const { count: requestsCount } = await supabase.from('help_requests').select('*', { count: 'exact', head: true })
+      const { count: teachersCount } = await supabase.from('teachers').select('*', { count: 'exact', head: true })
+      const { count: sponsorsCount } = await supabase.from('sponsors').select('*', { count: 'exact', head: true }).eq('active', true)
 
       setLegendCounts({
-        actions: (actionsRes as { count: number | null }).count ?? 0,
+        actions: actionsCount ?? 0,
         students: totalStudents,
-        mentors: monitorCount,
-        requests: (requestsRes as { count: number | null }).count ?? 0,
-        teachers: 0,
-        sponsors: (sponsorsRes as { count: number | null }).count ?? 0,
+        mentors: monitorsCount ?? 0,
+        requests: requestsCount ?? 0,
+        teachers: teachersCount ?? 0,
+        sponsors: sponsorsCount ?? 0,
       })
     }
     if (!loading) loadCounts()
-  }, [allSchoolData, selectedState, selectedCity, selectedNeighborhood, loading])
+  }, [allSchoolData, loading])
 
   // Aggregate by current drill level
   const markers = useMemo((): AggData[] => {
     if (drillLevel === 'states') {
       const byState: Record<string, AggData> = {}
-      // Initialize all states with 0
       for (const state of Object.keys(STATE_COORDS)) {
         byState[state] = { state, students: 0, teachers: 0, sponsors: 0, schools: 0 }
       }
@@ -161,19 +129,19 @@ export default function Mapa() {
           byState[s.state] = { state: s.state, students: 0, teachers: 0, sponsors: 0, schools: 0 }
         }
         byState[s.state].students += s.student_count
-        byState[s.state].schools++
+        byState[s.state].schools += (s as Record<string, unknown>).school_count_agg ? Number((s as Record<string, unknown>).school_count_agg) : 1
       }
       return Object.values(byState)
     }
 
     if (drillLevel === 'cities') {
       const byCity: Record<string, AggData> = {}
-      for (const s of allSchoolData.filter(d => d.state === selectedState)) {
+      for (const s of allSchoolData.filter(d => d.state === selectedState && d.city !== '')) {
         if (!byCity[s.city]) {
           byCity[s.city] = { state: s.state, city: s.city, students: 0, teachers: 0, sponsors: 0, schools: 0 }
         }
         byCity[s.city].students += s.student_count
-        byCity[s.city].schools++
+        byCity[s.city].schools += (s as Record<string, unknown>).school_count_agg ? Number((s as Record<string, unknown>).school_count_agg) : 1
       }
       return Object.values(byCity)
     }
@@ -213,6 +181,21 @@ export default function Mapa() {
     setDrillLevel('cities')
     const coords = STATE_COORDS[state]
     if (coords) { setMapCenter(coords); setMapZoom(7) }
+    // Load city-level data from view
+    supabase.from('school_counts_by_city')
+      .select('state, city, school_count, total_students')
+      .eq('state', state)
+      .then(({ data }) => {
+        if (data) {
+          const cityData = data.map((c: { state: string; city: string; school_count: number; total_students: number }) => ({
+            state: c.state, city: c.city, neighborhood: null as string | null,
+            school_id: '', school_name: '', latitude: null as number | null, longitude: null as number | null,
+            student_count: Number(c.total_students) || 0,
+            school_count_agg: Number(c.school_count) || 0,
+          }))
+          setAllSchoolData(prev => [...prev.filter(s => s.state !== state || s.city === ''), ...cityData])
+        }
+      })
   }
 
   const handleCityClick = (city: string) => {
@@ -318,8 +301,8 @@ export default function Mapa() {
                   <Tooltip permanent direction="center" className="map-label"
                     offset={[0, 0]}>
                     <span style={{ fontSize: '11px', fontWeight: 700, color: '#1F4E79', textShadow: '0 0 3px white, 0 0 3px white' }}>
-                      {drillLevel === 'states' ? item.state : drillLevel === 'cities' ? (item.city?.split(' ')[0] || '') : ''}
-                      {drillLevel === 'states' && <><br/><span style={{ fontSize: '9px', fontWeight: 400 }}>{item.schools.toLocaleString()} esc.</span></>}
+                      {drillLevel === 'states' ? item.state : drillLevel === 'cities' ? (item.city?.length && item.city.length > 12 ? item.city.split(' ')[0] : item.city || '') : drillLevel === 'neighborhoods' ? (item.neighborhood?.split(' ')[0] || '') : ''}
+                      <br/><span style={{ fontSize: '9px', fontWeight: 400 }}>{item.schools.toLocaleString()} esc.</span>
                     </span>
                   </Tooltip>
                   <Popup>
@@ -370,12 +353,12 @@ export default function Mapa() {
           {' '}({markers.length})
         </p>
         <div className="space-y-1 text-xs text-gray-600">
-          <div className="flex justify-between"><span>Boas Acoes</span><span className="font-bold text-[#1F4E79]">{legendCounts.actions}</span></div>
-          <div className="flex justify-between"><span>Alunos</span><span className="font-bold text-[#1F4E79]">{legendCounts.students}</span></div>
-          <div className="flex justify-between"><span>Monitores</span><span className="font-bold text-[#1F4E79]">{legendCounts.mentors}</span></div>
-          <div className="flex justify-between"><span>Pedidos Ajuda</span><span className="font-bold text-[#1F4E79]">{legendCounts.requests}</span></div>
-          <div className="flex justify-between"><span>Professores</span><span className="font-bold text-[#1F4E79]">{legendCounts.teachers}</span></div>
-          <div className="flex justify-between"><span>Patrocinadores</span><span className="font-bold text-[#1F4E79]">{legendCounts.sponsors}</span></div>
+          <div className="flex justify-between"><span>Escolas</span><span className="font-bold text-[#1F4E79]">{markers.reduce((s, m) => s + m.schools, 0).toLocaleString()}</span></div>
+          <div className="flex justify-between"><span>Alunos</span><span className="font-bold text-[#1F4E79]">{legendCounts.students.toLocaleString()}</span></div>
+          <div className="flex justify-between"><span>Boas Acoes</span><span className="font-bold text-[#1F4E79]">{legendCounts.actions.toLocaleString()}</span></div>
+          <div className="flex justify-between"><span>Professores</span><span className="font-bold text-[#1F4E79]">{legendCounts.teachers.toLocaleString()}</span></div>
+          <div className="flex justify-between"><span>Monitores</span><span className="font-bold text-[#1F4E79]">{legendCounts.mentors.toLocaleString()}</span></div>
+          <div className="flex justify-between"><span>Patrocinadores</span><span className="font-bold text-[#1F4E79]">{legendCounts.sponsors.toLocaleString()}</span></div>
         </div>
         <div className="flex items-center gap-3 mt-2 pt-2 border-t border-gray-100">
           <div className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#02C39A]" /><span className="text-[10px] text-gray-500">Com alunos</span></div>
