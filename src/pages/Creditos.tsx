@@ -5,6 +5,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import BottomNav from '../components/BottomNav'
+import QrScanner from '../components/QrScanner'
 
 interface Transaction {
   id: string
@@ -45,6 +46,7 @@ export default function Creditos() {
 
   // Scan states
   const [showScan, setShowScan] = useState(false)
+  const [showCamera, setShowCamera] = useState(false)
   const [scanInput, setScanInput] = useState('')
   const [scanResult, setScanResult] = useState<{ desc: string; amount: number; id: string } | null>(null)
   const [confirmCode, setConfirmCode] = useState('')
@@ -111,7 +113,7 @@ export default function Creditos() {
     }
   }
 
-  const handleTransferGenerate = useCallback(() => {
+  const handleTransferGenerate = useCallback(async () => {
     const amt = parseInt(transferAmount)
     if (!amt || amt <= 0 || amt > credits) return
     const code = `TRNF-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
@@ -119,28 +121,42 @@ export default function Creditos() {
     setTransferStep('qr')
     setTransferExpired(false)
     setTransferTimer(30)
-    // Start 30s countdown
+
+    // Insert pending transfer in DB
+    await supabase.from('pending_transfers').insert({
+      code,
+      sender_id: studentId,
+      amount: amt,
+      status: 'waiting',
+      expires_at: new Date(Date.now() + 30000).toISOString(),
+    })
+
+    // Start 30s countdown + poll for scan
     if (timerRef.current) clearInterval(timerRef.current)
-    timerRef.current = setInterval(() => {
+    timerRef.current = setInterval(async () => {
       setTransferTimer(prev => {
         if (prev <= 1) {
           if (timerRef.current) clearInterval(timerRef.current)
           setTransferExpired(true)
+          // Mark as expired in DB
+          supabase.from('pending_transfers').update({ status: 'expired' }).eq('code', code)
           return 0
         }
         return prev - 1
       })
-    }, 1000)
-  }, [transferAmount, credits])
-
-  const handleTransferScanned = useCallback(() => {
-    // Simulate: friend scanned → now show OTP confirm
-    if (timerRef.current) clearInterval(timerRef.current)
-    const confirmPIN = String(Math.floor(100000 + Math.random() * 900000))
-    setTransferConfirmCode(confirmPIN)
-    setTransferGenerated(confirmPIN)
-    setTransferStep('confirm')
-  }, [])
+      // Poll: check if someone scanned
+      const { data: pt } = await supabase.from('pending_transfers')
+        .select('status, receiver_id').eq('code', code).single()
+      if (pt?.status === 'scanned') {
+        // Friend scanned! Move to confirm step
+        if (timerRef.current) clearInterval(timerRef.current)
+        const confirmPIN = String(Math.floor(100000 + Math.random() * 900000))
+        setTransferConfirmCode(confirmPIN)
+        setTransferGenerated(confirmPIN)
+        setTransferStep('confirm')
+      }
+    }, 2000)
+  }, [transferAmount, credits, studentId])
 
   const resetTransfer = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current)
@@ -155,7 +171,11 @@ export default function Creditos() {
   const handleTransferConfirm = async () => {
     if (transferConfirmCode !== transferGenerated) return
     const amt = parseInt(transferAmount)
-    if (!studentId || !amt) return
+    if (!studentId || !amt || !transferQrCode) return
+
+    // Get receiver from pending_transfers
+    const { data: pt } = await supabase.from('pending_transfers')
+      .select('receiver_id').eq('code', transferQrCode).single()
 
     // Deduct from sender
     await supabase.from('students').update({
@@ -170,6 +190,29 @@ export default function Creditos() {
       balance_after: credits - amt,
       description: `Transferencia enviada (codigo: ${transferQrCode})`,
     })
+
+    // Credit receiver
+    if (pt?.receiver_id) {
+      const { data: recv } = await supabase.from('students')
+        .select('available_points').eq('id', pt.receiver_id).single()
+      if (recv) {
+        await supabase.from('students').update({
+          available_points: (recv.available_points ?? 0) + amt,
+        }).eq('id', pt.receiver_id)
+        await supabase.from('credit_transactions').insert({
+          student_id: pt.receiver_id,
+          type: 'transferred_in',
+          amount: amt,
+          balance_after: (recv.available_points ?? 0) + amt,
+          description: `Transferencia recebida (codigo: ${transferQrCode})`,
+        })
+      }
+    }
+
+    // Mark transfer as confirmed
+    await supabase.from('pending_transfers').update({
+      status: 'confirmed', confirmed_at: new Date().toISOString(),
+    }).eq('code', transferQrCode)
 
     setCredits(prev => prev - amt)
     resetTransfer()
@@ -337,11 +380,7 @@ export default function Creditos() {
                   </div>
                 </div>
                 <p className="text-[10px] text-gray-400 text-center mb-3">O codigo expira em {transferTimer} segundos</p>
-                {/* DEV: botão simular scan */}
-                <button onClick={handleTransferScanned}
-                  className="w-full py-2.5 rounded-lg bg-orange-100 text-orange-700 text-xs font-semibold mb-2">
-                  [MVP] Simular que amigo escaneou
-                </button>
+                <p className="text-xs text-gray-500 text-center mb-3">Aguardando seu amigo escanear o QR Code...</p>
                 <button onClick={resetTransfer} className="w-full py-2 text-gray-400 text-sm">Cancelar</button>
               </>
             )}
@@ -390,6 +429,40 @@ export default function Creditos() {
         </div>
       )}
 
+      {/* QR Camera Scanner */}
+      {showCamera && (
+        <QrScanner
+          onScan={async (data) => {
+            setShowCamera(false)
+            setScanInput(data)
+            // Look up in pending_transfers
+            const { data: pt } = await supabase.from('pending_transfers')
+              .select('id, code, sender_id, amount, status')
+              .eq('code', data).eq('status', 'waiting').single()
+            if (pt && studentId) {
+              // Mark as scanned with my ID
+              await supabase.from('pending_transfers').update({
+                status: 'scanned', receiver_id: studentId, scanned_at: new Date().toISOString(),
+              }).eq('id', pt.id)
+              // Get sender name
+              const { data: sender } = await supabase.from('students')
+                .select('user:users!students_users_id_fkey(name)').eq('id', pt.sender_id).single()
+              const senderName = ((sender?.user as unknown as {name:string})?.name) || 'Aluno'
+              setScanResult({ desc: `Transferencia de ${senderName}`, amount: pt.amount, id: pt.code })
+              const pin = String(Math.floor(100000 + Math.random() * 900000))
+              setConfirmCode(pin); setConfirmGenerated(pin)
+              setShowScan(true)
+            } else {
+              // Not found — maybe a promo code? Show error
+              setScanResult(null)
+              setShowScan(true)
+              alert('Codigo nao encontrado ou expirado.')
+            }
+          }}
+          onClose={() => setShowCamera(false)}
+        />
+      )}
+
       {/* Scan/Use benefit Modal */}
       {showScan && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
@@ -397,15 +470,39 @@ export default function Creditos() {
             {!scanResult ? (
               <>
                 <h3 className="font-bold text-navy text-lg mb-3">Usar beneficio ou receber creditos</h3>
-                <p className="text-xs text-gray-400 mb-3">Digite o codigo do beneficio ou da transferencia.</p>
-                <input type="text" placeholder="Digite o codigo" value={scanInput}
+                <p className="text-xs text-gray-400 mb-3">Escaneie o QR Code ou digite o codigo manualmente.</p>
+                <button onClick={() => { setShowScan(false); setShowCamera(true) }}
+                  className="w-full py-3 rounded-xl bg-teal text-white font-bold text-sm flex items-center justify-center gap-2 mb-3">
+                  <QrCode size={18} /> Escanear QR Code
+                </button>
+                <div className="relative flex items-center justify-center my-2">
+                  <div className="border-t border-gray-200 flex-1" />
+                  <span className="px-3 text-xs text-gray-400">ou</span>
+                  <div className="border-t border-gray-200 flex-1" />
+                </div>
+                <input type="text" placeholder="Digite o codigo manualmente" value={scanInput}
                   onChange={e => setScanInput(e.target.value.toUpperCase())}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-teal focus:outline-none text-center text-lg tracking-widest mb-3" />
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-teal focus:outline-none text-center text-lg tracking-widest mb-3 mt-2" />
                 <div className="flex gap-2">
-                  <button onClick={() => setShowScan(false)} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-500 text-sm">Cancelar</button>
-                  <button onClick={() => {
-                    // Simulate finding the transfer/promo
-                    setScanResult({ desc: `Transferencia recebida (codigo: ${scanInput})`, amount: 10, id: scanInput })
+                  <button onClick={() => { setShowScan(false); setScanInput('') }} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-500 text-sm">Cancelar</button>
+                  <button onClick={async () => {
+                    if (!scanInput || !studentId) return
+                    const { data: pt } = await supabase.from('pending_transfers')
+                      .select('id, code, sender_id, amount, status')
+                      .eq('code', scanInput).eq('status', 'waiting').single()
+                    if (pt) {
+                      await supabase.from('pending_transfers').update({
+                        status: 'scanned', receiver_id: studentId, scanned_at: new Date().toISOString(),
+                      }).eq('id', pt.id)
+                      const { data: sender } = await supabase.from('students')
+                        .select('user:users!students_users_id_fkey(name)').eq('id', pt.sender_id).single()
+                      const senderName = ((sender?.user as unknown as {name:string})?.name) || 'Aluno'
+                      setScanResult({ desc: `Transferencia de ${senderName}`, amount: pt.amount, id: pt.code })
+                      const pin = String(Math.floor(100000 + Math.random() * 900000))
+                      setConfirmCode(pin); setConfirmGenerated(pin)
+                    } else {
+                      alert('Codigo nao encontrado ou expirado.')
+                    }
                   }} disabled={!scanInput}
                     className="flex-1 py-2.5 rounded-lg bg-teal text-white text-sm font-semibold disabled:opacity-50">Buscar</button>
                 </div>
@@ -417,7 +514,13 @@ export default function Creditos() {
                   <p className="text-sm text-navy font-semibold">{scanResult.desc}</p>
                   <p className="text-2xl font-bold text-teal mt-1">+{scanResult.amount} creditos</p>
                 </div>
-                <p className="text-xs text-red-500 text-center font-semibold mb-2">Codigo exibido na tela no MVP (aguardando ativacao do WhatsApp - prazo: 1 a 7 dias)</p>
+                <p className="text-xs text-gray-500 text-center mb-1">
+                  Confirme com o codigo enviado para seu WhatsApp
+                </p>
+                <p className="text-xs text-navy font-semibold text-center mb-2">
+                  {userPhone ? `+${userPhone.replace(/^(\d{2})(\d{2})(\d{5})(\d{4})$/, '$1 $2 $3-$4')}` : 'telefone cadastrado'}
+                </p>
+                <p className="text-xs text-red-500 text-center font-semibold mb-2">Codigo exibido na tela no MVP (aguardando ativacao do WhatsApp)</p>
                 <input type="text" inputMode="numeric" value={confirmCode}
                   onChange={e => setConfirmCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 text-center text-lg tracking-widest mb-3" />
