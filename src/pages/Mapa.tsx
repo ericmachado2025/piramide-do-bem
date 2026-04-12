@@ -93,29 +93,37 @@ export default function Mapa() {
     load()
   }, [])
 
-  // Load legend counts based on current scope
+  // Load legend counts based on current scope (filtered by drill level)
   useEffect(() => {
     async function loadCounts() {
-      const totalStudents = allSchoolData.reduce((sum, s) => sum + s.student_count, 0)
+      const scopeState = (drillLevel !== 'states' && selectedState) ? selectedState : null
+      const scopeCity = (drillLevel !== 'states' && drillLevel !== 'cities' && selectedCity) ? selectedCity : null
+      const scopeNeighborhood = (drillLevel === 'schools' && selectedNeighborhood) ? selectedNeighborhood : null
 
-      // Global counts (efficient head queries)
-      const { count: actionsCount } = await supabase.from('actions').select('*', { count: 'exact', head: true }).eq('status', 'validated')
-      const { count: monitorsCount } = await supabase.from('monitors').select('*', { count: 'exact', head: true })
-      const { count: requestsCount } = await supabase.from('help_requests').select('*', { count: 'exact', head: true })
-      const { count: teachersCount } = await supabase.from('teachers').select('*', { count: 'exact', head: true })
-      const { count: sponsorsCount } = await supabase.from('sponsors').select('*', { count: 'exact', head: true }).eq('active', true)
+      const { data } = await supabase.rpc('get_map_counts', {
+        p_state: scopeState,
+        p_city: scopeCity,
+        p_neighborhood: scopeNeighborhood,
+      })
+
+      // Students: sum from allSchoolData filtered by current scope
+      let filtered = allSchoolData
+      if (scopeState) filtered = filtered.filter(s => s.state === scopeState)
+      if (scopeCity) filtered = filtered.filter(s => s.city === scopeCity)
+      if (scopeNeighborhood) filtered = filtered.filter(s => (s.neighborhood || 'Sem bairro') === scopeNeighborhood)
+      const totalStudents = filtered.reduce((sum, s) => sum + s.student_count, 0)
 
       setLegendCounts({
-        actions: actionsCount ?? 0,
+        actions: data?.actions ?? 0,
         students: totalStudents,
-        mentors: monitorsCount ?? 0,
-        requests: requestsCount ?? 0,
-        teachers: teachersCount ?? 0,
-        sponsors: sponsorsCount ?? 0,
+        mentors: data?.monitors ?? 0,
+        requests: 0,
+        teachers: data?.teachers ?? 0,
+        sponsors: data?.sponsors ?? 0,
       })
     }
     if (!loading) loadCounts()
-  }, [allSchoolData, loading])
+  }, [allSchoolData, loading, drillLevel, selectedState, selectedCity, selectedNeighborhood])
 
   // Aggregate by current drill level
   const markers = useMemo((): AggData[] => {
