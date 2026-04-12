@@ -95,16 +95,20 @@ export default function Home() {
       if (params.get('transfer') || path.includes('/creditos')) {
         const code = params.get('transfer')
         if (code && student) {
-          const { data: pt, error } = await supabase.from('pending_transfers')
-            .select('id, sender_id, amount, status').eq('code', code).eq('status', 'waiting').single()
-          if (error || !pt) {
-            setTransferMsg('Codigo de transferencia invalido ou expirado.')
-            return
+          try {
+            const { data: pt, error } = await supabase.from('pending_transfers')
+              .select('id, sender_id, amount, status').eq('code', code).eq('status', 'waiting').single()
+            if (error || !pt) {
+              setTransferMsg('Codigo de transferencia invalido ou expirado.')
+              return
+            }
+            await supabase.from('pending_transfers')
+              .update({ status: 'scanned', receiver_id: (student as any).id, scanned_at: new Date().toISOString() })
+              .eq('id', pt.id)
+            setTransferMsg(`Transferencia de ${pt.amount} creditos registrada! Aguarde a confirmacao do remetente.`)
+          } catch {
+            setTransferMsg('Erro ao processar transferencia. Tente novamente.')
           }
-          await supabase.from('pending_transfers')
-            .update({ status: 'scanned', receiver_id: (student as any).id, scanned_at: new Date().toISOString() })
-            .eq('id', pt.id)
-          setTransferMsg(`Transferencia de ${pt.amount} creditos registrada! Aguarde a confirmacao do remetente.`)
         } else {
           navigate('/creditos')
         }
@@ -128,7 +132,7 @@ export default function Home() {
         return
       }
     }
-    alert('QR Code nao reconhecido')
+    setTransferMsg('QR Code nao reconhecido.')
   }, [navigate, student])
 
   useEffect(() => {
