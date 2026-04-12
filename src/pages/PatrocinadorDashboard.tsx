@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import AvatarUpload from '../components/AvatarUpload'
 
 interface Reward {
   id: string
@@ -269,9 +270,14 @@ export default function PatrocinadorDashboard() {
       {/* Header */}
       <div className="text-white px-4 py-6" style={{ background: 'linear-gradient(135deg, #1F4E79 0%, #028090 100%)' }}>
         <div className="max-w-lg mx-auto flex items-center justify-between">
-          <div>
-            <p className="text-sm opacity-80">Area do Patrocinador</p>
-            <h1 className="text-xl font-extrabold">{businessName}</h1>
+          <div className="flex items-center gap-3">
+            <AvatarUpload userId={user?.id || ''} currentUrl={null} size={50}
+              initials={businessName?.slice(0, 2).toUpperCase() || 'P'}
+              onUploaded={() => {}} />
+            <div>
+              <p className="text-sm opacity-80">Area do Patrocinador</p>
+              <h1 className="text-xl font-extrabold">{businessName}</h1>
+            </div>
           </div>
           <button onClick={handleSignOut} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 transition-colors text-sm font-semibold">
             <LogOut className="w-4 h-4" /> Sair
