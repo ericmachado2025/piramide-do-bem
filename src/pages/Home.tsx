@@ -278,6 +278,9 @@ export default function Home() {
               </div>
               <div className="flex justify-between mt-1">
                 <span className="text-white/60 text-xs">{student.total_points} pts</span>
+                <Link to="/creditos" className="text-green text-xs font-semibold hover:text-white transition-colors">
+                  {'\u{1F4B0}'} {student.available_points ?? 0} creditos
+                </Link>
                 <span className="text-white/60 text-xs">{student.community?.name ?? 'Sem comunidade'}</span>
               </div>
             </div>
