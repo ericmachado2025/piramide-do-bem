@@ -74,18 +74,30 @@ export default function Login() {
     setLoading(true)
     setError('')
 
-    // Check if user exists
-    const { data: userRec } = await supabase.from('users').select('name').eq('email', email).maybeSingle()
-    
-    if (userRec) {
-      // Existing user — go directly to password step
-      setUserName(userRec.name || '')
+    // Detectar se email existe via tentativa de login com senha invalida
+    // "Invalid login credentials" = email existe → pedir senha
+    // Qualquer outro erro = email não existe → cadastro
+    const { error: probeError } = await supabase.auth.signInWithPassword({
+      email,
+      password: '___probe___',
+    })
+    const msg = (probeError?.message || '').toLowerCase()
+    const emailExists = msg.includes('invalid login credentials') ||
+      msg.includes('invalid credentials') ||
+      msg.includes('email not confirmed') ||
+      msg.includes('not confirmed') ||
+      msg.includes('database error')
+
+    if (emailExists) {
+      // Buscar nome para exibir (pode falhar se users não acessível, ok)
+      const { data: userRec } = await supabase.from('users').select('name').eq('email', email).maybeSingle()
+      setUserName(userRec?.name || '')
       setStep('senha')
       setLoading(false)
       return
     }
 
-    // New user — send OTP for registration
+    // Email não existe — enviar OTP para cadastro
     const { error: otpErr } = await supabase.auth.signInWithOtp({
       email,
       options: { shouldCreateUser: true },
