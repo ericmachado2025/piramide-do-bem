@@ -13,6 +13,7 @@ import {
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import AttendanceSheet from '../components/AttendanceSheet'
+import AvatarUpload from '../components/AvatarUpload'
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -334,9 +335,14 @@ export default function ProfessorDashboard() {
       {/* Header */}
       <header className="bg-gradient-to-r from-[#1F4E79] to-[#028090] px-6 pt-12 pb-6">
         <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white">{teacherName || 'Professor'}</h1>
-            <p className="text-white/70 text-sm mt-1">{schoolName}</p>
+          <div className="flex items-center gap-3">
+            <AvatarUpload userId={user?.id || ''} currentUrl={null} size={56}
+              initials={teacherName?.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() || 'P'}
+              onUploaded={() => {}} />
+            <div>
+              <h1 className="text-2xl font-bold text-white">{teacherName || 'Professor'}</h1>
+              <p className="text-white/70 text-sm mt-1">{schoolName}</p>
+            </div>
           </div>
           <button
             onClick={handleSignOut}
