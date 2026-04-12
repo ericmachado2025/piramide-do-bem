@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import AttendanceSheet from '../components/AttendanceSheet'
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -51,6 +52,7 @@ export default function ProfessorDashboard() {
   const [schoolName, setSchoolName] = useState('')
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [selectedAssignment, setSelectedAssignment] = useState('')
+  const [teacherId, setTeacherId] = useState<string | null>(null)
 
   // Metrics
   const [totalAlunos, setTotalAlunos] = useState(0)
@@ -60,6 +62,7 @@ export default function ProfessorDashboard() {
 
   // Fraud alerts
   const [alerts, setAlerts] = useState<FraudAlert[]>([])
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'chamada'>('dashboard')
 
   // Tribe ranking
   const [tribeRanking, setTribeRanking] = useState<TribeRank[]>([])
@@ -79,6 +82,7 @@ export default function ProfessorDashboard() {
 
       if (!teacher) { setLoading(false); return }
 
+      setTeacherId(teacher.id)
       setTeacherName((teacher as any).user?.name || teacher.name)
 
       // Get school name
@@ -345,6 +349,53 @@ export default function ProfessorDashboard() {
       </header>
 
       <div className="max-w-4xl mx-auto px-4 -mt-4 pb-12">
+        {/* Tabs */}
+        <div className="flex gap-2 mb-4">
+          {([
+            { k: 'dashboard' as const, label: 'Painel' },
+            { k: 'chamada' as const, label: 'Chamada' },
+          ]).map(({ k, label }) => (
+            <button key={k} onClick={() => setActiveTab(k)}
+              className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                activeTab === k ? 'bg-white text-navy shadow-sm' : 'bg-white/30 text-white/80'
+              }`}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'chamada' ? (
+          <>
+            {/* Assignment selector for attendance */}
+            {assignments.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-sm p-4 mb-4">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">
+                  Selecione a turma
+                </label>
+                <select
+                  className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#028090]/40"
+                  value={selectedAssignment}
+                  onChange={(e) => setSelectedAssignment(e.target.value)}>
+                  {assignments.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.classroom.grade} {a.classroom.section} - {a.subject.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {currentClassroomId && teacherId ? (
+              <div className="bg-white rounded-2xl shadow-sm p-4">
+                <AttendanceSheet classroomId={currentClassroomId} teacherId={teacherId} />
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl shadow-sm p-8 text-center">
+                <p className="text-gray-400">Selecione uma turma para fazer a chamada.</p>
+              </div>
+            )}
+          </>
+        ) : (
+        <>
         {/* Assignment selector */}
         {assignments.length > 0 && (
           <div className="bg-white rounded-2xl shadow-sm p-4 mb-6">
@@ -461,6 +512,8 @@ export default function ProfessorDashboard() {
             Dados agregados — sem informacoes individuais de alunos (LGPD)
           </p>
         </div>
+        </>
+        )}
       </div>
     </div>
   )
