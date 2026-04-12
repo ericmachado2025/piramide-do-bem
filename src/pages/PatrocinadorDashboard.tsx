@@ -50,6 +50,15 @@ export default function PatrocinadorDashboard() {
   const [redemptions, setRedemptions] = useState<Redemption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [activeTab, setActiveTab] = useState<'rewards' | 'promotions'>('rewards')
+
+  // Promotions
+  const [promotions, setPromotions] = useState<{ id: string; title: string; description: string | null; discount_percent: number | null; active: boolean }[]>([])
+  const [showPromoForm, setShowPromoForm] = useState(false)
+  const [promoTitle, setPromoTitle] = useState('')
+  const [promoDesc, setPromoDesc] = useState('')
+  const [promoDiscount, setPromoDiscount] = useState('')
+  const [promoMinTier, setPromoMinTier] = useState(1)
 
   // New reward form
   const [showForm, setShowForm] = useState(false)
@@ -116,6 +125,14 @@ export default function PatrocinadorDashboard() {
           }
         })
       )
+
+      // Load promotions
+      const { data: promos } = await supabase.from('promotions')
+        .select('id, title, description, discount_percent, active')
+        .eq('sponsor_id', sponsorData.id)
+        .order('created_at', { ascending: false })
+      if (promos) setPromotions(promos)
+
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao carregar dados.'
       setError(message)
@@ -172,6 +189,30 @@ export default function PatrocinadorDashboard() {
   const handleSignOut = async () => {
     await signOut()
     navigate('/')
+  }
+
+  const handleCreatePromo = async () => {
+    if (!promoTitle.trim() || !sponsorId) return
+    const { data } = await supabase.from('promotions').insert({
+      sponsor_id: sponsorId,
+      title: promoTitle,
+      description: promoDesc || null,
+      discount_percent: promoDiscount ? parseInt(promoDiscount) : null,
+      min_tier: promoMinTier,
+      active: true,
+    }).select().single()
+    if (data) setPromotions(prev => [data, ...prev])
+    setPromoTitle(''); setPromoDesc(''); setPromoDiscount(''); setShowPromoForm(false)
+  }
+
+  const handleTogglePromo = async (promoId: string, currentActive: boolean) => {
+    await supabase.from('promotions').update({ active: !currentActive }).eq('id', promoId)
+    setPromotions(prev => prev.map(p => p.id === promoId ? { ...p, active: !currentActive } : p))
+  }
+
+  const handleDeletePromo = async (promoId: string) => {
+    await supabase.from('promotions').delete().eq('id', promoId)
+    setPromotions(prev => prev.filter(p => p.id !== promoId))
   }
 
   const totalRewards = rewards.length
@@ -252,6 +293,86 @@ export default function PatrocinadorDashboard() {
             <p className="text-xs text-gray-400">Total resgatadas</p>
           </div>
         </div>
+
+        {/* Tabs */}
+        <div className="flex gap-2">
+          <button onClick={() => setActiveTab('rewards')}
+            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors ${activeTab === 'rewards' ? 'bg-teal text-white' : 'bg-gray-100 text-gray-500'}`}>
+            Recompensas
+          </button>
+          <button onClick={() => setActiveTab('promotions')}
+            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors ${activeTab === 'promotions' ? 'bg-teal text-white' : 'bg-gray-100 text-gray-500'}`}>
+            Promocoes
+          </button>
+        </div>
+
+        {activeTab === 'promotions' ? (
+          <div className="bg-white rounded-2xl shadow-lg p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-lg" style={{ color: '#1F4E79' }}>Minhas Promocoes</h3>
+              <button onClick={() => setShowPromoForm(true)} className="text-sm font-semibold text-teal">+ Nova</button>
+            </div>
+
+            {showPromoForm && (
+              <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                <input type="text" placeholder="Titulo da promocao" value={promoTitle}
+                  onChange={e => setPromoTitle(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 focus:border-teal focus:outline-none text-sm" />
+                <textarea placeholder="Descricao (opcional)" value={promoDesc}
+                  onChange={e => setPromoDesc(e.target.value)} rows={2}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-teal focus:outline-none text-sm resize-none" />
+                <div className="flex gap-2">
+                  <input type="number" placeholder="% desconto" value={promoDiscount}
+                    onChange={e => setPromoDiscount(e.target.value)}
+                    className="flex-1 px-3 py-2.5 rounded-lg border border-gray-200 focus:border-teal focus:outline-none text-sm" />
+                  <select value={promoMinTier} onChange={e => setPromoMinTier(Number(e.target.value))}
+                    className="flex-1 px-3 py-2.5 rounded-lg border border-gray-200 text-sm">
+                    <option value={1}>Tier 1+</option>
+                    <option value={2}>Tier 2+</option>
+                    <option value={3}>Tier 3+</option>
+                    <option value={4}>Tier 4+</option>
+                    <option value={5}>Tier 5+</option>
+                  </select>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setShowPromoForm(false)} className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-500 text-sm">Cancelar</button>
+                  <button onClick={handleCreatePromo} disabled={!promoTitle.trim()}
+                    className="flex-1 py-2 rounded-lg bg-teal text-white text-sm font-semibold disabled:opacity-50">Criar</button>
+                </div>
+              </div>
+            )}
+
+            {promotions.length === 0 && !showPromoForm ? (
+              <div className="text-center py-6">
+                <span className="text-4xl block mb-2">{'\u{1F381}'}</span>
+                <p className="text-gray-400 text-sm">Nenhuma promocao ainda. Crie sua primeira!</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {promotions.map(p => (
+                  <div key={p.id} className={`rounded-xl p-3 border ${p.active ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-navy">{p.title}</p>
+                        {p.description && <p className="text-xs text-gray-500">{p.description}</p>}
+                        {p.discount_percent && <span className="text-xs font-bold text-teal">{p.discount_percent}% OFF</span>}
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleTogglePromo(p.id, p.active)}
+                          className={`text-xs px-2 py-1 rounded ${p.active ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
+                          {p.active ? 'Pausar' : 'Ativar'}
+                        </button>
+                        <button onClick={() => handleDeletePromo(p.id)}
+                          className="text-xs px-2 py-1 rounded bg-red-100 text-red-700">Excluir</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+        <>
 
         {/* My Rewards */}
         <div className="bg-white rounded-2xl shadow-lg p-6">
@@ -396,6 +517,8 @@ export default function PatrocinadorDashboard() {
             </div>
           )}
         </div>
+        </>
+        )}
       </div>
     </div>
   )
