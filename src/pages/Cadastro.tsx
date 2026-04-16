@@ -127,9 +127,9 @@ function getNivelByAge(age: number | null): string {
 
 // Normal flow: 2=Nome, 4=Nascimento, 5=Escola, 7=LGPD (email/password/phone handled in Login)
 // Google flow: 4=Nascimento, 5=Escola, 7=LGPD (Google has name)
-const NORMAL_STEPS = [2, 4, 5, 7]  // Nome, Nascimento, Escola, LGPD
-const NORMAL_STEPS_WITH_EMAIL = [2, 4, 5, 7]
-const GOOGLE_STEPS = [4, 5, 7]  // Nascimento, Escola, LGPD (Google has name)
+const NORMAL_STEPS = [2, 4, 5, 6, 7]  // Nome, Nascimento, Escola, WhatsApp, LGPD
+const NORMAL_STEPS_WITH_EMAIL = [2, 4, 5, 6, 7]
+const GOOGLE_STEPS = [4, 5, 6, 7]  // Nascimento, Escola, WhatsApp, LGPD (Google has name)
 
 export default function Cadastro() {
   const navigate = useNavigate()
@@ -470,6 +470,16 @@ export default function Cadastro() {
         setEmailError('Erro ao criar perfil. Tente novamente.')
         setSubmitting(false)
         return
+      }
+
+      // Gravar phone/whatsapp na tabela users (complemento ao trigger handle_new_auth_user)
+      const fullWhatsapp = phoneFromUrl || (form.whatsapp.replace(/\D/g, '') ? (form.whatsappCountryCode + form.whatsapp.replace(/\D/g, '')) : null)
+      if (fullWhatsapp) {
+        await supabase.from('users').update({
+          phone: fullWhatsapp,
+          whatsapp: fullWhatsapp,
+          updated_at: new Date().toISOString()
+        }).eq('auth_id', authUserId)
       }
 
       // Create classroom and enrollment

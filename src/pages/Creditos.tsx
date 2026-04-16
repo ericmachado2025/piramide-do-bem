@@ -125,9 +125,15 @@ export default function Creditos() {
       setCredits(data.available_points ?? 0)
       setTotalPoints(data.total_points ?? 0)
     }
-    // Load phone
-    const { data: u } = await supabase.from('users').select('phone').eq('auth_id', user!.id).single()
+    // Load phone (users.phone > students.whatsapp > students.phone como fallback)
+    const { data: u } = await supabase.from('users').select('phone, whatsapp').eq('auth_id', user!.id).single()
     if (u?.phone) setUserPhone(u.phone)
+    else if (u?.whatsapp) setUserPhone(u.whatsapp)
+    else if (data) {
+      const { data: st } = await supabase.from('students').select('whatsapp, phone').eq('id', data.id).single()
+      if (st?.whatsapp) setUserPhone(st.whatsapp)
+      else if (st?.phone) setUserPhone(st.phone)
+    }
     setLoading(false)
   }
 
@@ -202,8 +208,18 @@ export default function Creditos() {
         // Friend scanned! Move to confirm step
         if (timerRef.current) clearInterval(timerRef.current)
         const confirmPIN = String(Math.floor(100000 + Math.random() * 900000))
-        setTransferConfirmCode(confirmPIN)
+        setTransferConfirmCode('')
         setTransferGenerated(confirmPIN)
+        // Enviar código via WhatsApp
+        if (userPhone) {
+          const phoneNum = userPhone.replace(/\D/g, '')
+          const formattedPhone = phoneNum.startsWith('+') ? phoneNum : `+${phoneNum}`
+          fetch(`${import.meta.env.VITE_SUPABASE_URL || 'https://frdpscbdtudaulscexyp.supabase.co'}/functions/v1/send-verification`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZyZHBzY2JkdHVkYXVsc2NleHlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMzQ4MzEsImV4cCI6MjA5MDgxMDgzMX0.acvN82Uwmcfy7v5WQfQ-lSLGuYZp7UI2Oyxvbaxlt3o'}` },
+            body: JSON.stringify({ to: formattedPhone, channel: 'whatsapp', code: confirmPIN, type: 'transfer_confirm' })
+          }).catch(() => {})
+        }
         setTransferStep('confirm')
       }
     }, 2000)
@@ -321,7 +337,7 @@ export default function Creditos() {
             className="flex-1 py-2.5 rounded-xl bg-white/20 text-white text-sm font-semibold flex items-center justify-center gap-2">
             <Send size={14} /> Transferir
           </button>
-          <button onClick={() => { setShowScan(true); const c = String(Math.floor(100000 + Math.random() * 900000)); setConfirmGenerated(c); setConfirmCode(c) }}
+          <button onClick={() => { setShowScan(true); setConfirmCode(''); setConfirmGenerated(''); setScanResult(null); setScanInput('') }}
             className="flex-1 py-2.5 rounded-xl bg-white/20 text-white text-sm font-semibold flex items-center justify-center gap-2">
             <QrCode size={14} /> Usar beneficio
           </button>
@@ -540,9 +556,8 @@ export default function Creditos() {
                   Confirme a transferencia com o codigo enviado para seu WhatsApp
                 </p>
                 <p className="text-xs text-navy font-semibold text-center mb-2">
-                  {userPhone ? `+${userPhone.replace(/^(\d{2})(\d{2})(\d{5})(\d{4})$/, '$1 $2 $3-$4')}` : 'telefone cadastrado'}
+                  {userPhone ? `+${userPhone.replace(/^(\d{2})(\d{2})(\d{5})(\d{4})$/, '$1 $2 $3-$4')}` : 'Cadastre seu WhatsApp no perfil'}
                 </p>
-                <p className="text-xs text-red-500 text-center font-semibold mb-2">Codigo exibido na tela no MVP (aguardando ativacao do WhatsApp)</p>
                 <input type="text" inputMode="numeric" value={transferConfirmCode}
                   onChange={e => setTransferConfirmCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 text-center text-lg tracking-widest mb-3" />
@@ -579,7 +594,17 @@ export default function Creditos() {
               const senderName = ((sender?.user as unknown as {name:string})?.name) || 'Aluno'
               setScanResult({ desc: `Transferencia de ${senderName}`, amount: pt.amount, id: pt.code })
               const pin = String(Math.floor(100000 + Math.random() * 900000))
-              setConfirmCode(pin); setConfirmGenerated(pin)
+              setConfirmCode(''); setConfirmGenerated(pin)
+              // Enviar código via WhatsApp
+              if (userPhone) {
+                const phoneNum = userPhone.replace(/\D/g, '')
+                const formattedPhone = phoneNum.startsWith('+') ? phoneNum : `+${phoneNum}`
+                fetch(`${import.meta.env.VITE_SUPABASE_URL || 'https://frdpscbdtudaulscexyp.supabase.co'}/functions/v1/send-verification`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZyZHBzY2JkdHVkYXVsc2NleHlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMzQ4MzEsImV4cCI6MjA5MDgxMDgzMX0.acvN82Uwmcfy7v5WQfQ-lSLGuYZp7UI2Oyxvbaxlt3o'}` },
+                  body: JSON.stringify({ to: formattedPhone, channel: 'whatsapp', code: pin, type: 'benefit_confirm' })
+                }).catch(() => {})
+              }
               setShowScan(true)
             } else {
               // Not found — maybe a promo code? Show error
@@ -628,7 +653,16 @@ export default function Creditos() {
                       const senderName = ((sender?.user as unknown as {name:string})?.name) || 'Aluno'
                       setScanResult({ desc: `Transferencia de ${senderName}`, amount: pt.amount, id: pt.code })
                       const pin = String(Math.floor(100000 + Math.random() * 900000))
-                      setConfirmCode(pin); setConfirmGenerated(pin)
+                      setConfirmCode(''); setConfirmGenerated(pin)
+                      if (userPhone) {
+                        const phoneNum = userPhone.replace(/\D/g, '')
+                        const formattedPhone = phoneNum.startsWith('+') ? phoneNum : `+${phoneNum}`
+                        fetch(`${import.meta.env.VITE_SUPABASE_URL || 'https://frdpscbdtudaulscexyp.supabase.co'}/functions/v1/send-verification`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZyZHBzY2JkdHVkYXVsc2NleHlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMzQ4MzEsImV4cCI6MjA5MDgxMDgzMX0.acvN82Uwmcfy7v5WQfQ-lSLGuYZp7UI2Oyxvbaxlt3o'}` },
+                          body: JSON.stringify({ to: formattedPhone, channel: 'whatsapp', code: pin, type: 'benefit_confirm' })
+                        }).catch(() => {})
+                      }
                     } else {
                       alert('Codigo nao encontrado ou expirado.')
                     }
@@ -647,9 +681,8 @@ export default function Creditos() {
                   Confirme com o codigo enviado para seu WhatsApp
                 </p>
                 <p className="text-xs text-navy font-semibold text-center mb-2">
-                  {userPhone ? `+${userPhone.replace(/^(\d{2})(\d{2})(\d{5})(\d{4})$/, '$1 $2 $3-$4')}` : 'telefone cadastrado'}
+                  {userPhone ? `+${userPhone.replace(/^(\d{2})(\d{2})(\d{5})(\d{4})$/, '$1 $2 $3-$4')}` : 'Cadastre seu WhatsApp no perfil'}
                 </p>
-                <p className="text-xs text-red-500 text-center font-semibold mb-2">Codigo exibido na tela no MVP (aguardando ativacao do WhatsApp)</p>
                 <input type="text" inputMode="numeric" value={confirmCode}
                   onChange={e => setConfirmCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 text-center text-lg tracking-widest mb-3" />
