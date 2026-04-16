@@ -556,7 +556,7 @@ export default function Creditos() {
                   Confirme a transferencia com o codigo enviado para seu WhatsApp
                 </p>
                 <p className="text-xs text-navy font-semibold text-center mb-2">
-                  {userPhone ? `+${userPhone.replace(/^(\d{2})(\d{2})(\d{5})(\d{4})$/, '$1 $2 $3-$4')}` : 'Cadastre seu WhatsApp no perfil'}
+                  {userPhone ? `+${userPhone.replace(/^\+/, '').replace(/^(\d{2})(\d{2})(\d{5})(\d{4})$/, '$1 $2 $3-$4')}` : 'Cadastre seu WhatsApp no perfil'}
                 </p>
                 <input type="text" inputMode="numeric" value={transferConfirmCode}
                   onChange={e => setTransferConfirmCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
@@ -681,7 +681,7 @@ export default function Creditos() {
                   Confirme com o codigo enviado para seu WhatsApp
                 </p>
                 <p className="text-xs text-navy font-semibold text-center mb-2">
-                  {userPhone ? `+${userPhone.replace(/^(\d{2})(\d{2})(\d{5})(\d{4})$/, '$1 $2 $3-$4')}` : 'Cadastre seu WhatsApp no perfil'}
+                  {userPhone ? `+${userPhone.replace(/^\+/, '').replace(/^(\d{2})(\d{2})(\d{5})(\d{4})$/, '$1 $2 $3-$4')}` : 'Cadastre seu WhatsApp no perfil'}
                 </p>
                 <input type="text" inputMode="numeric" value={confirmCode}
                   onChange={e => setConfirmCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
