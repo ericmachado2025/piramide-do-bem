@@ -31,6 +31,7 @@ import ResponsavelDashboard from './pages/ResponsavelDashboard'
 import PatrocinadorCadastro from './pages/PatrocinadorCadastro'
 import PatrocinadorDashboard from './pages/PatrocinadorDashboard'
 import AutorizarResponsavel from './pages/AutorizarResponsavel'
+import Confirmar from './pages/Confirmar'
 import VerificationGuard from './components/VerificationGuard'
 
 export default function App() {
@@ -46,6 +47,7 @@ export default function App() {
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/estatisticas" element={<Estatisticas />} />
           <Route path="/autorizar" element={<AutorizarResponsavel />} />
+          <Route path="/confirmar/:token" element={<Confirmar />} />
 
           {/* Aluno — protegido */}
           <Route path="/tribo" element={<EscolhaTribo />} />
