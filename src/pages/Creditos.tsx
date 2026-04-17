@@ -46,6 +46,11 @@ export default function Creditos() {
   const [userPhone, setUserPhone] = useState('')
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // Operation token for new transfer flow
+  const [operationToken, setOperationToken] = useState<string | null>(null)
+  const [userName, setUserName] = useState('')
+  const [userEmail, setUserEmail] = useState('')
+
   // State for incoming transfer notification
   const [incomingTransfer, setIncomingTransfer] = useState<{ amount: number; senderName: string } | null>(null)
 
@@ -126,8 +131,10 @@ export default function Creditos() {
       setCredits(data.available_points ?? 0)
       setTotalPoints(data.total_points ?? 0)
     }
-    // Load phone (users.phone > students.whatsapp > students.phone como fallback)
-    const { data: u } = await supabase.from('users').select('phone, whatsapp').eq('auth_id', user!.id).single()
+    // Load phone and name/email
+    const { data: u } = await supabase.from('users').select('name, email, phone, whatsapp').eq('auth_id', user!.id).single()
+    if (u?.name) setUserName(u.name)
+    if (u?.email) setUserEmail(u.email)
     if (u?.phone) setUserPhone(u.phone)
     else if (u?.whatsapp) setUserPhone(u.whatsapp)
     else if (data) {
@@ -173,58 +180,85 @@ export default function Creditos() {
 
   const handleTransferGenerate = useCallback(async () => {
     const amt = parseInt(transferAmount)
-    if (!amt || amt <= 0 || amt > credits) return
+    if (!amt || amt <= 0 || amt > credits || !studentId) return
     const code = `TRNF-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
     setTransferQrCode(code)
     setTransferStep('qr')
     setTransferExpired(false)
     setTransferTimer(30)
 
-    // Insert pending transfer in DB
-    await supabase.from('pending_transfers').insert({
+    // Insert pending transfer
+    const { data: ptData } = await supabase.from('pending_transfers').insert({
       code,
       sender_id: studentId,
       amount: amt,
       status: 'waiting',
+      sender_name: userName,
+      sender_email: userEmail,
       expires_at: new Date(Date.now() + 30000).toISOString(),
-    })
+    }).select('id').single()
 
-    // Start 30s countdown + poll for scan
+    // Create operation_token linked to pending_transfer
+    const { data: otData } = await supabase.from('operation_tokens').insert({
+      user_id: user!.id,
+      operation_type: 'transfer',
+      target_id: ptData?.id || null,
+      payload: { amount: amt, sender_name: userName, sender_email: userEmail, direction: 'out' },
+      expires_at: new Date(Date.now() + 30000).toISOString(),
+    }).select('id, token').single()
+
+    if (otData) {
+      setOperationToken(otData.token)
+
+      // Link operation_token to pending_transfer
+      if (ptData?.id) {
+        await supabase.from('pending_transfers')
+          .update({ operation_token_id: otData.id })
+          .eq('id', ptData.id)
+      }
+
+      // Subscribe to Realtime for approval
+      const channel = supabase
+        .channel(`transfer-${otData.id}`)
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'operation_tokens',
+          filter: `id=eq.${otData.id}`,
+        }, (payload) => {
+          const updated = payload.new as { status: string }
+          if (updated.status === 'approved') {
+            supabase.removeChannel(channel)
+            if (timerRef.current) clearInterval(timerRef.current)
+            // Transfer approved! Show success and refresh
+            setIncomingTransfer({ amount: amt, senderName: 'destinatario' })
+            resetTransfer()
+            loadTransactions(0, true)
+            // Reload credits
+            supabase.from('students').select('available_points').eq('id', studentId).single()
+              .then(({ data: s }) => { if (s) setCredits(s.available_points ?? 0) })
+          }
+        })
+        .subscribe()
+    }
+
+    // Start 30s countdown
     if (timerRef.current) clearInterval(timerRef.current)
-    timerRef.current = setInterval(async () => {
+    timerRef.current = setInterval(() => {
       setTransferTimer(prev => {
         if (prev <= 1) {
           if (timerRef.current) clearInterval(timerRef.current)
           setTransferExpired(true)
-          // Mark as expired in DB
           supabase.from('pending_transfers').update({ status: 'expired' }).eq('code', code)
+          if (otData) {
+            supabase.from('operation_tokens').update({ status: 'expired' }).eq('id', otData.id)
+          }
           return 0
         }
         return prev - 1
       })
-      // Poll: check if someone scanned
-      const { data: pt } = await supabase.from('pending_transfers')
-        .select('status, receiver_id').eq('code', code).single()
-      if (pt?.status === 'scanned') {
-        // Friend scanned! Move to confirm step
-        if (timerRef.current) clearInterval(timerRef.current)
-        const confirmPIN = String(Math.floor(100000 + Math.random() * 900000))
-        setTransferConfirmCode('')
-        setTransferGenerated(confirmPIN)
-        // Enviar código via WhatsApp
-        if (userPhone) {
-          const phoneNum = userPhone.replace(/\D/g, '')
-          const formattedPhone = phoneNum.startsWith('+') ? phoneNum : `+${phoneNum}`
-          fetch(`${import.meta.env.VITE_SUPABASE_URL || 'https://frdpscbdtudaulscexyp.supabase.co'}/functions/v1/send-verification`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZyZHBzY2JkdHVkYXVsc2NleHlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMzQ4MzEsImV4cCI6MjA5MDgxMDgzMX0.acvN82Uwmcfy7v5WQfQ-lSLGuYZp7UI2Oyxvbaxlt3o'}` },
-            body: JSON.stringify({ to: formattedPhone, channel: 'whatsapp', code: confirmPIN, type: 'transfer_confirm' })
-          }).catch(() => {})
-        }
-        setTransferStep('confirm')
-      }
-    }, 2000)
-  }, [transferAmount, credits, studentId])
+    }, 1000)
+  }, [transferAmount, credits, studentId, userName, userEmail, user])
 
   const resetTransfer = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current)
@@ -234,6 +268,7 @@ export default function Creditos() {
     setTransferQrCode(null)
     setTransferExpired(false)
     setTransferTimer(30)
+    setOperationToken(null)
   }, [])
 
   const handleTransferConfirm = async () => {
@@ -517,7 +552,7 @@ export default function Creditos() {
                 <h3 className="font-bold text-navy text-lg mb-2">QR Code gerado!</h3>
                 <p className="text-xs text-gray-400 mb-3">Peca para seu amigo escanear este codigo para prosseguir com a transferencia.</p>
                 <div className="bg-gray-50 rounded-xl p-6 flex flex-col items-center mb-3">
-                  <QRCodeSVG value={`${window.location.origin}/home?transfer=${transferQrCode || ''}`} size={180} level="M" />
+                  <QRCodeSVG value={operationToken ? `${window.location.origin}/confirmar/${operationToken}` : `${window.location.origin}/home?transfer=${transferQrCode || ''}`} size={180} level="M" />
                   <p className="text-sm text-teal font-bold mt-3">{transferAmount} creditos</p>
                 </div>
                 <div className="flex items-center justify-center gap-2 mb-3">
