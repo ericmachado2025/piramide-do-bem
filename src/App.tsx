@@ -32,6 +32,7 @@ import PatrocinadorCadastro from './pages/PatrocinadorCadastro'
 import PatrocinadorDashboard from './pages/PatrocinadorDashboard'
 import AutorizarResponsavel from './pages/AutorizarResponsavel'
 import Confirmar from './pages/Confirmar'
+import LoginQr from './pages/LoginQr'
 import VerificationGuard from './components/VerificationGuard'
 
 export default function App() {
@@ -48,6 +49,7 @@ export default function App() {
           <Route path="/estatisticas" element={<Estatisticas />} />
           <Route path="/autorizar" element={<AutorizarResponsavel />} />
           <Route path="/confirmar/:token" element={<Confirmar />} />
+          <Route path="/login-qr/:token" element={<LoginQr />} />
 
           {/* Aluno — protegido */}
           <Route path="/tribo" element={<EscolhaTribo />} />

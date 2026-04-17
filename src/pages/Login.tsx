@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Eye, EyeOff, ChevronRight } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 
@@ -19,7 +20,156 @@ function formatPhone(value: string): string {
   return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
 }
 
-type LoginStep = 'email' | 'senha' | 'confirmar-email' | 'criar-senha' | 'telefone'
+type LoginStep = 'email' | 'senha' | 'confirmar-email' | 'criar-senha' | 'telefone' | 'qr-login'
+
+function QrLoginStep({ qrToken, setQrToken, qrTokenId, setQrTokenId, qrCountdown, setQrCountdown, qrExpired, setQrExpired, onBack, onSuccess }: {
+  qrToken: string; setQrToken: (v: string) => void
+  qrTokenId: string; setQrTokenId: (v: string) => void
+  qrCountdown: number; setQrCountdown: (v: number | ((p: number) => number)) => void
+  qrExpired: boolean; setQrExpired: (v: boolean) => void
+  onBack: () => void
+  onSuccess: (userId: string) => void
+}) {
+  const [generating, setGenerating] = useState(false)
+
+  const generateToken = useCallback(async () => {
+    setGenerating(true)
+    setQrExpired(false)
+    setQrCountdown(60)
+
+    const { data, error } = await supabase
+      .from('operation_tokens')
+      .insert({
+        operation_type: 'login_web',
+        user_id: null,
+        payload: { session_hint: 'Navegador ' + (navigator.userAgent.includes('Chrome') ? 'Chrome' : navigator.userAgent.includes('Firefox') ? 'Firefox' : 'Web'), device_info: navigator.userAgent },
+        expires_at: new Date(Date.now() + 60000).toISOString(),
+      })
+      .select('id, token')
+      .single()
+
+    if (error || !data) {
+      setGenerating(false)
+      return
+    }
+
+    setQrToken(data.token)
+    setQrTokenId(data.id)
+    setGenerating(false)
+  }, [setQrToken, setQrTokenId, setQrExpired, setQrCountdown])
+
+  useEffect(() => {
+    if (!qrToken) generateToken()
+  }, [qrToken, generateToken])
+
+  // Countdown timer
+  useEffect(() => {
+    if (!qrToken || qrExpired) return
+    const interval = setInterval(() => {
+      setQrCountdown((prev: number) => {
+        if (prev <= 1) {
+          clearInterval(interval)
+          setQrExpired(true)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [qrToken, qrExpired, setQrCountdown, setQrExpired])
+
+  // Realtime subscription for approval
+  useEffect(() => {
+    if (!qrTokenId || qrExpired) return
+
+    const channel = supabase
+      .channel(`qr-login-${qrTokenId}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'operation_tokens',
+        filter: `id=eq.${qrTokenId}`,
+      }, (payload) => {
+        const updated = payload.new as { status: string; user_id: string | null }
+        if (updated.status === 'approved' && updated.user_id) {
+          // Login approved! Create session via edge function
+          supabase.functions.invoke('login-via-qr', {
+            body: { token: qrToken },
+          }).then(({ data: result }) => {
+            if (result?.access_token && result?.refresh_token) {
+              supabase.auth.setSession({
+                access_token: result.access_token,
+                refresh_token: result.refresh_token,
+              }).then(() => {
+                onSuccess(updated.user_id!)
+              })
+            }
+          })
+        }
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [qrTokenId, qrToken, qrExpired, onSuccess])
+
+  if (generating) {
+    return (
+      <div className="space-y-4 text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal mx-auto" />
+        <p className="text-sm text-gray-500">Gerando QR Code...</p>
+      </div>
+    )
+  }
+
+  if (qrExpired) {
+    return (
+      <div className="space-y-4 text-center">
+        <div className="text-5xl mb-2">&#9203;</div>
+        <h2 className="text-lg font-bold text-gray-700">QR expirado</h2>
+        <p className="text-sm text-gray-500">Gere um novo QR Code para continuar.</p>
+        <button onClick={() => { setQrToken(''); setQrTokenId('') }}
+          className="w-full py-3 rounded-xl bg-teal text-white font-bold hover:bg-teal/90 transition-all">
+          Gerar novo QR Code
+        </button>
+        <button onClick={onBack} className="w-full py-2 text-sm text-gray-400 hover:text-teal">
+          Voltar ao login por email
+        </button>
+      </div>
+    )
+  }
+
+  const qrUrl = `${window.location.origin}/login-qr/${qrToken}`
+
+  return (
+    <div className="space-y-4 text-center">
+      <h2 className="text-xl font-extrabold text-navy">Entrar com QR Code</h2>
+      <p className="text-sm text-gray-500">Escaneie com o celular onde voce ja esta logado</p>
+
+      {qrToken && (
+        <div className="flex justify-center p-4 bg-white rounded-xl border-2 border-gray-100">
+          <QRCodeSVG value={qrUrl} size={200} level="M" />
+        </div>
+      )}
+
+      <div className="flex items-center justify-center gap-2">
+        <div className="w-8 h-8 rounded-full bg-teal/10 flex items-center justify-center">
+          <span className="text-teal font-bold text-sm">{qrCountdown}</span>
+        </div>
+        <span className="text-sm text-gray-400">segundos restantes</span>
+      </div>
+
+      <div className="text-xs text-gray-400 space-y-1">
+        <p>1. Abra a Piramide do Bem no celular</p>
+        <p>2. Escaneie este QR Code</p>
+        <p>3. Confirme o login no celular</p>
+      </div>
+
+      <button onClick={onBack} className="w-full py-2 text-sm text-gray-400 hover:text-teal">
+        Cancelar
+      </button>
+    </div>
+  )
+}
 
 export default function Login() {
   const navigate = useNavigate()
@@ -48,6 +198,15 @@ export default function Login() {
   const [emailVerifLoading, setEmailVerifLoading] = useState(false)
 
   // Phone
+  // QR login states
+  const [searchParams] = useSearchParams()
+  const [qrToken, setQrToken] = useState('')
+  const [qrTokenId, setQrTokenId] = useState('')
+  const [qrCountdown, setQrCountdown] = useState(60)
+  const [qrExpired, setQrExpired] = useState(false)
+  const isDesktop = typeof navigator !== 'undefined' && !/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
+
+  // Phone
   const [phone, setPhone] = useState('')
   const [phoneCountryCode, setPhoneCountryCode] = useState('+55')
   const [phoneOtpSent, setPhoneOtpSent] = useState(false)
@@ -57,7 +216,15 @@ export default function Login() {
   const [phoneError, setPhoneError] = useState('')
   const [phoneSending, setPhoneSending] = useState(false)
 
-  async function redirectByRole(userId: string) {
+  const redirectByRole = useCallback(async (userId: string) => {
+    // Check for return URL first
+    const returnUrl = sessionStorage.getItem('login_return_url')
+    if (returnUrl) {
+      sessionStorage.removeItem('login_return_url')
+      navigate(returnUrl, { replace: true })
+      return
+    }
+
     const { data: student } = await supabase.from('students').select('id').eq('user_id', userId).maybeSingle()
     if (student) { navigate('/home', { replace: true }); return }
     const { data: teacher } = await supabase.from('teachers').select('id').eq('user_id', userId).maybeSingle()
@@ -67,7 +234,23 @@ export default function Login() {
     const { data: sponsor } = await supabase.from('sponsors').select('id').eq('user_id', userId).maybeSingle()
     if (sponsor) { navigate('/patrocinador/dashboard', { replace: true }); return }
     navigate('/cadastro/perfil', { replace: true })
-  }
+  }, [navigate])
+
+  // ADITIVO: verificar sessão no mount e salvar return URL
+  useEffect(() => {
+    const returnParam = searchParams.get('return')
+    if (returnParam) {
+      sessionStorage.setItem('login_return_url', returnParam)
+    }
+
+    let mounted = true
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (mounted && session?.user) {
+        redirectByRole(session.user.id)
+      }
+    })
+    return () => { mounted = false }
+  }, [searchParams, redirectByRole])
 
   async function handleContinue() {
     if (!email.includes('@')) return
@@ -201,7 +384,7 @@ export default function Login() {
   }
 
   const handleBack = () => {
-    if (step === 'senha' || step === 'confirmar-email') { setStep('email'); setError(''); setForgotMode(false); setForgotSent(false) }
+    if (step === 'senha' || step === 'confirmar-email' || step === 'qr-login') { setStep('email'); setError(''); setForgotMode(false); setForgotSent(false); setQrExpired(false) }
     else if (step === 'criar-senha') setStep('confirmar-email')
     else if (step === 'telefone') setStep('criar-senha')
     else navigate('/')
@@ -245,6 +428,15 @@ export default function Login() {
               className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-lg transition-all ${email.includes('@') && !loading ? 'bg-teal text-white hover:bg-teal/90' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
               {loading ? 'Verificando...' : 'Continuar'}<ChevronRight className="w-5 h-5" />
             </button>
+            {isDesktop && (
+              <>
+                <div className="relative flex items-center"><div className="flex-1 h-px bg-gray-200" /><span className="px-3 text-gray-400 text-sm">ou</span><div className="flex-1 h-px bg-gray-200" /></div>
+                <button onClick={() => setStep('qr-login')}
+                  className="w-full flex items-center justify-center gap-2 py-3 px-4 border-2 border-gray-200 rounded-xl transition-colors font-medium hover:bg-gray-50 text-gray-600">
+                  <span className="text-xl">&#128241;</span> Entrar com QR Code
+                </button>
+              </>
+            )}
           </div>
         )}
 
@@ -432,6 +624,22 @@ export default function Login() {
               </div>
             )}
           </div>
+        )}
+
+        {/* STEP: QR login (desktop only) */}
+        {step === 'qr-login' && (
+          <QrLoginStep
+            qrToken={qrToken}
+            setQrToken={setQrToken}
+            qrTokenId={qrTokenId}
+            setQrTokenId={setQrTokenId}
+            qrCountdown={qrCountdown}
+            setQrCountdown={setQrCountdown}
+            qrExpired={qrExpired}
+            setQrExpired={setQrExpired}
+            onBack={() => { setStep('email'); setQrExpired(false) }}
+            onSuccess={redirectByRole}
+          />
         )}
       </div>
 
