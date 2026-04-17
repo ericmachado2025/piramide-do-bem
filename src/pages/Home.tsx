@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ChevronRight, Clock, CheckCircle2, Sparkles, ScanLine } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { routeScannedData } from '../lib/scanRouter'
 import { getCharacterDisplayName, getTierLabel } from '../lib/database'
 import { generateCharacterAvatar } from '../lib/avatarGenerator'
 import { useAuth } from '../contexts/AuthContext'
@@ -78,61 +79,56 @@ export default function Home() {
     processTransfer(transferCode)
   }, [searchParams, student, setSearchParams])
 
-  const handleSmartScan = useCallback(async (data: string) => {
+  const handleSmartScan = useCallback((data: string) => {
     setShowSmartScanner(false)
-    try {
-      const url = new URL(data)
-      const path = url.pathname
-      const params = url.searchParams
-
-      // Validar ação de colega
-      if (params.get('token') || path.includes('/validar')) {
-        const token = params.get('token')
-        navigate(token ? `/validar?token=${token}` : '/validar')
-        return
-      }
-      // Receber transferência de créditos — processar direto
-      if (params.get('transfer') || path.includes('/creditos')) {
-        const code = params.get('transfer')
-        if (code && student) {
-          try {
-            const { data: pt, error } = await supabase.from('pending_transfers')
-              .select('id, sender_id, amount, status').eq('code', code).eq('status', 'waiting').single()
-            if (error || !pt) {
-              setTransferMsg('Codigo de transferencia invalido ou expirado.')
-              return
+    const route = routeScannedData(data)
+    switch (route.type) {
+      case 'confirmar':
+        navigate(`/confirmar/${route.token}`)
+        break
+      case 'login-qr':
+        navigate(`/login-qr/${route.token}`)
+        break
+      case 'transfer-legacy':
+        // Legacy: redirect to /home?transfer=CODE for backward compat processing
+        if (student) {
+          (async () => {
+            try {
+              const { data: pt, error } = await supabase.from('pending_transfers')
+                .select('id, sender_id, amount, status').eq('code', route.token).eq('status', 'waiting').single()
+              if (error || !pt) {
+                setTransferMsg('Codigo de transferencia invalido ou expirado.')
+                return
+              }
+              await supabase.from('pending_transfers')
+                .update({ status: 'scanned', receiver_id: (student as unknown as {id:string}).id, scanned_at: new Date().toISOString() })
+                .eq('id', pt.id)
+              setTransferMsg(`Transferencia de ${pt.amount} creditos registrada! Aguarde a confirmacao do remetente.`)
+            } catch {
+              setTransferMsg('Erro ao processar transferencia. Tente novamente.')
             }
-            await supabase.from('pending_transfers')
-              .update({ status: 'scanned', receiver_id: (student as any).id, scanned_at: new Date().toISOString() })
-              .eq('id', pt.id)
-            setTransferMsg(`Transferencia de ${pt.amount} creditos registrada! Aguarde a confirmacao do remetente.`)
-          } catch {
-            setTransferMsg('Erro ao processar transferencia. Tente novamente.')
-          }
-        } else {
-          navigate('/creditos')
+          })()
         }
-        return
-      }
-      // Perfil de aluno
-      if (path.includes('/aluno/')) {
-        navigate(path)
-        return
-      }
-      // Benefício de patrocinador
-      if (params.get('code') || path.includes('/beneficio') || path.includes('/recompensas')) {
-        const code = params.get('code')
-        navigate(code ? `/recompensas?code=${code}` : '/recompensas')
-        return
-      }
-    } catch {
-      // Não é URL — pode ser UUID puro (QR antigo de ação)
-      if (/^[0-9a-f-]{36}$/i.test(data)) {
-        navigate(`/validar?token=${data}`)
-        return
-      }
+        break
+      default:
+        // Try URL-based routing for /validar, /aluno, /beneficio etc.
+        try {
+          const url = new URL(data)
+          const path = url.pathname
+          const params = url.searchParams
+          if (params.get('token') || path.includes('/validar')) {
+            navigate(params.get('token') ? `/validar?token=${params.get('token')}` : '/validar')
+          } else if (path.includes('/aluno/')) {
+            navigate(path)
+          } else if (params.get('code') || path.includes('/beneficio') || path.includes('/recompensas')) {
+            navigate(params.get('code') ? `/recompensas?code=${params.get('code')}` : '/recompensas')
+          } else {
+            setTransferMsg('QR Code nao reconhecido.')
+          }
+        } catch {
+          setTransferMsg('QR Code nao reconhecido.')
+        }
     }
-    setTransferMsg('QR Code nao reconhecido.')
   }, [navigate, student])
 
   useEffect(() => {

@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Send, QrCode } from 'lucide-react'
+import { ArrowLeft, Send, ScanLine } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { supabase } from '../lib/supabase'
+import { routeScannedData } from '../lib/scanRouter'
 import { useAuth } from '../contexts/AuthContext'
 import BottomNav from '../components/BottomNav'
 import QrScanner from '../components/QrScanner'
@@ -339,7 +340,7 @@ export default function Creditos() {
           </button>
           <button onClick={() => { setShowScan(true); setConfirmCode(''); setConfirmGenerated(''); setScanResult(null); setScanInput('') }}
             className="flex-1 py-2.5 rounded-xl bg-white/20 text-white text-sm font-semibold flex items-center justify-center gap-2">
-            <QrCode size={14} /> Usar beneficio
+            <ScanLine size={14} /> Abrir Scanner
           </button>
         </div>
       </div>
@@ -579,39 +580,49 @@ export default function Creditos() {
           onScan={async (data) => {
             setShowCamera(false)
             setScanInput(data)
-            // Look up in pending_transfers
-            const { data: pt } = await supabase.from('pending_transfers')
-              .select('id, code, sender_id, amount, status')
-              .eq('code', data).eq('status', 'waiting').single()
-            if (pt && studentId) {
-              // Mark as scanned with my ID
-              await supabase.from('pending_transfers').update({
-                status: 'scanned', receiver_id: studentId, scanned_at: new Date().toISOString(),
-              }).eq('id', pt.id)
-              // Get sender name
-              const { data: sender } = await supabase.from('students')
-                .select('user:users!students_users_id_fkey(name)').eq('id', pt.sender_id).single()
-              const senderName = ((sender?.user as unknown as {name:string})?.name) || 'Aluno'
-              setScanResult({ desc: `Transferencia de ${senderName}`, amount: pt.amount, id: pt.code })
-              const pin = String(Math.floor(100000 + Math.random() * 900000))
-              setConfirmCode(''); setConfirmGenerated(pin)
-              // Enviar código via WhatsApp
-              if (userPhone) {
-                const phoneNum = userPhone.replace(/\D/g, '')
-                const formattedPhone = phoneNum.startsWith('+') ? phoneNum : `+${phoneNum}`
-                fetch(`${import.meta.env.VITE_SUPABASE_URL || 'https://frdpscbdtudaulscexyp.supabase.co'}/functions/v1/send-verification`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZyZHBzY2JkdHVkYXVsc2NleHlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMzQ4MzEsImV4cCI6MjA5MDgxMDgzMX0.acvN82Uwmcfy7v5WQfQ-lSLGuYZp7UI2Oyxvbaxlt3o'}` },
-                  body: JSON.stringify({ to: formattedPhone, channel: 'whatsapp', code: pin, type: 'benefit_confirm' })
-                }).catch(() => {})
-              }
-              setShowScan(true)
-            } else {
-              // Not found — maybe a promo code? Show error
-              setScanResult(null)
-              setShowScan(true)
-              alert('Codigo nao encontrado ou expirado.')
+            const route = routeScannedData(data)
+            if (route.type === 'confirmar') {
+              navigate(`/confirmar/${route.token}`)
+              return
             }
+            if (route.type === 'login-qr') {
+              navigate(`/login-qr/${route.token}`)
+              return
+            }
+            if (route.type === 'transfer-legacy') {
+              // Legacy transfer code lookup
+              const { data: pt } = await supabase.from('pending_transfers')
+                .select('id, code, sender_id, amount, status')
+                .eq('code', route.token).eq('status', 'waiting').single()
+              if (pt && studentId) {
+                await supabase.from('pending_transfers').update({
+                  status: 'scanned', receiver_id: studentId, scanned_at: new Date().toISOString(),
+                }).eq('id', pt.id)
+                const { data: sender } = await supabase.from('students')
+                  .select('user:users!students_users_id_fkey(name)').eq('id', pt.sender_id).single()
+                const senderName = ((sender?.user as unknown as {name:string})?.name) || 'Aluno'
+                setScanResult({ desc: `Transferencia de ${senderName}`, amount: pt.amount, id: pt.code })
+                const pin = String(Math.floor(100000 + Math.random() * 900000))
+                setConfirmCode(''); setConfirmGenerated(pin)
+                if (userPhone) {
+                  const phoneNum = userPhone.replace(/\D/g, '')
+                  const formattedPhone = phoneNum.startsWith('+') ? phoneNum : `+${phoneNum}`
+                  fetch(`${import.meta.env.VITE_SUPABASE_URL || 'https://frdpscbdtudaulscexyp.supabase.co'}/functions/v1/send-verification`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZyZHBzY2JkdHVkYXVsc2NleHlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMzQ4MzEsImV4cCI6MjA5MDgxMDgzMX0.acvN82Uwmcfy7v5WQfQ-lSLGuYZp7UI2Oyxvbaxlt3o'}` },
+                    body: JSON.stringify({ to: formattedPhone, channel: 'whatsapp', code: pin, type: 'benefit_confirm' })
+                  }).catch(() => {})
+                }
+                setShowScan(true)
+              } else {
+                setScanResult(null)
+                setShowScan(true)
+                alert('Codigo nao encontrado ou expirado.')
+              }
+              return
+            }
+            // Unknown
+            alert('QR Code nao reconhecido. Tente novamente.')
           }}
           onClose={() => setShowCamera(false)}
         />
@@ -627,7 +638,7 @@ export default function Creditos() {
                 <p className="text-xs text-gray-400 mb-3">Escaneie o QR Code ou digite o codigo manualmente.</p>
                 <button onClick={() => { setShowScan(false); setShowCamera(true) }}
                   className="w-full py-3 rounded-xl bg-teal text-white font-bold text-sm flex items-center justify-center gap-2 mb-3">
-                  <QrCode size={18} /> Escanear QR Code
+                  <ScanLine size={18} /> Escanear QR Code
                 </button>
                 <div className="relative flex items-center justify-center my-2">
                   <div className="border-t border-gray-200 flex-1" />
