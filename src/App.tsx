@@ -34,12 +34,22 @@ import AutorizarResponsavel from './pages/AutorizarResponsavel'
 import Confirmar from './pages/Confirmar'
 import LoginQr from './pages/LoginQr'
 import VerificationGuard from './components/VerificationGuard'
+import SessionChangeBanner from './components/SessionChangeBanner'
+import { useAuth } from './contexts/AuthContext'
 
-export default function App() {
+function AppRoutes() {
+  const { accountSwitchDetected, dismissAccountSwitch } = useAuth()
+
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
+    <>
+      {accountSwitchDetected && (
+        <SessionChangeBanner
+          info={accountSwitchDetected}
+          onReload={() => window.location.reload()}
+          onDismiss={dismissAccountSwitch}
+        />
+      )}
+      <Routes>
           {/* Público */}
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
@@ -83,6 +93,15 @@ export default function App() {
           <Route path="/patrocinador/cadastro" element={<PatrocinadorCadastro />} />
           <Route path="/patrocinador/dashboard" element={<PatrocinadorDashboard />} />
         </Routes>
+    </>
+  )
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <AppRoutes />
       </BrowserRouter>
     </AuthProvider>
   )

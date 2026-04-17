@@ -3,10 +3,17 @@ import type { ReactNode } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 
+interface AccountSwitchInfo {
+  oldEmail: string
+  newEmail: string
+}
+
 interface AuthContextType {
   user: User | null
   session: Session | null
   loading: boolean
+  accountSwitchDetected: AccountSwitchInfo | null
+  dismissAccountSwitch: () => void
   signInWithGoogle: () => Promise<void>
   signInWithEmail: (email: string, password: string) => Promise<{ error: string | null }>
   signUpWithEmail: (email: string, password: string) => Promise<{ error: string | null; user: User | null }>
@@ -19,6 +26,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  const [accountSwitchDetected, setAccountSwitchDetected] = useState<AccountSwitchInfo | null>(null)
 
   useEffect(() => {
     // Get initial session
@@ -36,6 +44,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
 
     return () => subscription.unsubscribe()
+  }, [])
+
+  // Detect account switch in another tab
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key?.startsWith('sb-') && e.key.endsWith('-auth-token')) {
+        if (e.oldValue && e.newValue && e.oldValue !== e.newValue) {
+          try {
+            const oldSession = JSON.parse(e.oldValue)
+            const newSession = JSON.parse(e.newValue)
+            if (oldSession?.user?.id !== newSession?.user?.id) {
+              setAccountSwitchDetected({
+                oldEmail: oldSession?.user?.email || 'desconhecido',
+                newEmail: newSession?.user?.email || 'desconhecido',
+              })
+            }
+          } catch { /* ignore parse errors */ }
+        }
+      }
+    }
+    window.addEventListener('storage', handleStorageChange)
+    return () => window.removeEventListener('storage', handleStorageChange)
+  }, [])
+
+  const dismissAccountSwitch = useCallback(() => {
+    setAccountSwitchDetected(null)
   }, [])
 
   const signInWithGoogle = useCallback(async () => {
@@ -78,6 +112,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       session,
       loading,
+      accountSwitchDetected,
+      dismissAccountSwitch,
       signInWithGoogle,
       signInWithEmail,
       signUpWithEmail,

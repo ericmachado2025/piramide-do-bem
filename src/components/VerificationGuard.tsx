@@ -8,12 +8,13 @@ interface VerificationGuardProps {
 }
 
 export default function VerificationGuard({ children }: VerificationGuardProps) {
-  const { user } = useAuth()
+  const { user, loading } = useAuth()
   const navigate = useNavigate()
   const [checking, setChecking] = useState(true)
   const [verified, setVerified] = useState(false)
 
   useEffect(() => {
+    if (loading) return  // AGUARDA hidratacao do session
     if (!user) { navigate('/'); return }
 
     async function check() {
@@ -45,9 +46,9 @@ export default function VerificationGuard({ children }: VerificationGuardProps) 
     }
 
     check()
-  }, [user, navigate])
+  }, [user, loading, navigate])
 
-  if (checking) {
+  if (loading || checking) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center">
         <div className="animate-pulse text-teal text-lg">Verificando...</div>
