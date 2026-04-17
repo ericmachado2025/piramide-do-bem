@@ -45,3 +45,9 @@ scripts/bairro_batches/
 # Prompts (contain secrets)
 prompts/
 
+# Pastas históricas (não versionar)
+context_packs/
+docs/
+prints/
+videos/
+scripts/
