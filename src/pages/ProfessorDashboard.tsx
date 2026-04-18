@@ -15,6 +15,7 @@ import { useAuth } from '../contexts/AuthContext'
 import AttendanceSheet from '../components/AttendanceSheet'
 import AvatarUpload from '../components/AvatarUpload'
 import EditProfileModal from '../components/EditProfileModal'
+import StudentsAtRiskPanel from '../components/StudentsAtRiskPanel'
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -66,7 +67,7 @@ export default function ProfessorDashboard() {
 
   // Fraud alerts
   const [alerts, setAlerts] = useState<FraudAlert[]>([])
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'chamada'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'chamada' | 'risco'>('dashboard')
 
   // Tribe ranking
   const [tribeRanking, setTribeRanking] = useState<TribeRank[]>([])
@@ -365,6 +366,7 @@ export default function ProfessorDashboard() {
           {([
             { k: 'dashboard' as const, label: 'Painel' },
             { k: 'chamada' as const, label: 'Chamada' },
+            { k: 'risco' as const, label: 'Alunos em Risco' },
           ]).map(({ k, label }) => (
             <button key={k} onClick={() => setActiveTab(k)}
               className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
@@ -375,7 +377,11 @@ export default function ProfessorDashboard() {
           ))}
         </div>
 
-        {activeTab === 'chamada' ? (
+        {activeTab === 'risco' && teacherId && (
+          <StudentsAtRiskPanel teacherId={teacherId} />
+        )}
+
+        {activeTab === 'chamada' && (
           <>
             {/* Assignment selector for attendance */}
             {assignments.length > 0 && (
@@ -405,7 +411,9 @@ export default function ProfessorDashboard() {
               </div>
             )}
           </>
-        ) : (
+        )}
+
+        {activeTab === 'dashboard' && (
         <>
         {/* Assignment selector */}
         {assignments.length > 0 && (
