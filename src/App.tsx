@@ -34,8 +34,10 @@ import AutorizarResponsavel from './pages/AutorizarResponsavel'
 import Confirmar from './pages/Confirmar'
 import LoginQr from './pages/LoginQr'
 import AdminAuditoria from './pages/AdminAuditoria'
+import Ajuda from './pages/Ajuda'
 import VerificationGuard from './components/VerificationGuard'
 import SessionChangeBanner from './components/SessionChangeBanner'
+import HelpFAB from './components/HelpFAB'
 import { useAuth } from './contexts/AuthContext'
 
 function AppRoutes() {
@@ -60,6 +62,8 @@ function AppRoutes() {
           <Route path="/estatisticas" element={<Estatisticas />} />
           <Route path="/autorizar" element={<AutorizarResponsavel />} />
           <Route path="/confirmar/:token" element={<Confirmar />} />
+          <Route path="/ajuda" element={<Ajuda />} />
+          <Route path="/ajuda/:slug" element={<Ajuda />} />
           <Route path="/login-qr/:token" element={<LoginQr />} />
 
           {/* Aluno — protegido */}
@@ -97,6 +101,7 @@ function AppRoutes() {
           {/* Admin */}
           <Route path="/admin/auditoria" element={<AdminAuditoria />} />
         </Routes>
+      <HelpFAB />
     </>
   )
 }
