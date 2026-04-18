@@ -157,6 +157,7 @@ export interface Student {
   referred_by: string | null
   parent_authorized: boolean
   parent_authorization_token: string | null
+  has_totp: boolean
   created_at: string
   school?: School
   community?: Community

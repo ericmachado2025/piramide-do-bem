@@ -12,6 +12,8 @@ import FloatingFriendButton from '../components/FloatingFriendButton'
 import RecommendSponsorButton from '../components/RecommendSponsorButton'
 import InstallButton from '../components/InstallButton'
 import HelpRequestModal from '../components/HelpRequestModal'
+import TotpTipModal from '../components/TotpTipModal'
+import { useTotpTip } from '../hooks/useTotpTip'
 import type { Student, Action, ActionType } from '../types'
 
 const iconClassToEmoji: Record<string, string> = {
@@ -57,6 +59,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [showHelpModal, setShowHelpModal] = useState(false)
   const [friendRequests, setFriendRequests] = useState<{ id: string; name: string; created_at: string }[]>([])
+  const { showTip: showTotpTip, dismissTip: dismissTotpTip } = useTotpTip(authUser?.id, student?.has_totp ?? true)
   const [showSmartScanner, setShowSmartScanner] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const [transferMsg, setTransferMsg] = useState('')
@@ -554,6 +557,8 @@ export default function Home() {
           setTimeout(() => handleSmartScan(data), 200)
         }} onClose={() => setShowSmartScanner(false)} />
       )}
+
+      {showTotpTip && <TotpTipModal onDismiss={dismissTotpTip} />}
 
       <BottomNav />
     </div>

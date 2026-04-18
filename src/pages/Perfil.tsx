@@ -924,7 +924,12 @@ export default function Perfil() {
 
         {/* ===== SEGURANCA ===== */}
         <section>
-          <h2 className="text-lg font-bold text-navy mb-3">Seguranca</h2>
+          <h2 className="text-lg font-bold text-navy mb-3 flex items-center gap-2">
+            Seguranca
+            {student && !student.has_totp && (
+              <span title="Recomendamos ativar a verificacao em duas etapas"><AlertCircle className="w-5 h-5 text-yellow-500" /></span>
+            )}
+          </h2>
           <div className="bg-white rounded-xl shadow-md p-4 space-y-3">
             {/* Google link */}
             <div className="flex items-center justify-between">
