@@ -114,7 +114,10 @@ export default function AttendanceSheet({ classroomId, teacherId, date }: Props)
             notified_monitors: true,
           })
 
-          // Notify friends of the absent student
+          // Notify friends via notifications (rescue_call)
+          const { data: absentStudent } = await supabase.from('students')
+            .select('user:users!students_users_id_fkey(name)').eq('id', sid).single()
+          const absentName = (absentStudent?.user as unknown as {name:string})?.name || 'Colega'
           const { data: friends } = await supabase.from('friendships')
             .select('requester_id, addressee_id')
             .or(`requester_id.eq.${sid},addressee_id.eq.${sid}`)
@@ -122,14 +125,18 @@ export default function AttendanceSheet({ classroomId, teacherId, date }: Props)
           if (friends) {
             const friendIds = friends.map(f => f.requester_id === sid ? f.addressee_id : f.requester_id).filter(Boolean)
             for (const fid of friendIds) {
-              await supabase.from('help_requests').insert({
-                student_id: sid,
-                subject_id: (await supabase.from('subjects').select('id').limit(1).single()).data?.id,
-                description: `Alerta de evasao: colega com ${recentAbs.length} faltas consecutivas. Ajude a traze-lo de volta!`,
-                visibility: 'friends',
-                target_student_id: fid,
-                status: 'open',
-              })
+              const { data: friendUser } = await supabase.from('students').select('user_id').eq('id', fid).single()
+              if (friendUser?.user_id) {
+                await supabase.rpc('create_notification', {
+                  p_user_id: friendUser.user_id,
+                  p_type: 'rescue_call',
+                  p_title: `${absentName} esta faltando`,
+                  p_message: `${absentName} esta com ${recentAbs.length} faltas consecutivas. Mande uma mensagem para ele!`,
+                  p_action_url: '/home',
+                  p_icon: '\u{1F6A8}',
+                  p_color: 'bg-red-50 border-red-200',
+                })
+              }
             }
           }
         }

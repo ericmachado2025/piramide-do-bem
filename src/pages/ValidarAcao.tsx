@@ -365,6 +365,21 @@ export default function ValidarAcao() {
       })
     }
 
+    // Notify the author that their action was validated
+    if (authorAction) {
+      const { data: authorStudent } = await supabase.from('students').select('user_id').eq('id', authorAction.author_id).single()
+      if (authorStudent?.user_id) {
+        await supabase.rpc('create_notification', {
+          p_user_id: authorStudent.user_id,
+          p_type: 'action_validated',
+          p_title: 'Acao validada!',
+          p_message: `Sua acao "${selectedAction.actionTypeName}" foi validada! +${actionPoints} pontos`,
+          p_action_url: '/home',
+          p_icon: '\u{1F3AF}',
+        })
+      }
+    }
+
     setPendingActions((prev) => prev.filter((a) => a.id !== selectedAction.id))
     setShowConfetti(true)
     setShowResult('confirmed')

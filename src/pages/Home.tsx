@@ -345,6 +345,21 @@ export default function Home() {
                           }
                         }
                       }
+                      // Notify requester that friendship was accepted
+                      if (friendship) {
+                        const { data: requesterStudent } = await supabase.from('students').select('user_id').eq('id', friendship.requester_id).single()
+                        if (requesterStudent?.user_id) {
+                          const myName = (student as unknown as { user?: { name?: string } })?.user?.name || 'Alguem'
+                          await supabase.rpc('create_notification', {
+                            p_user_id: requesterStudent.user_id,
+                            p_type: 'friendship_accepted',
+                            p_title: 'Amizade aceita!',
+                            p_message: `${myName} aceitou seu pedido de amizade! +10 pontos`,
+                            p_action_url: '/home',
+                            p_icon: '\u{1F91D}',
+                          })
+                        }
+                      }
                       setFriendRequests(prev => prev.filter(r => r.id !== fr.id))
                     }} className="bg-teal text-white text-xs font-bold px-3 py-1.5 rounded-lg">Aceitar</button>
                     <button onClick={async () => {

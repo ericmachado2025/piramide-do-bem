@@ -37,15 +37,33 @@ export default function TopBar() {
         if (data) setStudent(data as unknown as typeof student)
       })
 
-    // Try to get unread notifications count
-    supabase
-      .from('notifications')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('read', false)
-      .then(({ count }) => {
-        setUnreadCount(count ?? 0)
+    // Get unread notifications count
+    const loadUnread = () => {
+      supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('read', false)
+        .then(({ count }) => {
+          setUnreadCount(count ?? 0)
+        })
+    }
+    loadUnread()
+
+    // Realtime subscription for notification updates
+    const channel = supabase
+      .channel(`topbar-notifs-${user.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${user.id}`,
+      }, () => {
+        loadUnread()
       })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
   }, [user])
 
   if (!user || !student) return null
