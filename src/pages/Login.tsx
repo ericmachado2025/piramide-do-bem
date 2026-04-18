@@ -31,9 +31,11 @@ function QrLoginStep({ qrToken, setQrToken, qrTokenId, setQrTokenId, qrCountdown
   onSuccess: (userId: string) => void
 }) {
   const [generating, setGenerating] = useState(false)
+  const [qrError, setQrError] = useState('')
 
   const generateToken = useCallback(async () => {
     setGenerating(true)
+    setQrError('')
     setQrExpired(false)
     setQrCountdown(60)
 
@@ -49,7 +51,9 @@ function QrLoginStep({ qrToken, setQrToken, qrTokenId, setQrTokenId, qrCountdown
       .single()
 
     if (error || !data) {
+      console.error('Erro ao gerar token QR:', error)
       setGenerating(false)
+      setQrError(error?.message || 'Erro ao gerar QR Code. Tente novamente.')
       return
     }
 
@@ -144,6 +148,19 @@ function QrLoginStep({ qrToken, setQrToken, qrTokenId, setQrTokenId, qrCountdown
     <div className="space-y-4 text-center">
       <h2 className="text-xl font-extrabold text-navy">Entrar com QR Code</h2>
       <p className="text-sm text-gray-500">Escaneie com o celular onde voce ja esta logado</p>
+
+      {qrError && !qrToken && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+          <p className="font-semibold">Nao foi possivel gerar o QR Code</p>
+          <p className="text-xs mt-1">{qrError}</p>
+          <button
+            onClick={() => { setQrError(''); generateToken() }}
+            className="mt-2 text-xs font-semibold text-red-700 underline"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      )}
 
       {qrToken && (
         <div className="flex justify-center p-4 bg-white rounded-xl border-2 border-gray-100">
