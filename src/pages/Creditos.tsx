@@ -557,19 +557,19 @@ export default function Creditos() {
 
             {transferStep === 'qr' && !transferExpired && (
               <>
-                <h3 className="font-bold text-navy text-lg mb-2">QR Code gerado!</h3>
-                <p className="text-xs text-gray-400 mb-3">Peca para seu amigo escanear este codigo para prosseguir com a transferencia.</p>
+                <div className="text-center mb-2">
+                  <p className="text-3xl font-bold text-teal">{transferAmount} creditos</p>
+                  <p className="text-xs text-gray-400 mt-1">Aguardando seu amigo escanear...</p>
+                </div>
                 <div className="bg-gray-50 rounded-xl p-6 flex flex-col items-center mb-3">
                   <QRCodeSVG value={operationToken ? `${window.location.origin}/confirmar/${operationToken}` : `${window.location.origin}/home?transfer=${transferQrCode || ''}`} size={180} level="M" />
-                  <p className="text-sm text-teal font-bold mt-3">{transferAmount} creditos</p>
                 </div>
                 <div className="flex items-center justify-center gap-2 mb-3">
                   <div className={`text-2xl font-bold font-mono ${transferTimer <= 10 ? 'text-red-500' : 'text-navy'}`}>
                     00:{transferTimer.toString().padStart(2, '0')}
                   </div>
                 </div>
-                <p className="text-[10px] text-gray-400 text-center mb-3">O codigo expira em {transferTimer} segundos</p>
-                <p className="text-xs text-gray-500 text-center mb-3">Aguardando seu amigo escanear o QR Code...</p>
+                <p className="text-[10px] text-gray-400 text-center mb-3">Expira em {transferTimer}s</p>
                 <button onClick={resetTransfer} className="w-full py-2 text-gray-400 text-sm">Cancelar</button>
               </>
             )}
@@ -591,25 +591,28 @@ export default function Creditos() {
 
             {transferStep === 'confirm' && (
               <>
-                <h3 className="font-bold text-navy text-lg mb-2">Confirmar transferencia</h3>
-                <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center mb-3">
-                  <p className="text-sm text-navy">Transferencia de</p>
-                  <p className="text-2xl font-bold text-teal">{transferAmount} creditos</p>
+                <div className="text-center mb-4">
+                  <div className="text-green-500 text-3xl mb-2">&#10003;</div>
+                  <h3 className="font-bold text-navy text-lg">Amigo escaneou seu QR</h3>
                 </div>
-                <p className="text-xs text-gray-500 text-center mb-1">
-                  Confirme a transferencia com o codigo enviado para seu WhatsApp
-                </p>
-                <p className="text-xs text-navy font-semibold text-center mb-2">
-                  {userPhone ? `+${userPhone.replace(/^\+/, '').replace(/^(\d{2})(\d{2})(\d{5})(\d{4})$/, '$1 $2 $3-$4')}` : 'Cadastre seu WhatsApp no perfil'}
-                </p>
-                <input type="text" inputMode="numeric" value={transferConfirmCode}
-                  onChange={e => setTransferConfirmCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-center text-lg tracking-widest mb-3" />
-                <div className="flex gap-2">
-                  <button onClick={resetTransfer} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-gray-500 text-sm">Cancelar</button>
-                  <button onClick={handleTransferConfirm} disabled={transferConfirmCode !== transferGenerated}
-                    className="flex-1 py-2.5 rounded-lg bg-teal text-white text-sm font-semibold disabled:opacity-50">Confirmar</button>
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center mb-4">
+                  <p className="text-sm text-gray-600 mb-2">Aguardando aprovacao no seu WhatsApp...</p>
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-teal mx-auto" />
                 </div>
+                <p className="text-xs text-gray-400 text-center mb-3">
+                  Enviamos um codigo para {userPhone ? `+${userPhone.replace(/^\+/, '').replace(/^(\d{2})(\d{2})(\d{5})(\d{4})$/, '$1 $2 $3-$4')}` : 'seu WhatsApp'}
+                </p>
+                <details className="mb-3">
+                  <summary className="text-xs text-gray-400 cursor-pointer hover:text-teal text-center">Digitar codigo manualmente</summary>
+                  <div className="mt-2 space-y-2">
+                    <input type="text" inputMode="numeric" value={transferConfirmCode}
+                      onChange={e => setTransferConfirmCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 text-center text-lg tracking-widest" />
+                    <button onClick={handleTransferConfirm} disabled={transferConfirmCode !== transferGenerated}
+                      className="w-full py-2.5 rounded-lg bg-teal text-white text-sm font-semibold disabled:opacity-50">Confirmar</button>
+                  </div>
+                </details>
+                <button onClick={resetTransfer} className="w-full py-2 text-gray-400 text-sm">Cancelar</button>
               </>
             )}
 
