@@ -33,6 +33,7 @@ import PatrocinadorDashboard from './pages/PatrocinadorDashboard'
 import AutorizarResponsavel from './pages/AutorizarResponsavel'
 import Confirmar from './pages/Confirmar'
 import LoginQr from './pages/LoginQr'
+import AdminAuditoria from './pages/AdminAuditoria'
 import VerificationGuard from './components/VerificationGuard'
 import SessionChangeBanner from './components/SessionChangeBanner'
 import { useAuth } from './contexts/AuthContext'
@@ -92,6 +93,9 @@ function AppRoutes() {
           {/* Patrocinador */}
           <Route path="/patrocinador/cadastro" element={<PatrocinadorCadastro />} />
           <Route path="/patrocinador/dashboard" element={<PatrocinadorDashboard />} />
+
+          {/* Admin */}
+          <Route path="/admin/auditoria" element={<AdminAuditoria />} />
         </Routes>
     </>
   )
