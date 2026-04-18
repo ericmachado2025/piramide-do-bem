@@ -14,6 +14,8 @@ interface Transaction {
   amount: number
   balance_after: number
   description: string | null
+  counterparty_name: string | null
+  counterparty_email: string | null
   created_at: string
 }
 
@@ -160,7 +162,7 @@ export default function Creditos() {
   async function loadTransactions(p: number, reset = false) {
     if (!studentId) return
     let q = supabase.from('credit_transactions')
-      .select('id, type, amount, balance_after, description, created_at')
+      .select('id, type, amount, balance_after, description, counterparty_name, counterparty_email, created_at')
       .eq('student_id', studentId)
       .gte('created_at', getDateFilter())
       .order('created_at', { ascending: false })
@@ -434,6 +436,12 @@ export default function Creditos() {
                   <div key={tx.id} className="px-4 py-3 flex items-center justify-between">
                     <div className="flex-1">
                       <p className="text-sm text-navy">{tx.description || tx.type}</p>
+                      {tx.counterparty_name && (tx.type === 'transferred_out' || tx.type === 'transferred_in') && (
+                        <p className="text-xs text-gray-500">
+                          {tx.type === 'transferred_out' ? 'Para' : 'De'}: {tx.counterparty_name}
+                          {tx.counterparty_email ? ` · ${tx.counterparty_email}` : ''}
+                        </p>
+                      )}
                       <p className="text-[10px] text-gray-400">{new Date(tx.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
                     </div>
                     <div className="text-right">
